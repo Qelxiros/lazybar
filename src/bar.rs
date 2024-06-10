@@ -231,6 +231,7 @@ impl Bar {
                     > (new_width - cur_width)
                 {
                     self.extents.right += new_width - cur_width;
+                    // TODO: not sure this works
                     self.redraw_center()?;
                 } else {
                     self.redraw_bar()?;
@@ -397,7 +398,6 @@ impl Bar {
             if let Some(layout) = &panel.layout {
                 self.cr.move_to(f64::from(self.extents.center.1), 0.0);
                 show_layout(&self.cr, layout);
-                println!("panel drawn at {}, {}", self.extents.center.1, 0.0);
                 self.extents.center.1 += layout.pixel_size().0;
             }
         }
@@ -427,12 +427,13 @@ impl Bar {
             self.extents.right = self.width - total_width;
         }
 
+        let mut temp = self.extents.right;
+
         for panel in &self.right {
             if let Some(layout) = &panel.layout {
-                self.cr.move_to(f64::from(self.extents.right), 0.0);
+                self.cr.move_to(f64::from(temp), 0.0);
                 show_layout(&self.cr, layout);
-                println!("panel drawn at {}, {}", self.extents.right, 0.0);
-                self.extents.right += layout.pixel_size().0;
+                temp += layout.pixel_size().0;
             }
         }
 
