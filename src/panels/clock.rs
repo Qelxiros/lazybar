@@ -40,11 +40,38 @@ impl<P: Precision> Clock<P> {
     }
 }
 
-impl<T> Default for Clock<T> {
+impl Default for Clock<Days> {
+    fn default() -> Self {
+        Self {
+            format_str: String::from("%Y-%m-%d"),
+            phantom: PhantomData::<Days>,
+        }
+    }
+}
+
+impl Default for Clock<Hours> {
+    fn default() -> Self {
+        Self {
+            format_str: String::from("%Y-%m-%d %H"),
+            phantom: PhantomData::<Hours>,
+        }
+    }
+}
+
+impl Default for Clock<Minutes> {
+    fn default() -> Self {
+        Self {
+            format_str: String::from("%Y-%m-%d %H:%M"),
+            phantom: PhantomData::<Minutes>,
+        }
+    }
+}
+
+impl Default for Clock<Seconds> {
     fn default() -> Self {
         Self {
             format_str: String::from("%Y-%m-%d %T"),
-            phantom: PhantomData::<T>,
+            phantom: PhantomData::<Seconds>,
         }
     }
 }

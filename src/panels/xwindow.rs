@@ -51,7 +51,7 @@ impl Stream for XStream {
                 let event = conn.wait_for_event();
                 if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) = event {
                     if event.atom() == name_atom || event.atom() == window_atom {
-                        waker.clone().wake();
+                        waker.wake();
                         break;
                     }
                 }
@@ -67,12 +67,14 @@ pub struct XWindow {
 }
 
 impl XWindow {
-    pub fn new(screen: impl AsRef<String>) -> Self {
-        let result = xcb::Connection::connect(Some(screen.as_ref().as_str())).unwrap();
-        Self {
+    /// # Errors
+    /// If the connection to the X server fails, this function will return an error.
+    pub fn new(screen: impl AsRef<String>) -> Result<Self> {
+        let result = xcb::Connection::connect(Some(screen.as_ref().as_str()))?;
+        Ok(Self {
             conn: Arc::new(result.0),
             screen: result.1,
-        }
+        })
     }
 
     fn tick(

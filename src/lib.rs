@@ -46,6 +46,23 @@ impl Display for Alignment {
     }
 }
 
+pub struct Margins {
+    left: f64,
+    internal: f64,
+    right: f64,
+}
+
+impl Margins {
+    #[must_use]
+    pub const fn new(left: f64, internal: f64, right: f64) -> Self {
+        Self {
+            left,
+            internal,
+            right,
+        }
+    }
+}
+
 pub struct BarConfig {
     left: Vec<Box<dyn PanelConfig>>,
     center: Vec<Box<dyn PanelConfig>>,
@@ -53,12 +70,21 @@ pub struct BarConfig {
     position: Position,
     height: u16,
     transparent: bool,
+    fg: Color,
     bg: Color,
+    margins: Margins,
 }
 
 impl BarConfig {
     #[must_use]
-    pub fn new(position: Position, height: u16, transparent: bool, bg: Color) -> Self {
+    pub fn new(
+        position: Position,
+        height: u16,
+        transparent: bool,
+        fg: Color,
+        bg: Color,
+        margins: Margins,
+    ) -> Self {
         Self {
             left: Vec::new(),
             center: Vec::new(),
@@ -66,7 +92,9 @@ impl BarConfig {
             position,
             height,
             transparent,
+            fg,
             bg,
+            margins,
         }
     }
 
@@ -93,7 +121,14 @@ impl BarConfig {
 
     #[allow(clippy::future_not_send)]
     async fn run_inner(self) -> Result<()> {
-        let mut bar = Bar::new(self.position, self.height, self.transparent, self.bg)?;
+        let mut bar = Bar::new(
+            self.position,
+            self.height,
+            self.transparent,
+            self.fg,
+            self.bg,
+            self.margins,
+        )?;
 
         let mut left_panels = StreamMap::with_capacity(self.left.len());
         for (idx, panel) in self.left.into_iter().enumerate() {
