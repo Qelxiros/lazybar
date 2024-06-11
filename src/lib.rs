@@ -16,11 +16,13 @@ pub mod panels;
 pub type PanelStream = Pin<Box<dyn Stream<Item = Result<pango::Layout>>>>;
 
 pub trait PanelConfig {
-    // TODO: fix doc syntax
-
     /// # Errors
     /// If the process of creating a [`PanelStream`] can fail, this function may return an [`Error`][`anyhow::Error`].
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream>;
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -73,6 +75,7 @@ pub struct BarConfig {
     fg: Color,
     bg: Color,
     margins: Margins,
+    font: pango::FontDescription,
 }
 
 impl BarConfig {
@@ -84,6 +87,7 @@ impl BarConfig {
         fg: Color,
         bg: Color,
         margins: Margins,
+        font: impl AsRef<str>,
     ) -> Self {
         Self {
             left: Vec::new(),
@@ -95,6 +99,7 @@ impl BarConfig {
             fg,
             bg,
             margins,
+            font: pango::FontDescription::from_string(font.as_ref()),
         }
     }
 
@@ -133,21 +138,21 @@ impl BarConfig {
         let mut left_panels = StreamMap::with_capacity(self.left.len());
         for (idx, panel) in self.left.into_iter().enumerate() {
             bar.left.push(Panel::new(None));
-            left_panels.insert(idx, panel.into_stream(bar.cr.clone())?);
+            left_panels.insert(idx, panel.into_stream(bar.cr.clone(), self.font.clone())?);
         }
         bar.streams.insert(Alignment::Left, left_panels);
 
         let mut center_panels = StreamMap::with_capacity(self.center.len());
         for (idx, panel) in self.center.into_iter().enumerate() {
             bar.center.push(Panel::new(None));
-            center_panels.insert(idx, panel.into_stream(bar.cr.clone())?);
+            center_panels.insert(idx, panel.into_stream(bar.cr.clone(), self.font.clone())?);
         }
         bar.streams.insert(Alignment::Center, center_panels);
 
         let mut right_panels = StreamMap::with_capacity(self.right.len());
         for (idx, panel) in self.right.into_iter().enumerate() {
             bar.right.push(Panel::new(None));
-            right_panels.insert(idx, panel.into_stream(bar.cr.clone())?);
+            right_panels.insert(idx, panel.into_stream(bar.cr.clone(), self.font.clone())?);
         }
         bar.streams.insert(Alignment::Right, right_panels);
 

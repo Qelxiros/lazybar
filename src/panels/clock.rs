@@ -31,11 +31,12 @@ impl<P: Precision> Clock<P> {
         }
     }
 
-    fn tick(&self, cr: &Rc<cairo::Context>) -> Layout {
+    fn tick(&self, cr: &Rc<cairo::Context>, font: &pango::FontDescription) -> Layout {
         let now = chrono::Local::now();
         let text = now.format(&self.format_str).to_string();
         let layout = pangocairo::functions::create_layout(cr);
-        layout.set_text(text.as_str());
+        layout.set_font_description(Some(font));
+        layout.set_markup(text.as_str());
         layout
     }
 }
@@ -77,45 +78,61 @@ impl Default for Clock<Seconds> {
 }
 
 impl PanelConfig for Clock<Days> {
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream> {
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream> {
         let stream = ClockStream::new(|| {
             let now = Local::now();
             Duration::from_secs(u64::from(60 * (60 * (24 - now.hour()) + 60 - now.minute())))
         })
-        .map(move |_| Ok(self.tick(&cr)));
+        .map(move |_| Ok(self.tick(&cr, &font)));
         Ok(Box::pin(stream))
     }
 }
 
 impl PanelConfig for Clock<Hours> {
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream> {
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream> {
         let stream = ClockStream::new(|| {
             let now = Local::now();
             Duration::from_secs(u64::from(60 * (60 - now.minute())))
         })
-        .map(move |_| Ok(self.tick(&cr)));
+        .map(move |_| Ok(self.tick(&cr, &font)));
         Ok(Box::pin(stream))
     }
 }
 
 impl PanelConfig for Clock<Minutes> {
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream> {
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream> {
         let stream = ClockStream::new(|| {
             let now = Local::now();
             Duration::from_secs(u64::from(60 - now.second()))
         })
-        .map(move |_| Ok(self.tick(&cr)));
+        .map(move |_| Ok(self.tick(&cr, &font)));
         Ok(Box::pin(stream))
     }
 }
 
 impl PanelConfig for Clock<Seconds> {
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream> {
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream> {
         let stream = ClockStream::new(|| {
             let now = Local::now();
             Duration::from_nanos(1_000_000_000 - u64::from(now.nanosecond() % 1_000_000_000))
         })
-        .map(move |_| Ok(self.tick(&cr)));
+        .map(move |_| Ok(self.tick(&cr, &font)));
         Ok(Box::pin(stream))
     }
 }

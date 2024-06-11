@@ -69,8 +69,8 @@ pub struct XWindow {
 impl XWindow {
     /// # Errors
     /// If the connection to the X server fails, this function will return an error.
-    pub fn new(screen: impl AsRef<String>) -> Result<Self> {
-        let result = xcb::Connection::connect(Some(screen.as_ref().as_str()))?;
+    pub fn new(screen: impl AsRef<str>) -> Result<Self> {
+        let result = xcb::Connection::connect(Some(screen.as_ref()))?;
         Ok(Self {
             conn: Arc::new(result.0),
             screen: result.1,
@@ -80,6 +80,7 @@ impl XWindow {
     fn tick(
         &self,
         cr: &Rc<cairo::Context>,
+        font: &pango::FontDescription,
         name_atom: x::Atom,
         window_atom: x::Atom,
         root: x::Window,
@@ -124,6 +125,7 @@ impl XWindow {
         };
 
         let layout = pangocairo::functions::create_layout(cr);
+        layout.set_font_description(Some(font));
         layout.set_text(name.as_str());
         Ok(layout)
     }
@@ -140,7 +142,11 @@ impl Default for XWindow {
 }
 
 impl PanelConfig for XWindow {
-    fn into_stream(self: Box<Self>, cr: Rc<cairo::Context>) -> Result<PanelStream> {
+    fn into_stream(
+        self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        font: pango::FontDescription,
+    ) -> Result<PanelStream> {
         let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
         let window_atom = intern_named_atom(&self.conn, b"_NET_ACTIVE_WINDOW")?;
         let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
@@ -161,7 +167,7 @@ impl PanelConfig for XWindow {
             tokio_stream::once(()).chain(XStream::new(self.conn.clone(), name_atom, window_atom));
 
         Ok(Box::pin(stream.map(move |_| {
-            self.tick(&cr, name_atom, window_atom, root, utf8_atom)
+            self.tick(&cr, &font, name_atom, window_atom, root, utf8_atom)
         })))
     }
 }
