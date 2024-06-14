@@ -475,6 +475,7 @@ dependencies = [
  "chrono",
  "csscolorparser",
  "futures",
+ "glib",
  "pango",
  "pangocairo",
  "tokio",

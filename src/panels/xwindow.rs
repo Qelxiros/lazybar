@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     pin::Pin,
     rc::Rc,
     sync::Arc,
@@ -6,12 +7,12 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use pango::Layout;
+use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
-use crate::{x::intern_named_atom, PanelConfig, PanelStream};
+use crate::{x::intern_named_atom, Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 struct XStream {
     conn: Arc<xcb::Connection>,
@@ -64,28 +65,32 @@ impl Stream for XStream {
 pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
+    windows: HashSet<x::Window>,
+    attrs: Attrs,
 }
 
 impl XWindow {
     /// # Errors
-    /// If the connection to the X server fails, this function will return an error.
-    pub fn new(screen: impl AsRef<str>) -> Result<Self> {
+    ///
+    /// If the connection to the X server fails.
+    pub fn new(screen: impl AsRef<str>, attrs: Attrs) -> Result<Self> {
         let result = xcb::Connection::connect(Some(screen.as_ref()))?;
         Ok(Self {
             conn: Arc::new(result.0),
             screen: result.1,
+            windows: HashSet::new(),
+            attrs,
         })
     }
 
-    fn tick(
-        &self,
+    fn draw(
+        &mut self,
         cr: &Rc<cairo::Context>,
-        font: &pango::FontDescription,
         name_atom: x::Atom,
         window_atom: x::Atom,
         root: x::Window,
         utf8_atom: x::Atom,
-    ) -> Result<Layout> {
+    ) -> Result<((i32, i32), PanelDrawFn)> {
         let active: u32 = self
             .conn
             .wait_for_reply(self.conn.send_request(&x::GetProperty {
@@ -102,32 +107,50 @@ impl XWindow {
         } else {
             let window = unsafe { x::Window::new(active) };
 
-            self.conn.check_request(self.conn.send_request_checked(
-                &x::ChangeWindowAttributes {
-                    window,
-                    value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
-                },
-            ))?;
-
-            String::from_utf8(
-                self.conn
-                    .wait_for_reply(self.conn.send_request(&x::GetProperty {
-                        delete: false,
+            if self.windows.insert(window) {
+                self.conn.check_request(self.conn.send_request_checked(
+                    &x::ChangeWindowAttributes {
                         window,
-                        property: name_atom,
-                        r#type: utf8_atom,
-                        long_offset: 0,
-                        long_length: 64,
-                    }))?
-                    .value()
-                    .to_vec(),
-            )?
+                        value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
+                    },
+                ))?;
+            }
+
+            let bytes = self
+                .conn
+                .wait_for_reply(self.conn.send_request(&x::GetProperty {
+                    delete: false,
+                    window,
+                    property: name_atom,
+                    r#type: utf8_atom,
+                    long_offset: 0,
+                    long_length: 64,
+                }))?
+                .value()
+                .to_vec();
+
+            // TODO: read full string? not sure it's necessary, 64 longs is a lot
+            // but long strings of multi-byte characters might be cut off mid-grapheme
+            unsafe { String::from_utf8_unchecked(bytes) }
         };
 
         let layout = pangocairo::functions::create_layout(cr);
-        layout.set_font_description(Some(font));
         layout.set_text(name.as_str());
-        Ok(layout)
+        self.attrs.apply_font(&layout);
+        let dims = layout.pixel_size();
+        let attrs = self.attrs.clone();
+
+        Ok((
+            dims,
+            Box::new(move |cr| {
+                attrs.apply_bg(cr);
+                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
+                cr.fill()?;
+                attrs.apply_fg(cr);
+                show_layout(cr, &layout);
+                Ok(())
+            }),
+        ))
     }
 }
 
@@ -137,15 +160,18 @@ impl Default for XWindow {
         Self {
             conn: Arc::new(result.0),
             screen: result.1,
+            windows: HashSet::new(),
+            attrs: Attrs::default(),
         }
     }
 }
 
 impl PanelConfig for XWindow {
     fn into_stream(
-        self: Box<Self>,
+        mut self: Box<Self>,
         cr: Rc<cairo::Context>,
-        font: pango::FontDescription,
+        global_attrs: Attrs,
+        _height: i32,
     ) -> Result<PanelStream> {
         let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
         let window_atom = intern_named_atom(&self.conn, b"_NET_ACTIVE_WINDOW")?;
@@ -163,11 +189,11 @@ impl PanelConfig for XWindow {
                 value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
             }))?;
 
-        let stream =
-            tokio_stream::once(()).chain(XStream::new(self.conn.clone(), name_atom, window_atom));
+        self.attrs = global_attrs.overlay(self.attrs);
 
-        Ok(Box::pin(stream.map(move |_| {
-            self.tick(&cr, &font, name_atom, window_atom, root, utf8_atom)
-        })))
+        let stream = tokio_stream::once(())
+            .chain(XStream::new(self.conn.clone(), name_atom, window_atom))
+            .map(move |_| self.draw(&cr, name_atom, window_atom, root, utf8_atom));
+        Ok(Box::pin(stream))
     }
 }

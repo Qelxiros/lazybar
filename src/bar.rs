@@ -2,14 +2,12 @@ use std::{fmt::Debug, rc::Rc};
 
 use anyhow::Result;
 use csscolorparser::Color;
-use pango::Layout;
-use pangocairo::functions::show_layout;
 use tokio_stream::StreamMap;
 use xcb::{x, Event};
 
 use crate::{
-    create_surface, create_window, map_window, set_wm_properties, Alignment, Margins, PanelStream,
-    Position,
+    create_surface, create_window, map_window, set_wm_properties, Alignment, Margins, PanelDrawFn,
+    PanelStream, Position,
 };
 
 #[derive(PartialEq, Eq)]
@@ -35,22 +33,29 @@ struct Extents {
     right: f64,
 }
 
-pub struct Panel {
-    pub layout: Option<Layout>,
+pub struct DrawInfo {
+    width: i32,
+    height: i32,
+    draw_fn: PanelDrawFn,
 }
 
-impl Debug for Panel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.layout {
-            Some(layout) => f.write_fmt(format_args!("Panel{{ layout: Some({}) }}", layout.text())),
-            None => f.write_fmt(format_args!("Panel {{ layout: None }}")),
+impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
+    fn from(value: ((i32, i32), PanelDrawFn)) -> Self {
+        Self {
+            width: value.0 .0,
+            height: value.0 .1,
+            draw_fn: value.1,
         }
     }
 }
 
+pub struct Panel {
+    pub draw_info: Option<DrawInfo>,
+}
+
 impl Panel {
-    pub const fn new(layout: Option<Layout>) -> Self {
-        Self { layout }
+    pub const fn new(draw_info: Option<DrawInfo>) -> Self {
+        Self { draw_info }
     }
 }
 
@@ -64,7 +69,6 @@ pub struct Bar {
     pub cr: Rc<cairo::Context>,
     width: i32,
     height: u16,
-    fg: Color,
     bg: Color,
     margins: Margins,
     extents: Extents,
@@ -80,7 +84,6 @@ impl Bar {
         position: Position,
         height: u16,
         transparent: bool,
-        fg: Color,
         bg: Color,
         margins: Margins,
     ) -> Result<Self> {
@@ -90,7 +93,6 @@ impl Bar {
         map_window(&conn, window)?;
         let surface = create_surface(&conn, window, visual, width.into(), height.into())?;
         let cr = cairo::Context::new(&surface)?;
-        cr.set_source_rgba(fg.r, fg.g, fg.b, fg.a);
         surface.flush();
         conn.flush()?;
 
@@ -103,7 +105,6 @@ impl Bar {
             cr: Rc::new(cr),
             width: width.into(),
             height,
-            fg,
             bg,
             margins,
             extents: Extents {
@@ -162,23 +163,28 @@ impl Bar {
         Ok(())
     }
 
-    pub fn update_panel(&mut self, alignment: Alignment, idx: usize, new: Layout) -> Result<()> {
-        let new_width = f64::from(new.pixel_size().0);
+    pub fn update_panel(
+        &mut self,
+        alignment: Alignment,
+        idx: usize,
+        draw_info: DrawInfo,
+    ) -> Result<()> {
+        let new_width = f64::from(draw_info.width);
         match alignment {
             Alignment::Left => {
                 let cur_width = f64::from(
                     self.left
                         .get(idx)
                         .expect("one or more panels have vanished")
-                        .layout
-                        .clone()
-                        .map_or(0, |l| l.pixel_size().0),
+                        .draw_info
+                        .as_ref()
+                        .map_or(0, |i| i.width),
                 );
 
                 self.left
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
-                    .layout = Some(new);
+                    .draw_info = Some(draw_info);
 
                 if (new_width - cur_width).abs() < f64::EPSILON {
                     self.redraw_one(alignment, idx)?;
@@ -199,15 +205,15 @@ impl Bar {
                     self.center
                         .get(idx)
                         .expect("one or more panels have vanished")
-                        .layout
-                        .clone()
-                        .map_or(0, |l| l.pixel_size().0),
+                        .draw_info
+                        .as_ref()
+                        .map_or(0, |i| i.width),
                 );
 
                 self.center
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
-                    .layout = Some(new);
+                    .draw_info = Some(draw_info);
 
                 if (new_width - cur_width).abs() < f64::EPSILON {
                     self.redraw_one(alignment, idx)?;
@@ -222,15 +228,15 @@ impl Bar {
                     self.right
                         .get(idx)
                         .expect("one or more panels have vanished")
-                        .layout
-                        .clone()
-                        .map_or(0, |l| l.pixel_size().0),
+                        .draw_info
+                        .as_ref()
+                        .map_or(0, |i| i.width),
                 );
 
                 self.right
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
-                    .layout = Some(new);
+                    .draw_info = Some(draw_info);
 
                 if (new_width - cur_width).abs() < f64::EPSILON {
                     self.redraw_one(alignment, idx)?;
@@ -259,98 +265,101 @@ impl Bar {
     fn redraw_one(&self, alignment: Alignment, idx: usize) -> Result<()> {
         match alignment {
             Alignment::Left => {
+                self.cr.save()?;
                 let offset = f64::from(
                     self.left
                         .iter()
                         .take(idx)
-                        .filter_map(|p| p.layout.as_ref().map(|l| l.pixel_size().0))
+                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                         .sum::<i32>(),
                 ) + self.margins.left;
 
-                if let Some(layout) = self
+                if let Some(draw_info) = &self
                     .left
                     .get(idx)
                     .expect("one or more panels have vanished")
-                    .layout
-                    .clone()
+                    .draw_info
                 {
                     self.redraw_background(&Region::Custom {
                         start_x: offset,
-                        end_x: offset + f64::from(layout.pixel_size().0),
+                        end_x: offset + f64::from(draw_info.width),
                     })?;
-                    self.cr.move_to(
+                    self.cr.translate(
                         offset,
-                        f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                     );
-                    show_layout(&self.cr, &layout);
+                    (draw_info.draw_fn)(&self.cr)?;
                 }
 
                 self.surface.flush();
                 self.conn.flush()?;
+                self.cr.restore()?;
 
                 Ok(())
             }
             Alignment::Center => {
+                self.cr.save()?;
                 let offset = f64::from(
                     self.center
                         .iter()
                         .take(idx)
-                        .filter_map(|p| p.layout.as_ref().map(|l| l.pixel_size().0))
+                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                         .sum::<i32>(),
                 );
 
-                if let Some(layout) = self
+                if let Some(draw_info) = &self
                     .center
                     .get(idx)
                     .expect("one or more panels have vanished")
-                    .layout
-                    .clone()
+                    .draw_info
                 {
                     self.redraw_background(&Region::Custom {
                         start_x: self.extents.center.0 + offset,
-                        end_x: self.extents.center.0 + offset + f64::from(layout.pixel_size().0),
+                        end_x: self.extents.center.0 + offset + f64::from(draw_info.width),
                     })?;
-                    self.cr.move_to(
+                    self.cr.translate(
                         self.extents.center.0 + offset,
-                        f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                     );
-                    show_layout(&self.cr, &layout);
+                    (draw_info.draw_fn)(&self.cr)?;
                 }
 
                 self.surface.flush();
                 self.conn.flush()?;
+                self.cr.restore()?;
 
                 Ok(())
             }
             Alignment::Right => {
+                self.cr.save()?;
                 let offset = f64::from(
                     self.right
                         .iter()
                         .take(idx)
-                        .filter_map(|p| p.layout.as_ref().map(|l| l.pixel_size().0))
+                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                         .sum::<i32>(),
                 );
 
-                if let Some(layout) = self
+                if let Some(draw_info) = &self
                     .right
                     .get(idx)
                     .expect("one or more panels have vanished")
-                    .layout
-                    .clone()
+                    .draw_info
                 {
                     self.redraw_background(&Region::Custom {
                         start_x: self.extents.right + offset,
-                        end_x: self.extents.right + offset + f64::from(layout.pixel_size().0),
+                        end_x: self.extents.right + offset + f64::from(draw_info.width),
                     })?;
-                    self.cr.move_to(
+                    self.cr.translate(
                         self.extents.right + offset,
-                        f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                     );
-                    show_layout(&self.cr, &layout);
+                    (draw_info.draw_fn)(&self.cr)?;
                 }
 
                 self.surface.flush();
                 self.conn.flush()?;
+                self.cr.restore()?;
 
                 Ok(())
             }
@@ -372,13 +381,15 @@ impl Bar {
         self.extents.left = self.margins.left;
 
         for panel in &self.left {
-            if let Some(layout) = &panel.layout {
-                self.cr.move_to(
+            if let Some(draw_info) = &panel.draw_info {
+                self.cr.save()?;
+                self.cr.translate(
                     self.extents.left,
-                    f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                 );
-                show_layout(&self.cr, layout);
-                self.extents.left += f64::from(layout.pixel_size().0);
+                (draw_info.draw_fn)(&self.cr)?;
+                self.extents.left += f64::from(draw_info.width);
+                self.cr.restore()?;
             }
         }
 
@@ -396,7 +407,7 @@ impl Bar {
         let total_width = f64::from(
             self.center
                 .iter()
-                .filter_map(|p| p.layout.as_ref().map(|l| l.pixel_size().0))
+                .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                 .sum::<i32>(),
         );
 
@@ -426,13 +437,15 @@ impl Bar {
         }
 
         for panel in &self.center {
-            if let Some(layout) = &panel.layout {
-                self.cr.move_to(
+            if let Some(draw_info) = &panel.draw_info {
+                self.cr.save()?;
+                self.cr.translate(
                     self.extents.center.1,
-                    f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                 );
-                show_layout(&self.cr, layout);
-                self.extents.center.1 += f64::from(layout.pixel_size().0);
+                (draw_info.draw_fn)(&self.cr)?;
+                self.extents.center.1 += f64::from(draw_info.width);
+                self.cr.restore()?;
             }
         }
 
@@ -452,7 +465,7 @@ impl Bar {
         let total_width = f64::from(
             self.right
                 .iter()
-                .filter_map(|p| p.layout.as_ref().map(|l| l.pixel_size().0))
+                .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                 .sum::<i32>(),
         ) + self.margins.right;
 
@@ -465,13 +478,15 @@ impl Bar {
         let mut temp = self.extents.right;
 
         for panel in &self.right {
-            if let Some(layout) = &panel.layout {
-                self.cr.move_to(
+            if let Some(draw_info) = &panel.draw_info {
+                self.cr.save()?;
+                self.cr.translate(
                     temp,
-                    f64::from(i32::from(self.height) - layout.pixel_size().1) / 2.0,
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
                 );
-                show_layout(&self.cr, layout);
-                temp += f64::from(layout.pixel_size().0);
+                (draw_info.draw_fn)(&self.cr)?;
+                temp += f64::from(draw_info.width);
+                self.cr.restore()?;
             }
         }
 

@@ -1,22 +1,45 @@
 use anyhow::Result;
 use omnibars::{
-    panels::{Clock, Seconds, XWindow},
-    Alignment, BarConfig, Margins, Position,
+    panels::{Clock, Highlight, Seconds, XWindow, XWorkspaces},
+    Alignment, Attrs, BarConfig, Margins, Position,
 };
+use pango::FontDescription;
 
 fn main() -> Result<()> {
+    let attrs = Attrs::new(
+        Some(FontDescription::from_string("FiraMono Nerd Font Mono 10")),
+        Some("#ccc".parse()?),
+        Some("#0000".parse()?),
+    );
     let mut config = BarConfig::new(
         Position::Top,
         32,
         true,
-        "#c5c8c6".parse()?,
         "#0000".parse()?,
-        Margins::new(10.0, 10.0, 10.0),
-        "FiraMono Nerd Font Mono 10",
+        Margins::new(0.0, 10.0, 10.0),
+        attrs,
+    );
+
+    let active = Attrs::new(None, None, Some("#373737".parse()?));
+    let nonempty = Attrs::new(None, None, None);
+    let inactive = Attrs::new(None, Some("#888".parse()?), None);
+    config.add_panel(
+        XWorkspaces::new(
+            "",
+            16,
+            active,
+            nonempty,
+            inactive,
+            Highlight::new(true, 4.0, "#0ff".parse()?),
+        )?,
+        Alignment::Left,
     );
     config.add_panel(XWindow::default(), Alignment::Left);
     config.add_panel(
-        Clock::<Seconds>::new("<span foreground='#00ffff'>%Y-%m-%d %T</span>"),
+        Clock::<Seconds>::new(
+            "<span foreground='#0ff'>%Y-%m-%d %T</span>",
+            Attrs::default(),
+        ),
         Alignment::Right,
     );
     config.run()?;
