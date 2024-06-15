@@ -8,7 +8,10 @@ use xcb::{
 
 use crate::Position;
 
-pub fn intern_named_atom(conn: &xcb::Connection, atom: &[u8]) -> Result<x::Atom> {
+pub fn intern_named_atom(
+    conn: &xcb::Connection,
+    atom: &[u8],
+) -> Result<x::Atom> {
     Ok(conn
         .wait_for_reply(conn.send_request(&x::InternAtom {
             only_if_exists: true,
@@ -138,8 +141,14 @@ pub fn set_wm_properties(
     height: u32,
 ) -> Result<()> {
     let window_type_atom = intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")?;
-    let window_type_dock_atom = intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE_DOCK")?;
-    change_window_property(conn, window, window_type_atom, &[window_type_dock_atom])?;
+    let window_type_dock_atom =
+        intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE_DOCK")?;
+    change_window_property(
+        conn,
+        window,
+        window_type_atom,
+        &[window_type_dock_atom],
+    )?;
 
     let strut_partial_atom = intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")?;
     let strut = if position == Position::Top {
@@ -164,9 +173,17 @@ pub fn create_surface(
     height: i32,
 ) -> Result<XCBSurface> {
     Ok(XCBSurface::create(
-        unsafe { &XCBConnection::from_raw_none(std::mem::transmute(conn.get_raw_conn())) },
+        unsafe {
+            &XCBConnection::from_raw_none(std::mem::transmute(
+                conn.get_raw_conn(),
+            ))
+        },
         &cairo::XCBDrawable(window.resource_id()),
-        unsafe { &cairo::XCBVisualType::from_raw_none(std::mem::transmute(&mut visual as *mut _)) },
+        unsafe {
+            &cairo::XCBVisualType::from_raw_none(std::mem::transmute(
+                &mut visual as *mut _,
+            ))
+        },
         width,
         height,
     )?)

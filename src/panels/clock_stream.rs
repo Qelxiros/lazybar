@@ -22,7 +22,10 @@ impl ClockStream {
 impl Stream for ClockStream {
     type Item = Instant;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Instant>> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Instant>> {
         let ret = self.interval.poll_tick(cx).map(Some);
         if ret.is_ready() {
             let duration = (self.get_duration)();

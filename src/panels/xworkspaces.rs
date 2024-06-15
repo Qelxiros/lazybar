@@ -13,7 +13,9 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
-use crate::{x::intern_named_atom, Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    x::intern_named_atom, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+};
 
 struct XStream {
     conn: Arc<xcb::Connection>,
@@ -43,7 +45,10 @@ impl XStream {
 impl Stream for XStream {
     type Item = ();
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &self.handle {
             if handle.is_finished() {
                 self.handle = None;
@@ -59,7 +64,9 @@ impl Stream for XStream {
             let names_atom = self.names_atom;
             self.handle = Some(task::spawn_blocking(move || loop {
                 let event = conn.wait_for_event();
-                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) = event {
+                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
+                    event
+                {
                     if event.atom() == number_atom
                         || event.atom() == current_atom
                         || event.atom() == names_atom
@@ -150,7 +157,13 @@ impl XWorkspaces {
         normal_atom: x::Atom,
         desktop_atom: x::Atom,
     ) -> Result<((i32, i32), PanelDrawFn)> {
-        let workspaces = get_workspaces(&self.conn, root, number_atom, names_atom, utf8_atom)?;
+        let workspaces = get_workspaces(
+            &self.conn,
+            root,
+            number_atom,
+            names_atom,
+            utf8_atom,
+        )?;
         let current = get_current(&self.conn, root, current_atom)?;
         let nonempty_set = get_nonempty(
             &self.conn,
@@ -211,7 +224,12 @@ impl XWorkspaces {
                     let size = layout.pixel_size();
 
                     cr.save()?;
-                    cr.rectangle(0.0, 0.0, f64::from(size.0 + padding), f64::from(height));
+                    cr.rectangle(
+                        0.0,
+                        0.0,
+                        f64::from(size.0 + padding),
+                        f64::from(height),
+                    );
                     cr.fill()?;
 
                     if *i == current && highlight.enabled {
@@ -230,7 +248,10 @@ impl XWorkspaces {
                         cr.fill()?;
                     }
 
-                    cr.translate(f64::from(padding / 2), f64::from(height - size.1) / 2.0);
+                    cr.translate(
+                        f64::from(padding / 2),
+                        f64::from(height - size.1) / 2.0,
+                    );
 
                     if *i == current {
                         active.apply_fg(cr);
@@ -243,7 +264,10 @@ impl XWorkspaces {
                     show_layout(cr, layout);
                     cr.restore()?;
 
-                    cr.translate(f64::from(layout.pixel_size().0 + padding), 0.0);
+                    cr.translate(
+                        f64::from(layout.pixel_size().0 + padding),
+                        0.0,
+                    );
                 }
                 Ok(())
             }),
@@ -273,13 +297,16 @@ impl PanelConfig for XWorkspaces {
         global_attrs: Attrs,
         height: i32,
     ) -> Result<PanelStream> {
-        let number_atom = intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
+        let number_atom =
+            intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
         let names_atom = intern_named_atom(&self.conn, b"_NET_DESKTOP_NAMES")?;
         let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
-        let current_atom = intern_named_atom(&self.conn, b"_NET_CURRENT_DESKTOP")?;
+        let current_atom =
+            intern_named_atom(&self.conn, b"_NET_CURRENT_DESKTOP")?;
         let client_atom = intern_named_atom(&self.conn, b"_NET_CLIENT_LIST")?;
         let type_atom = intern_named_atom(&self.conn, b"_NET_WM_WINDOW_TYPE")?;
-        let normal_atom = intern_named_atom(&self.conn, b"_NET_WM_WINDOW_TYPE_NORMAL")?;
+        let normal_atom =
+            intern_named_atom(&self.conn, b"_NET_WM_WINDOW_TYPE_NORMAL")?;
         let desktop_atom = intern_named_atom(&self.conn, b"_NET_WM_DESKTOP")?;
 
         let root = self
@@ -289,11 +316,12 @@ impl PanelConfig for XWorkspaces {
             .nth(self.screen as usize)
             .ok_or_else(|| anyhow!("Screen not found"))?
             .root();
-        self.conn
-            .check_request(self.conn.send_request_checked(&x::ChangeWindowAttributes {
+        self.conn.check_request(self.conn.send_request_checked(
+            &x::ChangeWindowAttributes {
                 window: root,
                 value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
-            }))?;
+            },
+        ))?;
 
         self.active = global_attrs.clone().overlay(self.active);
         self.nonempty = global_attrs.clone().overlay(self.nonempty);
@@ -365,7 +393,11 @@ fn get_workspaces(
     Ok(names)
 }
 
-fn get_current(conn: &xcb::Connection, root: x::Window, current_atom: x::Atom) -> Result<u32> {
+fn get_current(
+    conn: &xcb::Connection,
+    root: x::Window,
+    current_atom: x::Atom,
+) -> Result<u32> {
     Ok(conn
         .wait_for_reply(conn.send_request(&x::GetProperty {
             delete: false,
@@ -422,17 +454,20 @@ fn get_clients(
     let mut windows = Vec::new();
 
     loop {
-        let reply = conn.wait_for_reply(conn.send_request(&x::GetProperty {
-            delete: false,
-            window: root,
-            property: client_atom,
-            r#type: x::ATOM_WINDOW,
-            long_offset: windows.len() as u32,
-            long_length: 16,
-        }))?;
+        let reply =
+            conn.wait_for_reply(conn.send_request(&x::GetProperty {
+                delete: false,
+                window: root,
+                property: client_atom,
+                r#type: x::ATOM_WINDOW,
+                long_offset: windows.len() as u32,
+                long_length: 16,
+            }))?;
 
         let wids: Vec<u32> = reply.value().to_vec();
-        windows.append(&mut wids.iter().map(|&w| unsafe { x::Window::new(w) }).collect());
+        windows.append(
+            &mut wids.iter().map(|&w| unsafe { x::Window::new(w) }).collect(),
+        );
 
         if reply.bytes_after() == 0 {
             break;

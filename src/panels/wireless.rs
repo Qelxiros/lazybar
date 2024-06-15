@@ -121,10 +121,15 @@ impl Wireless {
         }
     }
 
-    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<((i32, i32), PanelDrawFn)> {
-        let essid = glib::markup_escape_text(query_essid(self.if_name.as_str())?.as_str());
-        let ip =
-            query_ip(self.if_name.as_str()).map_or_else(|| "?.?.?.?".into(), |a| a.to_string());
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+    ) -> Result<((i32, i32), PanelDrawFn)> {
+        let essid = glib::markup_escape_text(
+            query_essid(self.if_name.as_str())?.as_str(),
+        );
+        let ip = query_ip(self.if_name.as_str())
+            .map_or_else(|| "?.?.?.?".into(), |a| a.to_string());
 
         let text = self
             .format
@@ -171,7 +176,8 @@ impl PanelConfig for Wireless {
         _height: i32,
     ) -> Result<PanelStream> {
         self.attrs = global_attrs.overlay(self.attrs);
-        let stream = IntervalStream::new(interval(self.duration)).map(move |_| self.draw(&cr));
+        let stream = IntervalStream::new(interval(self.duration))
+            .map(move |_| self.draw(&cr));
 
         Ok(Box::pin(stream))
     }

@@ -10,7 +10,11 @@ pub struct Attrs {
 
 impl Attrs {
     #[must_use]
-    pub const fn new(font: Option<FontDescription>, fg: Option<Color>, bg: Option<Color>) -> Self {
+    pub const fn new(
+        font: Option<FontDescription>,
+        fg: Option<Color>,
+        bg: Option<Color>,
+    ) -> Self {
         Self { font, fg, bg }
     }
 

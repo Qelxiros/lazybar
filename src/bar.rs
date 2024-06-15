@@ -6,8 +6,8 @@ use tokio_stream::StreamMap;
 use xcb::{x, Event};
 
 use crate::{
-    create_surface, create_window, map_window, set_wm_properties, Alignment, Margins, PanelDrawFn,
-    PanelStream, Position,
+    create_surface, create_window, map_window, set_wm_properties, Alignment,
+    Margins, PanelDrawFn, PanelStream, Position,
 };
 
 #[derive(PartialEq, Eq)]
@@ -89,9 +89,16 @@ impl Bar {
     ) -> Result<Self> {
         let (conn, screen, window, width, visual) =
             create_window(position, height, transparent, &bg)?;
-        set_wm_properties(&conn, window, position, width.into(), height.into())?;
+        set_wm_properties(
+            &conn,
+            window,
+            position,
+            width.into(),
+            height.into(),
+        )?;
         map_window(&conn, window)?;
-        let surface = create_surface(&conn, window, visual, width.into(), height.into())?;
+        let surface =
+            create_surface(&conn, window, visual, width.into(), height.into())?;
         let cr = cairo::Context::new(&surface)?;
         surface.flush();
         conn.flush()?;
@@ -133,9 +140,12 @@ impl Bar {
         self.cr
             .set_source_rgba(self.bg.r, self.bg.g, self.bg.b, self.bg.a);
         match scope {
-            Region::Left => self
-                .cr
-                .rectangle(0.0, 0.0, self.extents.left, f64::from(self.height)),
+            Region::Left => self.cr.rectangle(
+                0.0,
+                0.0,
+                self.extents.left,
+                f64::from(self.height),
+            ),
             Region::CenterRight => self.cr.rectangle(
                 self.extents.center.0,
                 0.0,
@@ -149,12 +159,20 @@ impl Bar {
                 f64::from(self.height),
             ),
             Region::All => {
-                self.cr
-                    .rectangle(0.0, 0.0, f64::from(self.width), f64::from(self.height));
+                self.cr.rectangle(
+                    0.0,
+                    0.0,
+                    f64::from(self.width),
+                    f64::from(self.height),
+                );
             }
             Region::Custom { start_x, end_x } => {
-                self.cr
-                    .rectangle(*start_x, 0.0, end_x - start_x, f64::from(self.height));
+                self.cr.rectangle(
+                    *start_x,
+                    0.0,
+                    end_x - start_x,
+                    f64::from(self.height),
+                );
             }
         }
         self.cr.fill()?;
@@ -188,7 +206,9 @@ impl Bar {
 
                 if (new_width - cur_width).abs() < f64::EPSILON {
                     self.redraw_one(alignment, idx)?;
-                } else if new_width - cur_width + self.extents.left + self.margins.internal
+                } else if new_width - cur_width
+                    + self.extents.left
+                    + self.margins.internal
                     < self.extents.center.0
                     && (self.center_state == CenterState::Center
                         || self.center_state == CenterState::Left)
@@ -240,12 +260,19 @@ impl Bar {
 
                 if (new_width - cur_width).abs() < f64::EPSILON {
                     self.redraw_one(alignment, idx)?;
-                } else if self.extents.right - new_width - cur_width - self.margins.internal
+                } else if self.extents.right
+                    - new_width
+                    - cur_width
+                    - self.margins.internal
                     > self.extents.center.1
                 {
                     self.redraw_right(true)?;
-                } else if (self.extents.right - self.extents.center.1 - self.margins.internal)
-                    + (self.extents.center.0 - self.extents.left - self.margins.internal)
+                } else if (self.extents.right
+                    - self.extents.center.1
+                    - self.margins.internal)
+                    + (self.extents.center.0
+                        - self.extents.left
+                        - self.margins.internal)
                     > new_width - cur_width
                 {
                     self.extents.right += new_width - cur_width;
@@ -286,7 +313,8 @@ impl Bar {
                     })?;
                     self.cr.translate(
                         offset,
-                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height)
+                            / 2.0,
                     );
                     (draw_info.draw_fn)(&self.cr)?;
                 }
@@ -315,11 +343,14 @@ impl Bar {
                 {
                     self.redraw_background(&Region::Custom {
                         start_x: self.extents.center.0 + offset,
-                        end_x: self.extents.center.0 + offset + f64::from(draw_info.width),
+                        end_x: self.extents.center.0
+                            + offset
+                            + f64::from(draw_info.width),
                     })?;
                     self.cr.translate(
                         self.extents.center.0 + offset,
-                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height)
+                            / 2.0,
                     );
                     (draw_info.draw_fn)(&self.cr)?;
                 }
@@ -348,11 +379,14 @@ impl Bar {
                 {
                     self.redraw_background(&Region::Custom {
                         start_x: self.extents.right + offset,
-                        end_x: self.extents.right + offset + f64::from(draw_info.width),
+                        end_x: self.extents.right
+                            + offset
+                            + f64::from(draw_info.width),
                     })?;
                     self.cr.translate(
                         self.extents.right + offset,
-                        f64::from(i32::from(self.height) - draw_info.height) / 2.0,
+                        f64::from(i32::from(self.height) - draw_info.height)
+                            / 2.0,
                     );
                     (draw_info.draw_fn)(&self.cr)?;
                 }
@@ -421,18 +455,26 @@ impl Bar {
             self.extents.center.1 = self.margins.internal + self.extents.left;
             self.center_state = CenterState::Unknown;
         } else if total_width / 2.0
-            > self.extents.right - f64::from(self.width / 2) - self.margins.internal
+            > self.extents.right
+                - f64::from(self.width / 2)
+                - self.margins.internal
         {
-            self.extents.center.0 = self.extents.right - total_width - self.margins.internal;
-            self.extents.center.1 = self.extents.right - total_width - self.margins.internal;
+            self.extents.center.0 =
+                self.extents.right - total_width - self.margins.internal;
+            self.extents.center.1 =
+                self.extents.right - total_width - self.margins.internal;
             self.center_state = CenterState::Left;
-        } else if total_width / 2.0 > f64::from(self.width / 2) - self.extents.left {
+        } else if total_width / 2.0
+            > f64::from(self.width / 2) - self.extents.left
+        {
             self.extents.center.0 = self.extents.left + self.margins.internal;
             self.extents.center.1 = self.extents.left + self.margins.internal;
             self.center_state = CenterState::Right;
         } else {
-            self.extents.center.0 = f64::from(self.width / 2) - total_width / 2.0;
-            self.extents.center.1 = f64::from(self.width / 2) - total_width / 2.0;
+            self.extents.center.0 =
+                f64::from(self.width / 2) - total_width / 2.0;
+            self.extents.center.1 =
+                f64::from(self.width / 2) - total_width / 2.0;
             self.center_state = CenterState::Center;
         }
 

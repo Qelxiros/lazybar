@@ -17,7 +17,8 @@ use x::{create_surface, create_window, map_window, set_wm_properties};
 pub mod panels;
 
 pub type PanelDrawFn = Box<dyn Fn(&cairo::Context) -> Result<()>>;
-pub type PanelStream = Pin<Box<dyn Stream<Item = Result<((i32, i32), PanelDrawFn)>>>>;
+pub type PanelStream =
+    Pin<Box<dyn Stream<Item = Result<((i32, i32), PanelDrawFn)>>>>;
 
 pub trait PanelConfig {
     /// # Errors
@@ -142,7 +143,11 @@ impl BarConfig {
             bar.left.push(Panel::new(None));
             left_panels.insert(
                 idx,
-                panel.into_stream(bar.cr.clone(), self.attrs.clone(), i32::from(self.height))?,
+                panel.into_stream(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?,
             );
         }
         bar.streams.insert(Alignment::Left, left_panels);
@@ -152,7 +157,11 @@ impl BarConfig {
             bar.center.push(Panel::new(None));
             center_panels.insert(
                 idx,
-                panel.into_stream(bar.cr.clone(), self.attrs.clone(), i32::from(self.height))?,
+                panel.into_stream(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?,
             );
         }
         bar.streams.insert(Alignment::Center, center_panels);
@@ -162,7 +171,11 @@ impl BarConfig {
             bar.right.push(Panel::new(None));
             right_panels.insert(
                 idx,
-                panel.into_stream(bar.cr.clone(), self.attrs.clone(), i32::from(self.height))?,
+                panel.into_stream(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?,
             );
         }
         bar.streams.insert(Alignment::Right, right_panels);

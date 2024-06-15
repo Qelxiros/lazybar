@@ -20,7 +20,9 @@ pub trait Precision {
 impl Precision for Days {
     fn tick() -> Duration {
         let now = Local::now();
-        Duration::from_secs(u64::from(60 * (60 * (24 - now.hour()) + 60 - now.minute())))
+        Duration::from_secs(u64::from(
+            60 * (60 * (24 - now.hour()) + 60 - now.minute()),
+        ))
     }
 }
 
@@ -41,7 +43,9 @@ impl Precision for Minutes {
 impl Precision for Seconds {
     fn tick() -> Duration {
         let now = Local::now();
-        Duration::from_nanos(1_000_000_000 - u64::from(now.nanosecond() % 1_000_000_000))
+        Duration::from_nanos(
+            1_000_000_000 - u64::from(now.nanosecond() % 1_000_000_000),
+        )
     }
 }
 
