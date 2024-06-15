@@ -113,7 +113,6 @@ pub struct XWorkspaces {
 }
 
 impl XWorkspaces {
-    #[must_use]
     /// # Errors
     ///
     /// If the connection to the X server cannot be established.

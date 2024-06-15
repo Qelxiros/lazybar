@@ -1,6 +1,8 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use omnibars::{
-    panels::{Clock, Highlight, Seconds, XWindow, XWorkspaces},
+    panels::{Clock, Highlight, Seconds, Wireless, XWindow, XWorkspaces},
     Alignment, Attrs, BarConfig, Margins, Position,
 };
 use pango::FontDescription;
@@ -34,7 +36,16 @@ fn main() -> Result<()> {
         )?,
         Alignment::Left,
     );
-    config.add_panel(XWindow::default(), Alignment::Left);
+    // config.add_panel(XWindow::default(), Alignment::Left);
+    config.add_panel(
+        Wireless::new(
+            "wlp0s20f3",
+            String::from("<span foreground='#0ff'>%ifname%</span> %essid% %local_ip%"),
+            Attrs::default(),
+            Duration::from_secs(1),
+        ),
+        Alignment::Left,
+    );
     config.add_panel(
         Clock::<Seconds>::new(
             "<span foreground='#0ff'>%Y-%m-%d %T</span>",
