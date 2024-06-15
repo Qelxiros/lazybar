@@ -201,7 +201,8 @@ impl XWorkspaces {
         let width = layouts
             .iter()
             .map(|l| l.1.pixel_size().0 + self.padding)
-            .sum();
+            .sum::<i32>()
+            - self.padding;
 
         let padding = self.padding;
         let active = self.active.clone();

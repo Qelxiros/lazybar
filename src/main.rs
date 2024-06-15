@@ -3,8 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use omnibars::{
     panels::{
-        Clock, FanotifyWatch, Highlight, Seconds, Wireless, XWindow,
-        XWorkspaces,
+        Clock, Highlight, Seconds, Separator, Wireless, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, Margins, Position,
 };
@@ -39,7 +38,15 @@ fn main() -> Result<()> {
         )?,
         Alignment::Left,
     );
-    // config.add_panel(XWindow::default(), Alignment::Left);
+    config.add_panel(Separator::default(), Alignment::Left);
+    config.add_panel(XWindow::default(), Alignment::Left);
+    config.add_panel(
+        Clock::<Seconds>::new(
+            "<span foreground='#0ff'>%Y-%m-%d %T</span>",
+            Attrs::default(),
+        ),
+        Alignment::Center,
+    );
     config.add_panel(
         Wireless::new(
             "wlp0s20f3",
@@ -48,13 +55,6 @@ fn main() -> Result<()> {
             ),
             Attrs::default(),
             Duration::from_secs(1),
-        ),
-        Alignment::Left,
-    );
-    config.add_panel(
-        Clock::<Seconds>::new(
-            "<span foreground='#0ff'>%Y-%m-%d %T</span>",
-            Attrs::default(),
         ),
         Alignment::Right,
     );
