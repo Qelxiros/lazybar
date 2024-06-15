@@ -9,28 +9,28 @@ use std::{
 
 use anyhow::Result;
 use futures::FutureExt;
-use nix::sys::fanotify::{self, EventFFlags, InitFlags, MarkFlags, MaskFlags};
+use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
-struct FanotifyStream {
-    f: Arc<fanotify::Fanotify>,
+struct InotifyStream {
+    i: Arc<inotify::Inotify>,
     handle: Option<JoinHandle<()>>,
 }
 
-impl FanotifyStream {
-    fn new(f: fanotify::Fanotify) -> Self {
+impl InotifyStream {
+    fn new(i: inotify::Inotify) -> Self {
         Self {
-            f: Arc::new(f),
+            i: Arc::new(i),
             handle: None,
         }
     }
 }
 
-impl Stream for FanotifyStream {
+impl Stream for InotifyStream {
     type Item = ();
 
     fn poll_next(
@@ -44,15 +44,13 @@ impl Stream for FanotifyStream {
             }
             value
         } else {
-            let f = self.f.clone();
+            let i = self.i.clone();
             let waker = cx.waker().clone();
             self.handle = Some(task::spawn_blocking(move || loop {
-                let result = f.read_events();
-                if let Ok(vec) = result {
-                    if let Some(_) = vec.iter().find(|e| e.check_version()) {
-                        waker.wake();
-                        break;
-                    }
+                let result = i.read_events();
+                if let Ok(_) = result {
+                    waker.wake();
+                    break;
                 }
             }));
             Poll::Pending
@@ -60,12 +58,12 @@ impl Stream for FanotifyStream {
     }
 }
 
-pub struct Fanotify {
+pub struct Inotify {
     path: String,
     attrs: Attrs,
 }
 
-impl Fanotify {
+impl Inotify {
     pub fn new(path: impl Into<String>, attrs: Attrs) -> Self {
         Self {
             path: path.into(),
@@ -102,29 +100,23 @@ impl Fanotify {
     }
 }
 
-impl PanelConfig for Fanotify {
+impl PanelConfig for Inotify {
     fn into_stream(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
-        // doesn't know that it's real
-        let init_flags = InitFlags::from_bits_retain(0x00000200);
-        let event_f_flags = EventFFlags::O_RDONLY | EventFFlags::O_NOATIME;
-        let fanotify = fanotify::Fanotify::init(init_flags, event_f_flags)?;
+        let init_flags = InitFlags::empty();
+        let inotify = inotify::Inotify::init(init_flags)?;
 
-        let mark_flags = MarkFlags::FAN_MARK_ADD;
-        let mask = MaskFlags::FAN_MODIFY
-            | MaskFlags::FAN_DELETE_SELF
-            | MaskFlags::FAN_MOVE_SELF;
-        fanotify.mark(mark_flags, mask, None, Some(self.path.as_str()))?;
+        let watch_flags = AddWatchFlags::IN_MODIFY;
+        inotify.add_watch(self.path.as_str(), watch_flags)?;
 
         self.attrs = global_attrs.overlay(self.attrs);
 
         let stream = tokio_stream::once(())
-            .chain(FanotifyStream::new(fanotify))
+            .chain(InotifyStream::new(inotify))
             .map(move |_| self.draw(&cr));
 
         Ok(Box::pin(stream))
