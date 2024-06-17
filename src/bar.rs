@@ -438,14 +438,23 @@ impl Bar {
             self.redraw_background(&Region::CenterRight)?;
         }
 
-        let total_width = f64::from(
+        let center_width = f64::from(
             self.center
                 .iter()
                 .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                 .sum::<i32>(),
         );
 
-        if total_width
+        self.extents.right = f64::from(
+            self.width
+                - self
+                    .right
+                    .iter()
+                    .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
+                    .sum::<i32>(),
+        ) - self.margins.internal;
+
+        if center_width
             > 2.0f64.mul_add(
                 -self.margins.internal,
                 self.extents.right - self.extents.left,
@@ -454,27 +463,29 @@ impl Bar {
             self.extents.center.0 = self.margins.internal + self.extents.left;
             self.extents.center.1 = self.margins.internal + self.extents.left;
             self.center_state = CenterState::Unknown;
-        } else if total_width / 2.0
+        } else if center_width / 2.0
             > self.extents.right
                 - f64::from(self.width / 2)
                 - self.margins.internal
         {
             self.extents.center.0 =
-                self.extents.right - total_width - self.margins.internal;
+                self.extents.right - center_width - self.margins.internal;
             self.extents.center.1 =
-                self.extents.right - total_width - self.margins.internal;
+                self.extents.right - center_width - self.margins.internal;
             self.center_state = CenterState::Left;
-        } else if total_width / 2.0
-            > f64::from(self.width / 2) - self.extents.left
+        } else if center_width / 2.0
+            > f64::from(self.width / 2)
+                - self.extents.left
+                - self.margins.internal
         {
             self.extents.center.0 = self.extents.left + self.margins.internal;
             self.extents.center.1 = self.extents.left + self.margins.internal;
             self.center_state = CenterState::Right;
         } else {
             self.extents.center.0 =
-                f64::from(self.width / 2) - total_width / 2.0;
+                f64::from(self.width / 2) - center_width / 2.0;
             self.extents.center.1 =
-                f64::from(self.width / 2) - total_width / 2.0;
+                f64::from(self.width / 2) - center_width / 2.0;
             self.center_state = CenterState::Center;
         }
 

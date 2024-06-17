@@ -1,12 +1,12 @@
+use std::{marker::PhantomData, rc::Rc, time::Duration};
+
 use anyhow::Result;
 use chrono::{Local, Timelike};
 use pangocairo::functions::show_layout;
-use std::{marker::PhantomData, rc::Rc, time::Duration};
 use tokio_stream::StreamExt;
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
-
 use super::clock_stream::ClockStream;
+use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 pub struct Days;
 pub struct Hours;

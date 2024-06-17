@@ -2,11 +2,10 @@ mod attrs;
 mod bar;
 mod x;
 
-pub use attrs::Attrs;
-
 use std::{fmt::Display, pin::Pin, rc::Rc};
 
 use anyhow::Result;
+pub use attrs::Attrs;
 use bar::{Bar, Panel};
 use csscolorparser::Color;
 use futures::Stream;

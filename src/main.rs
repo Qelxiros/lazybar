@@ -2,10 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use omnibars::{
-    panels::{
-        Battery, Clock, Fanotify, Highlight, Inotify, Seconds, Separator,
-        Wireless, XWindow, XWorkspaces,
-    },
+    panels::{Clock, Seconds, Wireless, XWindow},
     Alignment, Attrs, BarConfig, Margins, Position,
 };
 use pango::FontDescription;
@@ -16,31 +13,20 @@ fn main() -> Result<()> {
         Some("#ccc".parse()?),
         Some("#0000".parse()?),
     );
+
     let mut config = BarConfig::new(
         Position::Top,
         32,
         true,
         "#0000".parse()?,
-        Margins::new(0.0, 10.0, 10.0),
+        Margins::new(10.0, 10.0, 10.0),
         attrs,
     );
 
-    let active = Attrs::new(None, None, Some("#373737".parse()?));
-    let nonempty = Attrs::new(None, None, None);
-    let inactive = Attrs::new(None, Some("#888".parse()?), None);
-    config.add_panel(
-        XWorkspaces::new(
-            "",
-            16,
-            active,
-            nonempty,
-            inactive,
-            Highlight::new(true, 4.0, "#0ff".parse()?),
-        )?,
-        Alignment::Left,
-    );
-    config.add_panel(Separator::default(), Alignment::Left);
-    config.add_panel(Battery::default(), Alignment::Left);
+    config.add_panel(XWindow::default(), Alignment::Left);
+
+    config.add_panel(Clock::<Seconds>::default(), Alignment::Center);
+
     config.add_panel(
         Wireless::new(
             "wlp0s20f3",
@@ -52,6 +38,7 @@ fn main() -> Result<()> {
         ),
         Alignment::Right,
     );
+
     config.run()?;
 
     Ok(())

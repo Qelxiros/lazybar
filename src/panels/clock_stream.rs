@@ -1,7 +1,10 @@
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use futures::Stream;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
 use tokio::time::{interval, Instant, Interval};
 
 #[derive(Debug)]
