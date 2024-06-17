@@ -1,3 +1,4 @@
+mod battery;
 mod clock;
 mod clock_stream;
 mod fanotify;
@@ -7,6 +8,7 @@ mod wireless;
 mod xwindow;
 mod xworkspaces;
 
+pub use battery::*;
 pub use clock::*;
 pub use fanotify::*;
 pub use inotify::*;
