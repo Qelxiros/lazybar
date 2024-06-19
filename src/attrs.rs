@@ -1,23 +1,18 @@
+use builder_pattern::Builder;
 use csscolorparser::Color;
 use pango::FontDescription;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Builder)]
 pub struct Attrs {
+    #[default(None)]
     pub font: Option<FontDescription>,
+    #[default(None)]
     pub fg: Option<Color>,
+    #[default(None)]
     pub bg: Option<Color>,
 }
 
 impl Attrs {
-    #[must_use]
-    pub const fn new(
-        font: Option<FontDescription>,
-        fg: Option<Color>,
-        bg: Option<Color>,
-    ) -> Self {
-        Self { font, fg, bg }
-    }
-
     pub fn apply_font(&self, layout: &pango::Layout) {
         if let Some(font) = &self.font {
             layout.set_font_description(Some(font));
@@ -42,6 +37,16 @@ impl Attrs {
             font: new.font.or(self.font),
             fg: new.fg.or(self.fg),
             bg: new.bg.or(self.bg),
+        }
+    }
+}
+
+impl Default for Attrs {
+    fn default() -> Self {
+        Self {
+            font: None,
+            fg: None,
+            bg: None,
         }
     }
 }

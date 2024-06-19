@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use builder_pattern::Builder;
 use csscolorparser::Color;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
@@ -108,14 +109,24 @@ impl Default for Highlight {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Builder)]
 pub struct XWorkspaces {
     conn: Arc<xcb::Connection>,
     screen: i32,
+    #[default(0)]
+    #[public]
     padding: i32,
+    #[default(Default::default())]
+    #[public]
     active: Attrs,
+    #[default(Default::default())]
+    #[public]
     inactive: Attrs,
+    #[default(Default::default())]
+    #[public]
     nonempty: Attrs,
+    #[default(Default::default())]
+    #[public]
     highlight: Highlight,
 }
 
@@ -123,24 +134,24 @@ impl XWorkspaces {
     /// # Errors
     ///
     /// If the connection to the X server cannot be established.
-    pub fn new(
+    pub fn builder(
         screen: impl AsRef<str>,
-        padding: i32,
-        active: Attrs,
-        nonempty: Attrs,
-        inactive: Attrs,
-        highlight: Highlight,
-    ) -> Result<Self> {
+    ) -> Result<
+        XWorkspacesBuilder<
+            'static,
+            std::sync::Arc<xcb::Connection>,
+            i32,
+            (),
+            (),
+            (),
+            (),
+            (),
+            (),
+            (),
+        >,
+    > {
         let result = xcb::Connection::connect(Some(screen.as_ref()))?;
-        Ok(Self {
-            conn: Arc::new(result.0),
-            screen: result.1,
-            padding,
-            active,
-            inactive,
-            nonempty,
-            highlight,
-        })
+        Ok(Self::new().conn(Arc::new(result.0)).screen(result.1))
     }
 
     fn draw(

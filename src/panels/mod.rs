@@ -1,6 +1,5 @@
 mod battery;
 mod clock;
-mod clock_stream;
 mod fanotify;
 mod inotify;
 mod separator;

@@ -1,15 +1,14 @@
+use builder_pattern::Builder;
 use pangocairo::functions::{create_layout, show_layout};
 
 use crate::{PanelConfig, PanelDrawFn};
 
+#[derive(Builder)]
 pub struct Separator {
+    #[default(String::from(" <span foreground='#666'>|</span> "))]
+    #[into]
+    #[public]
     text: String,
-}
-
-impl Separator {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self { text: text.into() }
-    }
 }
 
 impl Default for Separator {

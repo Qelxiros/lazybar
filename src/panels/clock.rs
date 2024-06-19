@@ -1,11 +1,18 @@
-use std::{marker::PhantomData, rc::Rc, time::Duration};
+use std::{
+    marker::PhantomData,
+    pin::Pin,
+    rc::Rc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use anyhow::Result;
+use builder_pattern::Builder;
 use chrono::{Local, Timelike};
 use pangocairo::functions::show_layout;
-use tokio_stream::StreamExt;
+use tokio::time::{interval, Instant, Interval};
+use tokio_stream::{Stream, StreamExt};
 
-use super::clock_stream::ClockStream;
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 pub struct Days;
@@ -49,21 +56,50 @@ impl Precision for Seconds {
     }
 }
 
+#[derive(Debug)]
+pub struct ClockStream {
+    get_duration: fn() -> Duration,
+    interval: Interval,
+}
+
+impl ClockStream {
+    pub fn new(get_duration: fn() -> Duration) -> Self {
+        Self {
+            get_duration,
+            interval: interval(get_duration()),
+        }
+    }
+}
+
+impl Stream for ClockStream {
+    type Item = Instant;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Instant>> {
+        let ret = self.interval.poll_tick(cx).map(Some);
+        if ret.is_ready() {
+            let duration = (self.get_duration)();
+            self.interval.reset_at(Instant::now() + duration);
+        }
+        ret
+    }
+}
+
+#[derive(Builder)]
 pub struct Clock<P> {
+    #[into]
+    #[public]
     format_str: String,
+    #[default(Default::default())]
+    #[public]
     attrs: Attrs,
+    #[default(PhantomData::<P>)]
     phantom: PhantomData<P>,
 }
 
 impl<P: Precision> Clock<P> {
-    pub fn new(format_str: impl Into<String>, attrs: Attrs) -> Self {
-        Self {
-            format_str: format_str.into(),
-            attrs,
-            phantom: PhantomData::<P>,
-        }
-    }
-
     fn draw(&self, cr: &Rc<cairo::Context>) -> ((i32, i32), PanelDrawFn) {
         let now = chrono::Local::now();
         let text = now.format(&self.format_str).to_string();

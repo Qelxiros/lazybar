@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
+use builder_pattern::Builder;
 use nix::{
     ifaddrs::getifaddrs,
     sys::socket::{self, AddressFamily, SockFlag, SockType},
@@ -99,28 +100,25 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
     query_ipv4(if_name).or_else(|| query_ipv6(if_name))
 }
 
+#[derive(Builder)]
 pub struct Wireless {
+    #[default(String::from("wlan0"))]
+    #[into]
+    #[public]
     if_name: String,
+    #[default(String::from("%ifname% %essid% %local_ip%"))]
+    #[into]
+    #[public]
     format: String,
+    #[default(Default::default())]
+    #[public]
     attrs: Attrs,
+    #[default(Duration::from_secs(10))]
+    #[public]
     duration: Duration,
 }
 
 impl Wireless {
-    pub fn new(
-        if_name: impl Into<String>,
-        format: String,
-        attrs: Attrs,
-        duration: Duration,
-    ) -> Self {
-        Self {
-            if_name: if_name.into(),
-            format,
-            attrs,
-            duration,
-        }
-    }
-
     fn draw(
         &self,
         cr: &Rc<cairo::Context>,

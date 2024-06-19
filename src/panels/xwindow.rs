@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use builder_pattern::Builder;
 use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
@@ -74,10 +75,14 @@ impl Stream for XStream {
     }
 }
 
+#[derive(Builder)]
+#[hidden]
 pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
+    #[default(Default::default())]
+    #[public]
     attrs: Attrs,
 }
 
@@ -85,14 +90,24 @@ impl XWindow {
     /// # Errors
     ///
     /// If the connection to the X server fails.
-    pub fn new(screen: impl AsRef<str>, attrs: Attrs) -> Result<Self> {
+    pub fn builder(
+        screen: impl AsRef<str>,
+    ) -> Result<
+        XWindowBuilder<
+            'static,
+            Arc<xcb::Connection>,
+            i32,
+            HashSet<x::Window>,
+            (),
+            (),
+            (),
+        >,
+    > {
         let result = xcb::Connection::connect(Some(screen.as_ref()))?;
-        Ok(Self {
-            conn: Arc::new(result.0),
-            screen: result.1,
-            windows: HashSet::new(),
-            attrs,
-        })
+        Ok(Self::new()
+            .conn(Arc::new(result.0))
+            .screen(result.1)
+            .windows(HashSet::new()))
     }
 
     fn draw(

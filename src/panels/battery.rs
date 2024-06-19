@@ -1,49 +1,52 @@
 use std::{fs::File, io::Read, rc::Rc, time::Duration};
 
 use anyhow::Result;
+use builder_pattern::Builder;
 use pangocairo::functions::show_layout;
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
+#[derive(Builder)]
 pub struct Battery {
+    #[default(String::from("BAT0"))]
+    #[into]
+    #[public]
     battery: String,
+    #[default(String::from("AC"))]
+    #[into]
+    #[public]
     adapter: String,
+    #[default(String::from("CHG: %percentage%%"))]
+    #[into]
+    #[public]
     charging_format: String,
+    #[default(String::from("DSCHG: %percentage%%"))]
+    #[into]
+    #[public]
     discharging_format: String,
+    #[default(String::from("NCHG: %percentage%%"))]
+    #[into]
+    #[public]
     not_charging_format: String,
+    #[default(String::from("FULL: %percentage%%"))]
+    #[into]
+    #[public]
     full_format: String,
+    #[default(String::from("%percentage%%"))]
+    #[into]
+    #[public]
     unknown_format: String,
+    #[default(Duration::from_secs(10))]
+    #[public]
     duration: Duration,
+    #[default(Default::default())]
+    #[public]
     attrs: Attrs,
 }
 
 impl Battery {
-    pub fn new(
-        battery: impl Into<String>,
-        adapter: impl Into<String>,
-        charging_format: impl Into<String>,
-        discharging_format: impl Into<String>,
-        not_charging_format: impl Into<String>,
-        full_format: impl Into<String>,
-        unknown_format: impl Into<String>,
-        duration: Duration,
-        attrs: Attrs,
-    ) -> Self {
-        Self {
-            battery: battery.into(),
-            adapter: adapter.into(),
-            charging_format: charging_format.into(),
-            discharging_format: discharging_format.into(),
-            not_charging_format: not_charging_format.into(),
-            full_format: full_format.into(),
-            unknown_format: unknown_format.into(),
-            duration,
-            attrs,
-        }
-    }
-
     fn draw(
         &mut self,
         cr: &Rc<cairo::Context>,

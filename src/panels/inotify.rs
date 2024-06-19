@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::Result;
+use builder_pattern::Builder;
 use futures::FutureExt;
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
 use pangocairo::functions::{create_layout, show_layout};
@@ -58,19 +59,17 @@ impl Stream for InotifyStream {
     }
 }
 
+#[derive(Builder)]
 pub struct Inotify {
+    #[into]
+    #[public]
     path: String,
+    #[default(Default::default())]
+    #[public]
     attrs: Attrs,
 }
 
 impl Inotify {
-    pub fn new(path: impl Into<String>, attrs: Attrs) -> Self {
-        Self {
-            path: path.into(),
-            attrs,
-        }
-    }
-
     fn draw(
         &mut self,
         cr: &Rc<cairo::Context>,
