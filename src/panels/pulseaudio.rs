@@ -23,8 +23,32 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream, Ramp};
 
+#[derive(Builder)]
+pub struct Pulseaudio {
+    #[default(String::from("@DEFAULT_SINK@"))]
+    #[into]
+    #[public]
+    sink: String,
+    #[default(None)]
+    #[public]
+    server: Option<String>,
+    #[default(None)]
+    #[public]
+    ramp: Option<Ramp>,
+    #[default(None)]
+    #[public]
+    muted_ramp: Option<Ramp>,
+    #[default(Default::default())]
+    #[public]
+    attrs: Attrs,
+    send: Sender<(Volume, bool)>,
+    recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
+    #[default(None)]
+    handle: Option<JoinHandle<Result<(Volume, bool)>>>,
+}
+
 impl Stream for Pulseaudio {
-    type Item = Volume;
+    type Item = (Volume, bool);
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -55,32 +79,14 @@ impl Stream for Pulseaudio {
     }
 }
 
-#[derive(Builder)]
-pub struct Pulseaudio {
-    #[default(String::from("@DEFAULT_SINK@"))]
-    #[into]
-    #[public]
-    sink: String,
-    #[default(None)]
-    #[public]
-    server: Option<String>,
-    #[default(None)]
-    #[public]
-    ramp: Option<Ramp>,
-    #[default(Default::default())]
-    #[public]
-    attrs: Attrs,
-    send: Sender<Volume>,
-    recv: Arc<Mutex<Receiver<Volume>>>,
-    #[default(None)]
-    handle: Option<JoinHandle<Result<Volume>>>,
-}
-
 impl Pulseaudio {
     pub fn builder() -> PulseaudioBuilder<
         'static,
-        std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Volume>>>,
-        std::sync::mpsc::Sender<Volume>,
+        std::sync::Arc<
+            std::sync::Mutex<std::sync::mpsc::Receiver<(Volume, bool)>>,
+        >,
+        std::sync::mpsc::Sender<(Volume, bool)>,
+        (),
         (),
         (),
         (),
@@ -95,10 +101,16 @@ impl Pulseaudio {
 
     fn draw(
         cr: &Rc<cairo::Context>,
-        volume: Volume,
+        data: (Volume, bool),
         ramp: Option<&Ramp>,
+        muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
     ) -> ((i32, i32), PanelDrawFn) {
+        let (volume, mute) = data;
+        let ramp = match (mute, muted_ramp) {
+            (false, _) | (true, None) => ramp,
+            (true, Some(_)) => muted_ramp,
+        };
         let prefix = ramp
             .as_ref()
             .map(|r| r.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0));
@@ -134,6 +146,7 @@ impl Default for Pulseaudio {
             sink: String::from("@DEFAULT_SINK@"),
             server: None,
             ramp: None,
+            muted_ramp: None,
             attrs: Attrs::default(),
             send,
             recv: Arc::new(Mutex::new(recv)),
@@ -169,7 +182,8 @@ impl PanelConfig for Pulseaudio {
         introspector.get_sink_info_by_name(sink.as_str(), move |r| {
             if let ListResult::Item(s) = r {
                 let volume = s.volume.get()[0];
-                initial.send(volume).unwrap();
+                let mute = s.mute;
+                initial.send((volume, mute)).unwrap();
             }
         });
 
@@ -181,7 +195,8 @@ impl PanelConfig for Pulseaudio {
                 introspector.get_sink_info_by_name(sink.as_str(), move |r| {
                     if let ListResult::Item(s) = r {
                         let volume = s.volume.get()[0];
-                        send.send(volume).unwrap();
+                        let mute = s.mute;
+                        send.send((volume, mute)).unwrap();
                     }
                 });
             }));
@@ -196,10 +211,17 @@ impl PanelConfig for Pulseaudio {
 
         self.attrs = global_attrs.overlay(self.attrs);
         let ramp = self.ramp.clone();
+        let muted_ramp = self.muted_ramp.clone();
         let attrs = self.attrs.clone();
 
-        let stream = self.map(move |text| {
-            Ok(Pulseaudio::draw(&cr, text, ramp.as_ref(), &attrs))
+        let stream = self.map(move |data| {
+            Ok(Pulseaudio::draw(
+                &cr,
+                data,
+                ramp.as_ref(),
+                muted_ramp.as_ref(),
+                &attrs,
+            ))
         });
 
         Ok(Box::pin(stream))

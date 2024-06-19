@@ -1,7 +1,7 @@
 use anyhow::Result;
 use omnibars::{
     panels::{Clock, Pulseaudio, Seconds, XWindow},
-    Alignment, Attrs, BarConfig, Margins, Position,
+    Alignment, Attrs, BarConfig, Margins, Position, Ramp,
 };
 use pango::FontDescription;
 
@@ -25,7 +25,15 @@ fn main() -> Result<()> {
 
     config.add_panel(XWindow::builder("")?.build(), Alignment::Left);
 
-    config.add_panel(Pulseaudio::default(), Alignment::Center);
+    config.add_panel(
+        Pulseaudio::builder()
+            .ramp(Some(Ramp::from_iter("chom".chars().map(|c| c.to_string()))))
+            .muted_ramp(Some(Ramp::from_iter(
+                "mute".chars().map(|c| c.to_string()),
+            )))
+            .build(),
+        Alignment::Center,
+    );
 
     config.add_panel(
         Clock::<Seconds>::new()
