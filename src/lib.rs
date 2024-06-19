@@ -1,5 +1,6 @@
 mod attrs;
 mod bar;
+mod utils;
 mod x;
 
 use std::{fmt::Display, pin::Pin, rc::Rc};
@@ -11,6 +12,7 @@ use csscolorparser::Color;
 use futures::Stream;
 use tokio::{runtime::Runtime, task};
 use tokio_stream::{StreamExt, StreamMap};
+pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
 
 pub mod panels;

@@ -41,6 +41,8 @@ impl Attrs {
     }
 }
 
+// the `default` keyword conflicts with builder_pattern
+#[allow(clippy::derivable_impls)]
 impl Default for Attrs {
     fn default() -> Self {
         Self {

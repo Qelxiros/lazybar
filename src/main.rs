@@ -1,6 +1,6 @@
 use anyhow::Result;
 use omnibars::{
-    panels::{Clock, Seconds, Separator, Wireless, XWindow},
+    panels::{Clock, Pulseaudio, Seconds, XWindow},
     Alignment, Attrs, BarConfig, Margins, Position,
 };
 use pango::FontDescription;
@@ -25,21 +25,8 @@ fn main() -> Result<()> {
 
     config.add_panel(XWindow::builder("")?.build(), Alignment::Left);
 
-    config.add_panel(
-        Wireless::new()
-            .if_name("wlp0s20f3")
-            .format(
-                "<span foreground='#0ff'>%ifname%</span> %essid% %local_ip%",
-            )
-            .build(),
-        Alignment::Right,
-    );
-    config.add_panel(
-        Separator::new()
-            .text("<span font='FiraMono Nerd Font Mono 13'>  //  </span>")
-            .build(),
-        Alignment::Right,
-    );
+    config.add_panel(Pulseaudio::default(), Alignment::Center);
+
     config.add_panel(
         Clock::<Seconds>::new()
             .format_str("<span foreground='#0ff'>%Y-%m-%d %T</span>")
