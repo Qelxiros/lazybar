@@ -87,6 +87,7 @@ impl Margins {
 #[derive(Builder)]
 #[builder(pattern = "owned")]
 pub struct BarConfig {
+    name: String,
     left: Vec<Box<dyn PanelConfig>>,
     center: Vec<Box<dyn PanelConfig>>,
     right: Vec<Box<dyn PanelConfig>>,
@@ -99,28 +100,6 @@ pub struct BarConfig {
 }
 
 impl BarConfig {
-    #[must_use]
-    pub fn new(
-        position: Position,
-        height: u16,
-        transparent: bool,
-        bg: Color,
-        margins: Margins,
-        attrs: Attrs,
-    ) -> Self {
-        Self {
-            left: Vec::new(),
-            center: Vec::new(),
-            right: Vec::new(),
-            position,
-            height,
-            transparent,
-            bg,
-            margins,
-            attrs,
-        }
-    }
-
     pub fn add_panel(
         &mut self,
         panel: Box<dyn PanelConfig>,
@@ -146,6 +125,7 @@ impl BarConfig {
     #[allow(clippy::future_not_send)]
     async fn run_inner(self) -> Result<()> {
         let mut bar = Bar::new(
+            self.name,
             self.position,
             self.height,
             self.transparent,

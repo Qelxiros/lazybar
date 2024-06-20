@@ -1,7 +1,14 @@
 [package]
-name = "omnibars"
+name = "lazybar"
 version = "0.1.0"
+authors = ["Jeremy Smart <jeremy3141592@gmail.com"]
 edition = "2021"
+rust-version = "1.79.0"
+description = "A lightweight, event-driven X11 status bar"
+readme = "README.md"
+repository = "https://github.com/Qelxiros/lazybar"
+license = "MIT"
+keywords = ["X11","WM","Linux","taskbar","i3","awm"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

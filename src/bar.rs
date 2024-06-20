@@ -61,6 +61,7 @@ impl Panel {
 
 #[allow(dead_code)]
 pub struct Bar {
+    name: String,
     position: Position,
     pub conn: xcb::Connection,
     screen: i32,
@@ -81,6 +82,7 @@ pub struct Bar {
 
 impl Bar {
     pub fn new(
+        name: String,
         position: Position,
         height: u16,
         transparent: bool,
@@ -88,7 +90,7 @@ impl Bar {
         margins: Margins,
     ) -> Result<Self> {
         let (conn, screen, window, width, visual) =
-            create_window(position, height, transparent, &bg)?;
+            create_window(position, height, transparent, &bg, name.as_str())?;
         set_wm_properties(
             &conn,
             window,
@@ -104,6 +106,7 @@ impl Bar {
         conn.flush()?;
 
         Ok(Self {
+            name,
             position,
             conn,
             screen,

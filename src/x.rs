@@ -69,6 +69,7 @@ pub fn create_window(
     height: u16,
     transparent: bool,
     background: &Color,
+    name: &str,
 ) -> Result<(xcb::Connection, i32, x::Window, u16, x::Visualtype)> {
     let (conn, screen_idx) = xcb::Connection::connect(None)?;
     let window: x::Window = conn.generate_id();
@@ -128,7 +129,7 @@ pub fn create_window(
         window,
         property: x::ATOM_WM_NAME,
         r#type: x::ATOM_STRING,
-        data: b"omnibars",
+        data: format!("lazybar_{name}").as_bytes(),
     }))?;
 
     Ok((conn, screen_idx, window, width, visual))

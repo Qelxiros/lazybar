@@ -19,7 +19,7 @@ lazy_static! {
             .add_source(
                 File::new(
                     format!(
-                        "{}/omnibars/config.toml",
+                        "{}/lazybar/config.toml",
                         std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
                             format!(
                                 "{}/.config",
@@ -53,6 +53,7 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     .clone();
 
     let mut bar = BarConfigBuilder::default()
+        .name(String::from(bar_name))
         .position(
             match bar_table
                 .remove("position")

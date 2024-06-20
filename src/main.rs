@@ -1,6 +1,6 @@
 use anyhow::Result;
+use lazybar::parser;
 use log::LevelFilter;
-use omnibars::parser;
 use simple_logger::SimpleLogger;
 
 fn main() -> Result<()> {
@@ -11,7 +11,11 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let config = parser::parse("top")?;
+    let name = std::env::args()
+        .skip(1)
+        .next()
+        .expect("Specify the name of a bar");
+    let config = parser::parse(name.as_str())?;
 
     config.run()?;
 
