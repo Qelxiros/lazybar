@@ -1,7 +1,8 @@
-use std::{fs::File, io::Read, rc::Rc, time::Duration};
+use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 
 use anyhow::Result;
-use builder_pattern::Builder;
+use config::Config;
+use derive_builder::Builder;
 use pangocairo::functions::show_layout;
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
@@ -10,39 +11,23 @@ use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 #[derive(Builder)]
 pub struct Battery {
-    #[default(String::from("BAT0"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("BAT0")"#)]
     battery: String,
-    #[default(String::from("AC"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("AC")"#)]
     adapter: String,
-    #[default(String::from("CHG: %percentage%%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("CHG: %percentage%%")"#)]
     charging_format: String,
-    #[default(String::from("DSCHG: %percentage%%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("DSCHG: %percentage%%")"#)]
     discharging_format: String,
-    #[default(String::from("NCHG: %percentage%%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("NCHG: %percentage%%")"#)]
     not_charging_format: String,
-    #[default(String::from("FULL: %percentage%%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("FULL: %percentage%%")"#)]
     full_format: String,
-    #[default(String::from("%percentage%%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("%percentage%%")"#)]
     unknown_format: String,
-    #[default(Duration::from_secs(10))]
-    #[public]
+    #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
-    #[default(Default::default())]
-    #[public]
+    #[builder(default)]
     attrs: Attrs,
 }
 
@@ -131,5 +116,107 @@ impl PanelConfig for Battery {
             .map(move |_| self.draw(&cr));
 
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, config::Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = BatteryBuilder::default();
+        if let Some(battery) = table.remove("battery") {
+            if let Ok(battery) = battery.clone().into_string() {
+                builder.battery(battery);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {battery:?} (location attempt: \
+                     {:?})",
+                    battery.origin()
+                );
+            }
+        }
+        if let Some(adapter) = table.remove("adapter") {
+            if let Ok(adapter) = adapter.clone().into_string() {
+                builder.adapter(adapter);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {adapter:?} (location attempt: \
+                     {:?})",
+                    adapter.origin()
+                );
+            }
+        }
+        if let Some(format_charging) = table.remove("format_charging") {
+            if let Ok(format_charging) = format_charging.clone().into_string() {
+                builder.charging_format(format_charging);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format_charging:?} (location \
+                     attempt: {:?})",
+                    format_charging.origin()
+                );
+            }
+        }
+        if let Some(format_discharging) = table.remove("format_discharging") {
+            if let Ok(format_discharging) =
+                format_discharging.clone().into_string()
+            {
+                builder.discharging_format(format_discharging);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format_discharging:?} \
+                     (location attempt: {:?})",
+                    format_discharging.origin()
+                );
+            }
+        }
+        if let Some(format_not_charging) = table.remove("format_not_charging") {
+            if let Ok(format_not_charging) =
+                format_not_charging.clone().into_string()
+            {
+                builder.not_charging_format(format_not_charging);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format_not_charging:?} \
+                     (location attempt: {:?})",
+                    format_not_charging.origin()
+                );
+            }
+        }
+        if let Some(format_full) = table.remove("format_full") {
+            if let Ok(format_full) = format_full.clone().into_string() {
+                builder.full_format(format_full);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format_full:?} (location \
+                     attempt: {:?})",
+                    format_full.origin()
+                );
+            }
+        }
+        if let Some(format_unknown) = table.remove("format_unknown") {
+            if let Ok(format_unknown) = format_unknown.clone().into_string() {
+                builder.unknown_format(format_unknown);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format_unknown:?} (location \
+                     attempt: {:?})",
+                    format_unknown.origin()
+                );
+            }
+        }
+        if let Some(duration) = table.remove("interval") {
+            if let Ok(duration) = duration.clone().into_uint() {
+                builder.duration(Duration::from_secs(duration));
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {duration:?} (location \
+                     attempt: {:?})",
+                    duration.origin()
+                );
+            }
+        }
+        builder.attrs(Attrs::parse(table, ""));
+
+        Ok(builder.build()?)
     }
 }

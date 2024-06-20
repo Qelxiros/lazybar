@@ -77,7 +77,7 @@ pub fn create_window(
     let width = screen.width_in_pixels();
 
     let depth = if transparent { 32 } else { 24 };
-    let visual = *find_visual(screen, depth).unwrap();
+    let visual = *find_visual(screen, depth).expect("Failed to find visual");
 
     conn.check_request(conn.send_request_checked(&x::CreateColormap {
         alloc: x::ColormapAlloc::None,
@@ -87,6 +87,7 @@ pub fn create_window(
     }))?;
 
     // assume RGBA
+    // TODO: awesome wm has a more robust way of handling this
     let bg = if transparent {
         background
             .r

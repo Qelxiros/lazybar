@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::{c_char, CStr},
     net::IpAddr,
     os::fd::AsRawFd,
@@ -7,7 +8,8 @@ use std::{
 };
 
 use anyhow::Result;
-use builder_pattern::Builder;
+use config::{Config, Value};
+use derive_builder::Builder;
 use nix::{
     ifaddrs::getifaddrs,
     sys::socket::{self, AddressFamily, SockFlag, SockType},
@@ -102,19 +104,12 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 
 #[derive(Builder)]
 pub struct Wireless {
-    #[default(String::from("wlan0"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,
-    #[default(String::from("%ifname% %essid% %local_ip%"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("%ifname% %essid% %local_ip%")"#)]
     format: String,
-    #[default(Default::default())]
-    #[public]
     attrs: Attrs,
-    #[default(Duration::from_secs(10))]
-    #[public]
+    #[builder(default = r#"Duration::from_secs(10)"#)]
     duration: Duration,
 }
 
@@ -178,5 +173,49 @@ impl PanelConfig for Wireless {
             .map(move |_| self.draw(&cr));
 
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = WirelessBuilder::default();
+        if let Some(if_name) = table.remove("if_name") {
+            if let Ok(if_name) = if_name.clone().into_string() {
+                builder.if_name(if_name);
+            } else {
+                log::warn!(
+                    "Ignoring non=string value {if_name:?} (location attempt: \
+                     {:?})",
+                    if_name.origin()
+                );
+            }
+        }
+        if let Some(format) = table.remove("format") {
+            if let Ok(format) = format.clone().into_string() {
+                builder.format(format);
+            } else {
+                log::warn!(
+                    "Ignoring non=string value {format:?} (location attempt: \
+                     {:?})",
+                    format.origin()
+                );
+            }
+        }
+        if let Some(duration) = table.remove("interval") {
+            if let Ok(duration) = duration.clone().into_uint() {
+                builder.duration(Duration::from_secs(duration));
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {duration:?} (location \
+                     attempt: {:?})",
+                    duration.origin()
+                );
+            }
+        }
+
+        builder.attrs(Attrs::parse(table, ""));
+
+        Ok(builder.build()?)
     }
 }

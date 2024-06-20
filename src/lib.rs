@@ -1,14 +1,17 @@
 mod attrs;
 mod bar;
+pub mod parser;
 mod utils;
 mod x;
 
-use std::{fmt::Display, pin::Pin, rc::Rc};
+use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc};
 
 use anyhow::Result;
 pub use attrs::Attrs;
 use bar::{Bar, Panel};
+use config::{Config, Value};
 use csscolorparser::Color;
+use derive_builder::Builder;
 use futures::Stream;
 use tokio::{runtime::Runtime, task};
 use tokio_stream::{StreamExt, StreamMap};
@@ -31,6 +34,13 @@ pub trait PanelConfig {
         global_attrs: Attrs,
         height: i32,
     ) -> Result<PanelStream>;
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        global: &Config,
+    ) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -56,6 +66,7 @@ impl Display for Alignment {
     }
 }
 
+#[derive(Clone)]
 pub struct Margins {
     left: f64,
     internal: f64,
@@ -73,6 +84,8 @@ impl Margins {
     }
 }
 
+#[derive(Builder)]
+#[builder(pattern = "owned")]
 pub struct BarConfig {
     left: Vec<Box<dyn PanelConfig>>,
     center: Vec<Box<dyn PanelConfig>>,
@@ -108,14 +121,15 @@ impl BarConfig {
         }
     }
 
-    pub fn add_panel<P>(&mut self, panel: P, alignment: Alignment)
-    where
-        P: PanelConfig + 'static,
-    {
+    pub fn add_panel(
+        &mut self,
+        panel: Box<dyn PanelConfig>,
+        alignment: Alignment,
+    ) {
         match alignment {
-            Alignment::Left => self.left.push(Box::new(panel)),
-            Alignment::Center => self.center.push(Box::new(panel)),
-            Alignment::Right => self.right.push(Box::new(panel)),
+            Alignment::Left => self.left.push(panel),
+            Alignment::Center => self.center.push(panel),
+            Alignment::Right => self.right.push(panel),
         };
     }
 
@@ -186,16 +200,16 @@ impl BarConfig {
                 tokio::select! {
                     Ok(Some(event)) = async { bar.conn.poll_for_event() } => {
                         if let Err(e) = bar.process_event(&event) {
-                            println!("X event caused an error: {e}");
+                            log::warn!("X event caused an error: {e}");
                         }
                     },
                     Some((alignment, result)) = bar.streams.next() => {
                         match result {
                             (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info.into()) {
-                                println!("Error updating {alignment} panel at index {idx}: {e}");
+                                log::warn!("Error updating {alignment} panel at index {idx}: {e}");
                             }
                             (idx, Err(e)) =>
-                                println!("Error produced by {alignment} panel at index {idx:?}: {e}"),
+                                log::warn!("Error produced by {alignment} panel at index {idx:?}: {e}"),
                         }
                     },
                 }

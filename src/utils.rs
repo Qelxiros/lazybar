@@ -1,5 +1,7 @@
 use std::ops::Sub;
 
+use config::Config;
+
 #[derive(Clone)]
 pub struct Ramp {
     icons: Vec<String>,
@@ -22,6 +24,22 @@ impl Ramp {
             .get((idx.trunc() as usize).min(self.icons.len() - 1))
             .unwrap()
             .clone()
+    }
+
+    pub fn parse(name: &str, global: &Config) -> Option<Self> {
+        let ramps_table = global.get_table("ramps").ok()?;
+        let ramp_table = ramps_table.get(name)?.clone().into_table().ok()?;
+        let mut key = 0;
+        let mut icons = Vec::new();
+        while let Some(icon) = ramp_table.get(&key.to_string()) {
+            if let Ok(icon) = icon.clone().into_string() {
+                icons.push(icon);
+                key += 1;
+            } else {
+                break;
+            }
+        }
+        Some(Self { icons })
     }
 }
 

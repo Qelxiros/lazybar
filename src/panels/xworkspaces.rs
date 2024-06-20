@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     pin::Pin,
     rc::Rc,
     sync::Arc,
@@ -7,8 +7,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use builder_pattern::Builder;
+use config::{Config, Value};
 use csscolorparser::Color;
+use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
@@ -84,25 +85,63 @@ impl Stream for XStream {
 
 #[derive(Clone)]
 pub struct Highlight {
-    enabled: bool,
     height: f64,
     color: Color,
 }
 
 impl Highlight {
-    pub const fn new(enabled: bool, height: f64, color: Color) -> Self {
-        Self {
-            enabled,
-            height,
-            color,
-        }
+    pub const fn new(height: f64, color: Color) -> Self {
+        Self { height, color }
+    }
+
+    pub fn parse(table: &mut HashMap<String, Value>) -> Self {
+        let height = table
+            .remove("height")
+            .and_then(|height| {
+                height.clone().into_float().map_or_else(
+                    |_| {
+                        log::warn!(
+                            "Ignoring non-float value {height:?} (location \
+                             attempt: {:?})",
+                            height.origin()
+                        );
+                        None
+                    },
+                    |height| Some(height),
+                )
+            })
+            .unwrap_or(0.0);
+
+        let color = table
+            .remove("color")
+            .and_then(|color| {
+                color.clone().into_string().map_or_else(
+                    |_| {
+                        log::warn!(
+                            "Ignoring non-string value {color:?} (location \
+                             attempt: {:?})",
+                            color.origin()
+                        );
+                        None
+                    },
+                    |color| {
+                        if let Ok(color) = color.parse() {
+                            Some(color)
+                        } else {
+                            None
+                        }
+                    },
+                )
+            })
+            .unwrap_or_else(|| "#0000".parse().unwrap());
+
+        Self { height, color }
     }
 }
 
 impl Default for Highlight {
     fn default() -> Self {
         Self {
-            enabled: false,
             height: 0.0,
             color: "#000".parse().unwrap(),
         }
@@ -113,47 +152,16 @@ impl Default for Highlight {
 pub struct XWorkspaces {
     conn: Arc<xcb::Connection>,
     screen: i32,
-    #[default(0)]
-    #[public]
+    #[builder(default = "0")]
     padding: i32,
-    #[default(Default::default())]
-    #[public]
     active: Attrs,
-    #[default(Default::default())]
-    #[public]
     inactive: Attrs,
-    #[default(Default::default())]
-    #[public]
     nonempty: Attrs,
-    #[default(Default::default())]
-    #[public]
-    highlight: Highlight,
+    #[builder(setter(strip_option))]
+    highlight: Option<Highlight>,
 }
 
 impl XWorkspaces {
-    /// # Errors
-    ///
-    /// If the connection to the X server cannot be established.
-    pub fn builder(
-        screen: impl AsRef<str>,
-    ) -> Result<
-        XWorkspacesBuilder<
-            'static,
-            std::sync::Arc<xcb::Connection>,
-            i32,
-            (),
-            (),
-            (),
-            (),
-            (),
-            (),
-            (),
-        >,
-    > {
-        let result = xcb::Connection::connect(Some(screen.as_ref()))?;
-        Ok(Self::new().conn(Arc::new(result.0)).screen(result.1))
-    }
-
     fn draw(
         &self,
         cr: &Rc<cairo::Context>,
@@ -244,20 +252,22 @@ impl XWorkspaces {
                     );
                     cr.fill()?;
 
-                    if *i == current && highlight.enabled {
-                        cr.rectangle(
-                            0.0,
-                            f64::from(height) - highlight.height,
-                            f64::from(size.0 + padding),
-                            highlight.height,
-                        );
-                        cr.set_source_rgba(
-                            highlight.color.r,
-                            highlight.color.g,
-                            highlight.color.b,
-                            highlight.color.a,
-                        );
-                        cr.fill()?;
+                    if *i == current {
+                        if let Some(highlight) = &highlight {
+                            cr.rectangle(
+                                0.0,
+                                f64::from(height) - highlight.height,
+                                f64::from(size.0 + padding),
+                                highlight.height,
+                            );
+                            cr.set_source_rgba(
+                                highlight.color.r,
+                                highlight.color.g,
+                                highlight.color.b,
+                                highlight.color.a,
+                            );
+                            cr.fill()?;
+                        }
                     }
 
                     cr.translate(
@@ -297,7 +307,7 @@ impl Default for XWorkspaces {
             active: Attrs::default(),
             nonempty: Attrs::default(),
             inactive: Attrs::default(),
-            highlight: Highlight::default(),
+            highlight: None,
         }
     }
 }
@@ -362,6 +372,50 @@ impl PanelConfig for XWorkspaces {
                 )
             });
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = XWorkspacesBuilder::default();
+        let screen = table.remove("screen").and_then(|screen| {
+            screen.clone().into_string().map_or_else(
+                |_| {
+                    log::warn!(
+                        "Ignoring non-string value {screen:?} (location \
+                         attempt: {:?})",
+                        screen.origin()
+                    );
+                    None
+                },
+                |screen| Some(screen),
+            )
+        });
+        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
+        {
+            builder.conn(Arc::new(conn)).screen(screen);
+        } else {
+            log::error!("Failed to connect to X server");
+        }
+        if let Some(padding) = table.remove("padding") {
+            if let Ok(padding) = padding.clone().into_int() {
+                builder.padding(padding as i32);
+            } else {
+                log::warn!(
+                    "Ignoring non-integer value {padding:?} (location \
+                     attempt: {:?})",
+                    padding.origin()
+                );
+            }
+        }
+        builder.highlight(Highlight::parse(table));
+
+        builder.active(Attrs::parse(table, "active_"));
+        builder.inactive(Attrs::parse(table, "inactive_"));
+        builder.nonempty(Attrs::parse(table, "nonempty_"));
+
+        Ok(builder.build()?)
     }
 }
 

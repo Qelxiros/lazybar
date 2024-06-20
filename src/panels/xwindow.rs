@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     pin::Pin,
     rc::Rc,
     sync::Arc,
@@ -7,7 +7,8 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use builder_pattern::Builder;
+use config::{Config, Value};
+use derive_builder::Builder;
 use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
@@ -76,40 +77,14 @@ impl Stream for XStream {
 }
 
 #[derive(Builder)]
-#[hidden]
 pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
-    #[default(Default::default())]
-    #[public]
     attrs: Attrs,
 }
 
 impl XWindow {
-    /// # Errors
-    ///
-    /// If the connection to the X server fails.
-    pub fn builder(
-        screen: impl AsRef<str>,
-    ) -> Result<
-        XWindowBuilder<
-            'static,
-            Arc<xcb::Connection>,
-            i32,
-            HashSet<x::Window>,
-            (),
-            (),
-            (),
-        >,
-    > {
-        let result = xcb::Connection::connect(Some(screen.as_ref()))?;
-        Ok(Self::new()
-            .conn(Arc::new(result.0))
-            .screen(result.1)
-            .windows(HashSet::new()))
-    }
-
     fn draw(
         &mut self,
         cr: &Rc<cairo::Context>,
@@ -228,5 +203,36 @@ impl PanelConfig for XWindow {
                 self.draw(&cr, name_atom, window_atom, root, utf8_atom)
             });
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = XWindowBuilder::default();
+        let screen = table.remove("screen").and_then(|screen| {
+            screen.clone().into_string().map_or_else(
+                |_| {
+                    log::warn!(
+                        "Ignoring non-string value {screen:?} (location \
+                         attempt: {:?})",
+                        screen.origin()
+                    );
+                    None
+                },
+                |screen| Some(screen),
+            )
+        });
+        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
+        {
+            builder.conn(Arc::new(conn)).screen(screen);
+        } else {
+            log::error!("Failed to connect to X server");
+        }
+
+        builder.windows(HashSet::new());
+        builder.attrs(Attrs::parse(table, ""));
+
+        Ok(builder.build()?)
     }
 }

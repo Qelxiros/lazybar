@@ -1,20 +1,24 @@
-use builder_pattern::Builder;
+use std::{collections::HashMap, rc::Rc};
+
+use anyhow::Result;
+use config::{Config, Value};
+use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
 
-use crate::{PanelConfig, PanelDrawFn};
+use crate::{Attrs, PanelConfig, PanelDrawFn};
 
 #[derive(Builder)]
 pub struct Separator {
-    #[default(String::from(" <span foreground='#666'>|</span> "))]
-    #[into]
-    #[public]
-    text: String,
+    #[builder(
+        default = r#"String::from(" <span foreground='#666'>|</span> ")"#
+    )]
+    format: String,
 }
 
 impl Default for Separator {
     fn default() -> Self {
         Self {
-            text: String::from(" <span foreground='#666'>|</span> "),
+            format: String::from(" <span foreground='#666'>|</span> "),
         }
     }
 }
@@ -22,12 +26,12 @@ impl Default for Separator {
 impl PanelConfig for Separator {
     fn into_stream(
         self: Box<Self>,
-        cr: std::rc::Rc<cairo::Context>,
-        global_attrs: crate::Attrs,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
         _height: i32,
-    ) -> anyhow::Result<crate::PanelStream> {
+    ) -> Result<crate::PanelStream> {
         let layout = create_layout(&cr);
-        layout.set_markup(self.text.as_str());
+        layout.set_markup(self.format.as_str());
         let dims = layout.pixel_size();
 
         let draw_fn: PanelDrawFn = Box::new(move |cr| {
@@ -40,5 +44,25 @@ impl PanelConfig for Separator {
         });
 
         Ok(Box::pin(tokio_stream::once(Ok((dims, draw_fn)))))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = SeparatorBuilder::default();
+        if let Some(format) = table.remove("format") {
+            if let Ok(format) = format.clone().into_string() {
+                builder.format(format);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {format:?} (location attempt: \
+                     {:?})",
+                    format.origin()
+                );
+            }
+        }
+
+        Ok(builder.build()?)
     }
 }

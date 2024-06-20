@@ -1,14 +1,16 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::Read,
     pin::Pin,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
 use anyhow::Result;
-use builder_pattern::Builder;
+use config::{Config, Value};
+use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
 use pangocairo::functions::{create_layout, show_layout};
@@ -19,27 +21,29 @@ use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 struct InotifyStream {
     i: Arc<inotify::Inotify>,
+    file: Rc<Mutex<File>>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl InotifyStream {
-    fn new(i: inotify::Inotify) -> Self {
+    fn new(i: inotify::Inotify, file: Rc<Mutex<File>>) -> Self {
         Self {
             i: Arc::new(i),
+            file,
             handle: None,
         }
     }
 }
 
 impl Stream for InotifyStream {
-    type Item = ();
+    type Item = Rc<Mutex<File>>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &mut self.handle {
-            let value = handle.poll_unpin(cx).map(|_| Some(()));
+            let value = handle.poll_unpin(cx).map(|_| Some(self.file.clone()));
             if let Poll::Ready(_) = value {
                 self.handle = None;
             }
@@ -61,11 +65,7 @@ impl Stream for InotifyStream {
 
 #[derive(Builder)]
 pub struct Inotify {
-    #[into]
-    #[public]
     path: String,
-    #[default(Default::default())]
-    #[public]
     attrs: Attrs,
 }
 
@@ -73,10 +73,10 @@ impl Inotify {
     fn draw(
         &mut self,
         cr: &Rc<cairo::Context>,
+        file: &Rc<Mutex<File>>,
     ) -> Result<((i32, i32), PanelDrawFn)> {
-        let mut file = File::open(self.path.as_str())?;
         let mut buf = String::new();
-        file.read_to_string(&mut buf)?;
+        file.lock().unwrap().read_to_string(&mut buf)?;
         let text = buf.chars().take_while(|&c| c != '\n').collect::<String>();
 
         let layout = create_layout(cr);
@@ -114,10 +114,34 @@ impl PanelConfig for Inotify {
 
         self.attrs = global_attrs.overlay(self.attrs);
 
-        let stream = tokio_stream::once(())
-            .chain(InotifyStream::new(inotify))
-            .map(move |_| self.draw(&cr));
+        let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
+        let stream = tokio_stream::once(file.clone())
+            .chain(InotifyStream::new(inotify, file))
+            .map(move |f| self.draw(&cr, &f));
 
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = InotifyBuilder::default();
+        if let Some(path) = table.remove("path") {
+            if let Ok(path) = path.clone().into_string() {
+                builder.path(path);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {path:?} (location attempt: \
+                     {:?})",
+                    path.origin()
+                );
+            }
+        } else {
+            log::error!("No path found for inotify panel");
+        }
+        builder.attrs(Attrs::parse(table, ""));
+
+        Ok(builder.build()?)
     }
 }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     pin::Pin,
     rc::Rc,
     sync::{
@@ -9,7 +10,8 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use builder_pattern::Builder;
+use config::{Config, Value};
+use derive_builder::Builder;
 use futures::FutureExt;
 use libpulse_binding::{
     callbacks::ListResult,
@@ -25,25 +27,18 @@ use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream, Ramp};
 
 #[derive(Builder)]
 pub struct Pulseaudio {
-    #[default(String::from("@DEFAULT_SINK@"))]
-    #[into]
-    #[public]
+    #[builder(default = r#"String::from("@DEFAULT_SINK@")"#)]
     sink: String,
-    #[default(None)]
-    #[public]
+    #[builder(default, setter(strip_option))]
     server: Option<String>,
-    #[default(None)]
-    #[public]
+    #[builder(default, setter(strip_option))]
     ramp: Option<Ramp>,
-    #[default(None)]
-    #[public]
+    #[builder(default, setter(strip_option))]
     muted_ramp: Option<Ramp>,
-    #[default(Default::default())]
-    #[public]
     attrs: Attrs,
     send: Sender<(Volume, bool)>,
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
-    #[default(None)]
+    #[builder(default, setter(skip))]
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
 }
 
@@ -80,25 +75,6 @@ impl Stream for Pulseaudio {
 }
 
 impl Pulseaudio {
-    pub fn builder() -> PulseaudioBuilder<
-        'static,
-        std::sync::Arc<
-            std::sync::Mutex<std::sync::mpsc::Receiver<(Volume, bool)>>,
-        >,
-        std::sync::mpsc::Sender<(Volume, bool)>,
-        (),
-        (),
-        (),
-        (),
-        (),
-        (),
-        (),
-        (),
-    > {
-        let (send, recv) = channel();
-        Self::new().send(send).recv(Arc::new(Mutex::new(recv)))
-    }
-
     fn draw(
         cr: &Rc<cairo::Context>,
         data: (Volume, bool),
@@ -215,7 +191,7 @@ impl PanelConfig for Pulseaudio {
         let attrs = self.attrs.clone();
 
         let stream = self.map(move |data| {
-            Ok(Pulseaudio::draw(
+            Ok(Self::draw(
                 &cr,
                 data,
                 ramp.as_ref(),
@@ -225,5 +201,73 @@ impl PanelConfig for Pulseaudio {
         });
 
         Ok(Box::pin(stream))
+    }
+
+    fn parse(
+        table: &mut HashMap<String, Value>,
+        global: &Config,
+    ) -> Result<Self> {
+        let mut builder = PulseaudioBuilder::default();
+        if let Some(sink) = table.remove("sink") {
+            if let Ok(sink) = sink.clone().into_string() {
+                builder.sink(sink);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {sink:?} (location attempt: \
+                     {:?})",
+                    sink.origin()
+                );
+            }
+        }
+        if let Some(server) = table.remove("server") {
+            if let Ok(server) = server.clone().into_string() {
+                builder.server(server);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {server:?} (location attempt: \
+                     {:?})",
+                    server.origin()
+                );
+            }
+        }
+        if let Some(ramp) = table.remove("ramp") {
+            if let Ok(ramp) = ramp.clone().into_string() {
+                if let Some(ramp) = Ramp::parse(ramp.as_str(), global) {
+                    builder.ramp(ramp);
+                } else {
+                    log::warn!("Invalid ramp {ramp}");
+                }
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {ramp:?} (location attempt: \
+                     {:?})",
+                    ramp.origin()
+                );
+            }
+        }
+        if let Some(muted_ramp) = table.remove("muted_ramp") {
+            if let Ok(muted_ramp) = muted_ramp.clone().into_string() {
+                if let Some(muted_ramp) =
+                    Ramp::parse(muted_ramp.as_str(), global)
+                {
+                    builder.muted_ramp(muted_ramp);
+                } else {
+                    log::warn!("Invalid muted_ramp {muted_ramp}");
+                }
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {muted_ramp:?} (location \
+                     attempt: {:?})",
+                    muted_ramp.origin()
+                );
+            }
+        }
+
+        let (send, recv) = channel();
+        builder.send(send);
+        builder.recv(Arc::new(Mutex::new(recv)));
+        builder.attrs(Attrs::parse(table, ""));
+
+        Ok(builder.build()?)
     }
 }
