@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    ops::Deref,
     pin::Pin,
     process::Command,
     rc::Rc,
@@ -13,7 +12,7 @@ use derive_builder::Builder;
 use futures::Stream;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::time::{interval, Interval};
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use tokio_stream::StreamExt;
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
@@ -23,7 +22,7 @@ pub struct CustomStream {
 }
 
 impl CustomStream {
-    fn new(interval: Option<Interval>) -> Self {
+    const fn new(interval: Option<Interval>) -> Self {
         Self {
             interval,
             fired: false,
@@ -40,11 +39,11 @@ impl Stream for CustomStream {
         match &mut self.interval {
             Some(ref mut interval) => interval.poll_tick(cx).map(|_| Some(())),
             None => {
-                if !self.fired {
+                if self.fired {
+                    Poll::Pending
+                } else {
                     self.fired = true;
                     Poll::Ready(Some(()))
-                } else {
-                    Poll::Pending
                 }
             }
         }
@@ -125,21 +124,21 @@ impl PanelConfig for Custom {
             }
         }
 
-        Ok(builder.build()?)
+        Ok(builder.build())
     }
 }
 
 impl CustomBuilder {
-    fn build(self) -> Result<Custom> {
+    fn build(self) -> Custom {
         let command_str = self._command_str.unwrap();
         let mut command = Command::new("sh");
         command.arg("-c").arg(command_str.as_str());
         let duration = self.duration.unwrap();
 
-        Ok(Custom {
+        Custom {
             command,
             _command_str: command_str,
             duration,
-        })
+        }
     }
 }

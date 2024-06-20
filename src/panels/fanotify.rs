@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::Read,
+    io::{Read, Seek},
     pin::Pin,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -79,6 +79,7 @@ impl Fanotify {
     ) -> Result<((i32, i32), PanelDrawFn)> {
         let mut buf = String::new();
         file.lock().unwrap().read_to_string(&mut buf)?;
+        file.lock().unwrap().rewind()?;
         let text = buf.chars().take_while(|&c| c != '\n').collect::<String>();
 
         let layout = create_layout(cr);

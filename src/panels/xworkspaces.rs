@@ -124,13 +124,7 @@ impl Highlight {
                         );
                         None
                     },
-                    |color| {
-                        if let Ok(color) = color.parse() {
-                            Some(color)
-                        } else {
-                            None
-                        }
-                    },
+                    |color| color.parse().ok(),
                 )
             })
             .unwrap_or_else(|| "#0000".parse().unwrap());

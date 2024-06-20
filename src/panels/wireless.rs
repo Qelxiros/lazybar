@@ -28,7 +28,7 @@ struct Essid {
 }
 
 impl Essid {
-    fn new(ptr: *const c_char) -> Self {
+    const fn new(ptr: *const c_char) -> Self {
         Self {
             ptr,
             length: 33,

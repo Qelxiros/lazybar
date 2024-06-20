@@ -118,7 +118,7 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_left {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let Ok(name) = p.into_string() {
+                if let Ok(name) = p.clone().into_string() {
                     left_final.push(name);
                 } else {
                     log::warn!(
@@ -134,7 +134,7 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_center {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let Ok(name) = p.into_string() {
+                if let Ok(name) = p.clone().into_string() {
                     center_final.push(name);
                 } else {
                     log::warn!(
@@ -150,7 +150,7 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_right {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let Ok(name) = p.into_string() {
+                if let Ok(name) = p.clone().into_string() {
                     right_final.push(name);
                 } else {
                     log::warn!(
@@ -169,15 +169,15 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
 
     left_final
         .into_iter()
-        .filter_map(|p| parse_panel(p, &mut panels_table))
+        .filter_map(|p| parse_panel(p.as_str(), &mut panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Left));
     center_final
         .into_iter()
-        .filter_map(|p| parse_panel(p, &mut panels_table))
+        .filter_map(|p| parse_panel(p.as_str(), &mut panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Center));
     right_final
         .into_iter()
-        .filter_map(|p| parse_panel(p, &mut panels_table))
+        .filter_map(|p| parse_panel(p.as_str(), &mut panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Right));
 
     Ok(bar)
