@@ -1,5 +1,6 @@
 mod battery;
 mod clock;
+mod custom;
 mod fanotify;
 mod inotify;
 mod pulseaudio;
@@ -10,6 +11,7 @@ mod xworkspaces;
 
 pub use battery::*;
 pub use clock::*;
+pub use custom::*;
 pub use fanotify::*;
 pub use inotify::*;
 pub use pulseaudio::*;

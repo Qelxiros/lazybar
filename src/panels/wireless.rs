@@ -207,7 +207,7 @@ impl PanelConfig for Wireless {
                 builder.duration(Duration::from_secs(duration));
             } else {
                 log::warn!(
-                    "Ignoring non-string value {duration:?} (location \
+                    "Ignoring non-uint value {duration:?} (location \
                      attempt: {:?})",
                     duration.origin()
                 );

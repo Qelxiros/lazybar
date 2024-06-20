@@ -6,8 +6,8 @@ use lazy_static::lazy_static;
 
 use crate::{
     panels::{
-        Battery, Clock, Days, Fanotify, Hours, Inotify, Minutes, Pulseaudio,
-        Seconds, Separator, Wireless, XWindow, XWorkspaces,
+        Battery, Clock, Custom, Days, Fanotify, Hours, Inotify, Minutes,
+        Pulseaudio, Seconds, Separator, Wireless, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
     Position,
@@ -253,6 +253,9 @@ fn parse_panel(
                                     })
                             }
                         }
+                        "custom" => Custom::parse(table, &CONFIG)
+                            .ok()
+                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "fanotify" => Fanotify::parse(table, &CONFIG)
                             .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
