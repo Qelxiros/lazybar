@@ -118,11 +118,11 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_left {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let ValueKind::String(name) = &p.kind {
+                if let Ok(name) = p.into_string() {
                     left_final.push(name);
                 } else {
                     log::warn!(
-                        "Ignoring non-string value {p:#?} in `panels-left`"
+                        "Ignoring non-string value {p:?} in `panels-left`"
                     );
                 }
             }
@@ -134,11 +134,11 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_center {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let ValueKind::String(name) = &p.kind {
+                if let Ok(name) = p.into_string() {
                     center_final.push(name);
                 } else {
                     log::warn!(
-                        "Ignoring non-string value {p:#?} in `panels-center`"
+                        "Ignoring non-string value {p:?} in `panels-center`"
                     );
                 }
             }
@@ -150,11 +150,11 @@ pub fn parse(bar_name: &str) -> Result<BarConfig> {
     if let Some(pl) = panels_right {
         if let ValueKind::Array(panel_list) = &pl.kind {
             for p in panel_list {
-                if let ValueKind::String(name) = &p.kind {
+                if let Ok(name) = p.into_string() {
                     right_final.push(name);
                 } else {
                     log::warn!(
-                        "Ignoring non-string value {p:#?} in `panels-right`"
+                        "Ignoring non-string value {p:?} in `panels-right`"
                     );
                 }
             }
