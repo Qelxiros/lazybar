@@ -10,6 +10,7 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
 #[derive(Builder)]
+#[allow(dead_code)]
 pub struct Battery {
     #[builder(default = r#"String::from("BAT0")"#)]
     battery: String,
