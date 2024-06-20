@@ -10,8 +10,6 @@ repository = "https://github.com/Qelxiros/lazybar"
 license = "MIT"
 keywords = ["X11","WM","Linux","taskbar","i3","awm"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.86"
 cairo-rs = { version = "0.19.4", features = ["xcb"] }

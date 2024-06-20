@@ -1,0 +1,54 @@
+[bars]
+
+[bars.top]
+position = "top"
+height = 36
+transparent = true
+bg = "#0000"
+default_bg = "#0000"
+default_fg = "#ccc"
+default_font = "FiraMono Nerd Font Mono 10"
+margin_left = 10
+margin_internal = 10
+margin_right = 10
+panels_left = ["xwindow"]
+panels_center = ["clock"]
+panels_right = ["pulseaudio","separator","wireless","separator","battery"]
+
+[panels]
+
+[panels.xwindow]
+type = "xwindow"
+
+[panels.pulseaudio]
+type = "pulseaudio"
+ramp = "pa"
+muted_ramp = "pa_muted"
+
+[panels.wireless]
+type = "wireless"
+if_name = "wlp0s20f3"
+format = "<span foreground='#0ff'>%ifname%</span> %essid% %local_ip%"
+
+[panels.battery]
+type = "battery"
+
+[panels.clock]
+type = "clock"
+precision = "seconds"
+format = "<span foreground='#0ff'>%Y-%m-%d %T</span>"
+
+[panels.separator]
+type = "separator"
+format = "<span font='FiraMono Nerd Font Mono 13' foreground='#666' stretch='expanded'>  //  </span>"
+
+[ramps]
+
+[ramps.pa]
+0 = "<span font_size='25pt' rise='-7.5pt'>󰕿</span> "
+1 = "<span font_size='25pt' rise='-7.5pt'>󰖀</span> "
+2 = "<span font_size='25pt' rise='-7.5pt'>󰕾</span> "
+
+[ramps.pa_muted]
+0 = "<span font_size='25pt' rise='-7.5pt'>󰸈</span> "
+1 = "<span font_size='25pt' rise='-7.5pt'>󰖁</span> "
