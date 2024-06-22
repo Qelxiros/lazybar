@@ -111,7 +111,11 @@ impl PanelConfig for Custom {
             if let Ok(command) = command.clone().into_string() {
                 builder._command_str(command);
             } else {
-                log::warn!("Ignoring non-string value {command:?} (location attempt: {:?})", command.origin());
+                log::warn!(
+                    "Ignoring non-string value {command:?} (location attempt: \
+                     {:?})",
+                    command.origin()
+                );
             }
         } else {
             log::error!("No command found for custom panel");
@@ -120,7 +124,11 @@ impl PanelConfig for Custom {
             if let Ok(duration) = duration.clone().into_uint() {
                 builder.duration(Duration::from_secs(duration));
             } else {
-                log::warn!("Ignoring non-uint value {duration:?} (location attempt: {:?})", duration.origin());
+                log::warn!(
+                    "Ignoring non-uint value {duration:?} (location attempt: \
+                     {:?})",
+                    duration.origin()
+                );
             }
         }
 

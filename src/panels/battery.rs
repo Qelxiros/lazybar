@@ -210,8 +210,8 @@ impl PanelConfig for Battery {
                 builder.duration(Duration::from_secs(duration));
             } else {
                 log::warn!(
-                    "Ignoring non-uint value {duration:?} (location \
-                     attempt: {:?})",
+                    "Ignoring non-uint value {duration:?} (location attempt: \
+                     {:?})",
                     duration.origin()
                 );
             }
