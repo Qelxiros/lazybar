@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use crate::{
     panels::{
         Battery, Clock, Custom, Days, Fanotify, Hours, Inotify, Minutes,
-        Pulseaudio, Seconds, Separator, Wireless, XWindow, XWorkspaces,
+        Network, Pulseaudio, Seconds, Separator, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
     Position,
@@ -271,7 +271,7 @@ fn parse_panel(
                         "separator" => Separator::parse(table, &CONFIG)
                             .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "wireless" => Wireless::parse(table, &CONFIG)
+                        "network" => Network::parse(table, &CONFIG)
                             .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "xwindow" => XWindow::parse(table, &CONFIG)

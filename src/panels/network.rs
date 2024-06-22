@@ -103,32 +103,41 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 }
 
 #[derive(Builder)]
-pub struct Wireless {
+pub struct Network {
     #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,
     #[builder(default = r#"String::from("%ifname% %essid% %local_ip%")"#)]
-    format: String,
+    format_connected: String,
+    #[builder(default = r#"String::from("%ifname% disconnected")"#)]
+    format_disconnected: String,
     attrs: Attrs,
     #[builder(default = r#"Duration::from_secs(10)"#)]
     duration: Duration,
 }
 
-impl Wireless {
+impl Network {
     fn draw(
         &self,
         cr: &Rc<cairo::Context>,
     ) -> Result<((i32, i32), PanelDrawFn)> {
         let essid = glib::markup_escape_text(
-            query_essid(self.if_name.as_str())?.as_str(),
+            query_essid(self.if_name.as_str())
+                .unwrap_or_else(|_| String::new())
+                .as_str(),
         );
-        let ip = query_ip(self.if_name.as_str())
-            .map_or_else(|| "?.?.?.?".into(), |a| a.to_string());
+        let ip = query_ip(self.if_name.as_str());
 
-        let text = self
-            .format
-            .replace("%ifname%", self.if_name.as_str())
-            .replace("%essid%", essid.as_str())
-            .replace("%local_ip%", ip.as_str());
+        let text = match ip {
+            Some(ip) => self
+                .format_connected
+                .replace("%ifname%", self.if_name.as_str())
+                .replace("%essid%", essid.as_str())
+                .replace("%local_ip%", ip.to_string().as_str()),
+            None => self
+                .format_disconnected
+                .replace("%ifname%", self.if_name.as_str())
+                .replace("%essid%", essid.as_str()),
+        };
 
         let layout = create_layout(cr);
         layout.set_markup(text.as_str());
@@ -150,18 +159,7 @@ impl Wireless {
     }
 }
 
-impl Default for Wireless {
-    fn default() -> Self {
-        Self {
-            if_name: String::from("wlan0"),
-            format: String::from("%ifname% %essid% %local_ip%"),
-            attrs: Attrs::default(),
-            duration: Duration::from_secs(1),
-        }
-    }
-}
-
-impl PanelConfig for Wireless {
+impl PanelConfig for Network {
     fn into_stream(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
@@ -179,7 +177,7 @@ impl PanelConfig for Wireless {
         table: &mut HashMap<String, Value>,
         _global: &Config,
     ) -> Result<Self> {
-        let mut builder = WirelessBuilder::default();
+        let mut builder = NetworkBuilder::default();
         if let Some(if_name) = table.remove("if_name") {
             if let Ok(if_name) = if_name.clone().into_string() {
                 builder.if_name(if_name);
@@ -191,14 +189,28 @@ impl PanelConfig for Wireless {
                 );
             }
         }
-        if let Some(format) = table.remove("format") {
-            if let Ok(format) = format.clone().into_string() {
-                builder.format(format);
+        if let Some(format_connected) = table.remove("format_connected") {
+            if let Ok(format_connected) = format_connected.clone().into_string()
+            {
+                builder.format_connected(format_connected);
             } else {
                 log::warn!(
-                    "Ignoring non=string value {format:?} (location attempt: \
-                     {:?})",
-                    format.origin()
+                    "Ignoring non=string value {format_connected:?} (location \
+                     attempt: {:?})",
+                    format_connected.origin()
+                );
+            }
+        }
+        if let Some(format_disconnected) = table.remove("format_disconnected") {
+            if let Ok(format_disconnected) =
+                format_disconnected.clone().into_string()
+            {
+                builder.format_disconnected(format_disconnected);
+            } else {
+                log::warn!(
+                    "Ignoring non=string value {format_disconnected:?} \
+                     (location attempt: {:?})",
+                    format_disconnected.origin()
                 );
             }
         }
@@ -207,8 +219,8 @@ impl PanelConfig for Wireless {
                 builder.duration(Duration::from_secs(duration));
             } else {
                 log::warn!(
-                    "Ignoring non-uint value {duration:?} (location \
-                     attempt: {:?})",
+                    "Ignoring non-uint value {duration:?} (location attempt: \
+                     {:?})",
                     duration.origin()
                 );
             }

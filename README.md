@@ -11,7 +11,7 @@ This is a lightweight, event-driven status bar for X11. It is tested exclusively
 - [x] wireless (wifi)
 - [x] xwindow
 - [x] xworkspaces
-- [ ] ethernet
+- [x] ethernet (merged with wireless into the network module)
 - [ ] mpd
 - [ ] sensors (internal temperatures)
 - [ ] CPU usage
