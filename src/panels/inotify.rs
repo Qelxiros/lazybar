@@ -63,6 +63,9 @@ impl Stream for InotifyStream {
     }
 }
 
+/// Uses inotify to monitor and display the contents of a file. Useful for
+/// one-off scripts that can write to a file easily.
+#[allow(missing_docs)]
 #[derive(Builder)]
 pub struct Inotify {
     path: String,
@@ -123,6 +126,13 @@ impl PanelConfig for Inotify {
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `path`: the file to monitor
+    ///   - type: String
+    ///   - default: none
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,

@@ -62,7 +62,13 @@ impl Request {
     }
 }
 
-nix::ioctl_read_bad!(query_essid_inner, 0x8b1b, Request);
+// can't use #[doc(hidden)] or #[allow(missing_docs)], so this hides the macro
+// away from docs.rs
+mod hidden {
+    use super::Request;
+
+    nix::ioctl_read_bad!(query_essid_inner, 0x8b1b, Request);
+}
 
 fn query_essid(if_name: &str) -> Result<String> {
     let socket = socket::socket(
@@ -75,7 +81,7 @@ fn query_essid(if_name: &str) -> Result<String> {
     let buf = [0; 33];
     let mut req = Request::new(if_name, &buf);
 
-    unsafe { query_essid_inner(socket.as_raw_fd(), &mut req) }?;
+    unsafe { hidden::query_essid_inner(socket.as_raw_fd(), &mut req) }?;
     let res = buf.as_ptr();
     Ok(unsafe { CStr::from_ptr(res) }.to_str()?.to_owned())
 }
@@ -102,6 +108,9 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
     query_ipv4(if_name).or_else(|| query_ipv6(if_name))
 }
 
+/// Displays information about the current network connection on a given
+/// interface.
+#[allow(missing_docs)]
 #[derive(Builder)]
 pub struct Network {
     #[builder(default = r#"String::from("wlan0")"#)]
@@ -122,7 +131,7 @@ impl Network {
     ) -> Result<((i32, i32), PanelDrawFn)> {
         let essid = glib::markup_escape_text(
             query_essid(self.if_name.as_str())
-                .unwrap_or_else(|_| String::new())
+                .unwrap_or_default()
                 .as_str(),
         );
         let ip = query_ip(self.if_name.as_str());
@@ -173,6 +182,28 @@ impl PanelConfig for Network {
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `if_name`: the name of the given interface. These can be listed with
+    ///   `ip link`.
+    ///   - type: String
+    ///   - default: "wlan0"
+    ///
+    /// - `format_connected`: the format string when there is a connection
+    ///   present on the interface
+    ///   - type: String
+    ///   - default: "%ifname% %essid% %local_ip%"
+    ///
+    /// - `format_disconnected`: the format string when there is no connection
+    ///   present on the interface
+    ///   - type: String
+    ///   - default: "%ifname% disconnected"
+    ///
+    /// - `interval`: the amount of time in seconds to wait between polls
+    ///   - type: u64
+    ///   - default: 10
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,

@@ -1,6 +1,4 @@
-[bars]
-
-[bars.top]
+[bars.example]
 position = "top"
 height = 36
 transparent = true
@@ -14,8 +12,6 @@ margin_right = 10
 panels_left = ["xwindow"]
 panels_center = ["clock"]
 panels_right = ["pulseaudio","separator","network","separator","battery"]
-
-[panels]
 
 [panels.xwindow]
 type = "xwindow"
@@ -43,8 +39,6 @@ format = "<span foreground='#0ff'>%Y-%m-%d %T</span>"
 [panels.separator]
 type = "separator"
 format = "<span font='FiraMono Nerd Font Mono 13' foreground='#666' stretch='expanded'>  //  </span>"
-
-[ramps]
 
 [ramps.pa]
 0 = "<span font_size='25pt' rise='-7.5pt'>󰕿</span> "

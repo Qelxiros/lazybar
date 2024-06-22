@@ -83,17 +83,27 @@ impl Stream for XStream {
     }
 }
 
+/// Describes a bar to be drawn below a workspace name
 #[derive(Clone)]
 pub struct Highlight {
-    height: f64,
-    color: Color,
+    /// the height in pixels of the bar
+    pub height: f64,
+    /// the color of the bar
+    pub color: Color,
 }
 
 impl Highlight {
-    pub const fn new(height: f64, color: Color) -> Self {
-        Self { height, color }
-    }
-
+    /// Parses a new instance from a subset of the global [`Config`]
+    ///
+    /// Configuration options:
+    ///
+    /// - `height`: the height in pixels of the highlight
+    ///   - type: f64
+    ///   - default: none
+    ///
+    /// - `color`: the color of the highlight
+    ///   - type: String
+    ///   - default: none
     pub fn parse(table: &mut HashMap<String, Value>) -> Self {
         let height = table
             .remove("height")
@@ -133,15 +143,10 @@ impl Highlight {
     }
 }
 
-impl Default for Highlight {
-    fn default() -> Self {
-        Self {
-            height: 0.0,
-            color: "#000".parse().unwrap(),
-        }
-    }
-}
-
+/// Display information about workspaces
+///
+/// Requires an EWMH-compliant window manager
+#[allow(missing_docs)]
 #[derive(Clone, Builder)]
 pub struct XWorkspaces {
     conn: Arc<xcb::Connection>,
@@ -291,21 +296,6 @@ impl XWorkspaces {
     }
 }
 
-impl Default for XWorkspaces {
-    fn default() -> Self {
-        let result = xcb::Connection::connect(None).unwrap();
-        Self {
-            conn: Arc::new(result.0),
-            screen: result.1,
-            padding: 0,
-            active: Attrs::default(),
-            nonempty: Attrs::default(),
-            inactive: Attrs::default(),
-            highlight: None,
-        }
-    }
-}
-
 impl PanelConfig for XWorkspaces {
     fn into_stream(
         mut self: Box<Self>,
@@ -368,6 +358,29 @@ impl PanelConfig for XWorkspaces {
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `screen`: the name of the X screen to monitor
+    ///   - type: String
+    ///   - default: None (This will tell X to choose the default screen, which
+    ///     is probably what you want.)
+    ///
+    /// - `padding`: The space in pixels between two workspace names. The
+    ///   [`Attrs`] will change (if applicable) halfway between the two names.
+    ///   - type: u64
+    ///   - default: 0
+    ///
+    /// - `active`: The attributes that will apply to active workspaces. See
+    ///   [`Attrs::parse`] for parsing options. The prefix is `active_`
+    ///
+    /// - `inactive`: The attributes that will apply to inactive workspaces. See
+    ///   [`Attrs::parse`] for parsing options. The prefix is `inactive_`
+    ///
+    /// - `nonempty`: The attributes that will apply to nonempty workspaces. See
+    ///   [`Attrs::parse`] for parsing options. The prefix is `nonempty_`
+    ///
+    /// - `highlight`: The highlight that will appear on the active workspaces.
+    ///   See [`Highlight::parse`] for parsing options.
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,
@@ -393,7 +406,7 @@ impl PanelConfig for XWorkspaces {
             log::error!("Failed to connect to X server");
         }
         if let Some(padding) = table.remove("padding") {
-            if let Ok(padding) = padding.clone().into_int() {
+            if let Ok(padding) = padding.clone().into_uint() {
                 builder.padding(padding as i32);
             } else {
                 log::warn!(
@@ -403,11 +416,12 @@ impl PanelConfig for XWorkspaces {
                 );
             }
         }
-        builder.highlight(Highlight::parse(table));
 
         builder.active(Attrs::parse(table, "active_"));
         builder.inactive(Attrs::parse(table, "inactive_"));
         builder.nonempty(Attrs::parse(table, "nonempty_"));
+
+        builder.highlight(Highlight::parse(table));
 
         Ok(builder.build()?)
     }

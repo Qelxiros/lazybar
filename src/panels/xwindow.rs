@@ -76,6 +76,10 @@ impl Stream for XStream {
     }
 }
 
+/// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
+///
+/// Requires an EWMH-compliant window manager
+#[allow(missing_docs)]
 #[derive(Builder)]
 pub struct XWindow {
     conn: Arc<xcb::Connection>,
@@ -159,18 +163,6 @@ impl XWindow {
     }
 }
 
-impl Default for XWindow {
-    fn default() -> Self {
-        let result = xcb::Connection::connect(None).unwrap();
-        Self {
-            conn: Arc::new(result.0),
-            screen: result.1,
-            windows: HashSet::new(),
-            attrs: Attrs::default(),
-        }
-    }
-}
-
 impl PanelConfig for XWindow {
     fn into_stream(
         mut self: Box<Self>,
@@ -205,6 +197,14 @@ impl PanelConfig for XWindow {
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `screen`: the name of the X screen to monitor
+    ///   - type: String
+    ///   - default: None (This will tell X to choose the default screen, which
+    ///     is probably what you want.)
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,

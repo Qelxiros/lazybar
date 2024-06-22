@@ -3,14 +3,29 @@ use std::collections::HashMap;
 use csscolorparser::Color;
 use pango::FontDescription;
 
+/// Attributes of a panel, or the defaults for the bar.
 #[derive(Clone, Default, Debug)]
 pub struct Attrs {
-    pub font: Option<FontDescription>,
-    pub fg: Option<Color>,
-    pub bg: Option<Color>,
+    font: Option<FontDescription>,
+    fg: Option<Color>,
+    bg: Option<Color>,
 }
 
 impl Attrs {
+    /// Parses an instance of this type from a subset of the global
+    /// [`Config`][config::Config].
+    ///
+    /// Configuration options:
+    ///
+    /// `fg: String`: Specify the foreground (usually text) color. All parsing
+    /// methods from [csscolorparser] are available.
+    ///
+    /// `bg: String`: Specify the background color. All parsing methods from
+    /// [csscolorparser] are available.
+    ///
+    /// `font: String`: Specify the font to be used. This will be turned into a
+    /// [`pango::FontDescription`], so it's very configurable. Font family,
+    /// weight, size, and more can be specified.
     pub fn parse(
         table: &mut HashMap<String, config::Value>,
         prefix: &str,
@@ -49,6 +64,12 @@ impl Attrs {
         attrs
     }
 
+    /// Parses an instance of this type from a subset of the global
+    /// [`Config`][config::Config].
+    /// enforcing default colors. This ensures that the foreground and
+    /// background colors always exist. No default font is set because
+    /// [pango] will choose a reasonable font from those that exist on the host
+    /// system.
     pub fn parse_global(
         table: &mut HashMap<String, config::Value>,
         prefix: &str,
@@ -95,24 +116,30 @@ impl Attrs {
         attrs
     }
 
+    /// Sets the font of a [`pango::Layout`].
     pub fn apply_font(&self, layout: &pango::Layout) {
         if let Some(font) = &self.font {
             layout.set_font_description(Some(font));
         }
     }
 
+    /// Sets the foreground (usually text) color of a [`cairo::Context`].
     pub fn apply_fg(&self, cr: &cairo::Context) {
         if let Some(fg) = &self.fg {
             cr.set_source_rgba(fg.r, fg.g, fg.b, fg.a);
         }
     }
 
+    /// Sets the background color of a [`cairo::Context`].
     pub fn apply_bg(&self, cr: &cairo::Context) {
         if let Some(bg) = &self.bg {
             cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
         }
     }
 
+    /// Combines two [`Attrs`] instances into one, choosing options from `new`
+    /// as long as they are [`Some`], otherwise leaving the options on
+    /// `self` unchanged.
     #[must_use]
     pub fn overlay(self, new: Self) -> Self {
         Self {

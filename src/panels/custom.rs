@@ -16,7 +16,7 @@ use tokio_stream::StreamExt;
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
-pub struct CustomStream {
+struct CustomStream {
     interval: Option<Interval>,
     fired: bool,
 }
@@ -50,6 +50,9 @@ impl Stream for CustomStream {
     }
 }
 
+/// Runs a custom command with `sh -c <command>`, either once or on a given
+/// interval.
+#[allow(missing_docs)]
 #[derive(Builder)]
 #[builder(build_fn(skip))]
 pub struct Custom {
@@ -102,6 +105,18 @@ impl PanelConfig for Custom {
         ))
     }
 
+    /// Configuration options:
+    ///
+    /// - `command`: the command to run
+    ///   - type: String
+    ///   - default: none
+    ///
+    /// - `interval`: the amount of time in seconds to wait between runs
+    ///   - type: u64
+    ///   - default: none
+    ///   - if not present, the command will run exactly once.
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &config::Config,

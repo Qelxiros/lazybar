@@ -7,20 +7,14 @@ use pangocairo::functions::{create_layout, show_layout};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn};
 
+/// Displays static text with [pango] markup.
+#[allow(missing_docs)]
 #[derive(Builder)]
 pub struct Separator {
     #[builder(
         default = r#"String::from(" <span foreground='#666'>|</span> ")"#
     )]
     format: String,
-}
-
-impl Default for Separator {
-    fn default() -> Self {
-        Self {
-            format: String::from(" <span foreground='#666'>|</span> "),
-        }
-    }
 }
 
 impl PanelConfig for Separator {
@@ -46,6 +40,11 @@ impl PanelConfig for Separator {
         Ok(Box::pin(tokio_stream::once(Ok((dims, draw_fn)))))
     }
 
+    /// Configuration options:
+    ///
+    /// - `format`: the text to display
+    ///   - type: String
+    ///   - default: " <span foreground='#666'>|</span> "
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,

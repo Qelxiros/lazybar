@@ -1,5 +1,5 @@
 # Lazybar
-This is a lightweight, event-driven status bar for X11. It is tested exclusively on Linux, although support for other platforms may be added in the future.
+This is a lightweight, event-driven status bar for EWMH-compliant window managers on X11. It is tested exclusively on Linux, although support for other platforms may be added in the future.
 
 ## Features
 - [x] clock
@@ -33,7 +33,7 @@ Everyone is welcome to contribute. Submit a PR with a feature you want to see, a
 ```lazybar <bar_name>```
 
 ## Configuration
-Create `~/.config/lazybar/config.toml`. Documentation is currently limited, but the option names come directly from the variable names in the source code. See `examples/config.toml` for a working example.
+Create `~/.config/lazybar/config.toml`. See https://docs.rs/lazybar for documentation and configuration options.
 
 Documentation for pango markup is available [here](https://docs.gtk.org/Pango/pango_markup.htmlhttps://docs.gtk.org/Pango/pango_markup.html).
 

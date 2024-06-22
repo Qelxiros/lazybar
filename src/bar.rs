@@ -33,10 +33,16 @@ struct Extents {
     right: f64,
 }
 
+/// Information describing how to draw/redraw a [`Panel`].
 pub struct DrawInfo {
-    width: i32,
-    height: i32,
-    draw_fn: PanelDrawFn,
+    /// The width in pixels of the panel.
+    pub width: i32,
+    /// The height in pixels of the panel.
+    pub height: i32,
+    /// A [`FnMut`] that draws the panel to the [`cairo::Context`], starting at
+    /// (0, 0). Translating the Context is the responsibility of functions in
+    /// this module.
+    pub draw_fn: PanelDrawFn,
 }
 
 impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
@@ -49,38 +55,44 @@ impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
     }
 }
 
+/// A panel on the bar. This struct may be expanded in the future.
 pub struct Panel {
+    /// How to draw the panel.
     pub draw_info: Option<DrawInfo>,
 }
 
 impl Panel {
+    /// Create a new panel.
     pub const fn new(draw_info: Option<DrawInfo>) -> Self {
         Self { draw_info }
     }
 }
 
 #[allow(dead_code)]
+/// The bar itself.
 pub struct Bar {
     name: String,
     position: Position,
-    pub conn: xcb::Connection,
+    pub(crate) conn: xcb::Connection,
     screen: i32,
     window: x::Window,
     surface: cairo::XCBSurface,
-    pub cr: Rc<cairo::Context>,
+    pub(crate) cr: Rc<cairo::Context>,
     width: i32,
     height: u16,
     bg: Color,
     margins: Margins,
     extents: Extents,
-    pub left: Vec<Panel>,
-    pub center: Vec<Panel>,
-    pub right: Vec<Panel>,
-    pub streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
+    pub(crate) left: Vec<Panel>,
+    pub(crate) center: Vec<Panel>,
+    pub(crate) right: Vec<Panel>,
+    pub(crate) streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
     center_state: CenterState,
 }
 
 impl Bar {
+    /// Create a new bar, typically from information held by a
+    /// [`BarConfig`][crate::BarConfig].
     pub fn new(
         name: String,
         position: Position,
@@ -130,6 +142,7 @@ impl Bar {
         })
     }
 
+    /// Handle an event from the X server.
     pub fn process_event(&mut self, event: &Event) -> Result<()> {
         match event {
             Event::X(x::Event::Expose(_)) => self.redraw_bar(),
@@ -184,6 +197,7 @@ impl Bar {
         Ok(())
     }
 
+    /// Handle a change in the content of a panel.
     pub fn update_panel(
         &mut self,
         alignment: Alignment,
@@ -403,6 +417,12 @@ impl Bar {
         }
     }
 
+    /// Redraw the entire bar, either as the result of an expose event or
+    /// because the width of a panel changed.
+    ///
+    /// Note: this function is not called for every panel update. If the width
+    /// doesn't change, only one panel is redrawn, and there are a number of
+    /// other cases in which we can redraw only the left or right side.
     pub fn redraw_bar(&mut self) -> Result<()> {
         self.redraw_background(&Region::All)?;
 

@@ -6,8 +6,9 @@ use lazy_static::lazy_static;
 
 use crate::{
     panels::{
-        Battery, Clock, Custom, Days, Fanotify, Hours, Inotify, Minutes,
-        Network, Pulseaudio, Seconds, Separator, XWindow, XWorkspaces,
+        precision::{Days, Hours, Minutes, Seconds},
+        Battery, Clock, Custom, Fanotify, Inotify, Network, Pulseaudio,
+        Separator, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
     Position,

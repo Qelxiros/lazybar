@@ -9,6 +9,8 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
+/// Shows the current battery level.
+#[allow(missing_docs)]
 #[derive(Builder)]
 #[allow(dead_code)]
 pub struct Battery {
@@ -88,22 +90,6 @@ impl Battery {
     }
 }
 
-impl Default for Battery {
-    fn default() -> Self {
-        Self {
-            battery: String::from("BAT0"),
-            adapter: String::from("AC"),
-            charging_format: String::from("CHG: %percentage%%"),
-            discharging_format: String::from("DSCHG: %percentage%%"),
-            not_charging_format: String::from("NCHG: %percentage%%"),
-            full_format: String::from("FULL: %percentage%%"),
-            unknown_format: String::from("%percentage%%"),
-            duration: Duration::from_secs(1),
-            attrs: Attrs::default(),
-        }
-    }
-}
-
 impl PanelConfig for Battery {
     fn into_stream(
         mut self: Box<Self>,
@@ -119,6 +105,48 @@ impl PanelConfig for Battery {
         Ok(Box::pin(stream))
     }
 
+    /// Parses an instance of the panel from the global [`Config`]
+    ///
+    /// Configuration options:
+    ///
+    /// - `battery`: specify which battery to monitor
+    ///   - type: String
+    ///   - default: "BAT0"
+    ///
+    /// - `adapter`: specify which adapter to monitor
+    ///   - default: "AC"
+    ///   - currently unused
+    ///
+    /// - `charging_format`: format string when the battery is charging
+    ///   - type: String
+    ///   - formatting options: `%percentage%`
+    ///   - default: "CHG: %percentage%%"
+    ///
+    /// - `discharging_format`: format string when the battery is discharging
+    ///   - type: String
+    ///   - formatting options: `%percentage%`
+    ///   - default: "DSCHG: %percentage%%"
+    ///
+    /// - `not_charging_format`: format string when the battery is not charging
+    ///   - type: String
+    ///   - formatting options: `%percentage%`
+    ///   - default: "NCHG: %percentage%%"
+    ///
+    /// - `full_format`: format string when the battery is full
+    ///   - type: String
+    ///   - formatting options: `%percentage%`
+    ///   - default: "FULL: %percentage%%"
+    ///
+    /// - `unknown_format`: format string when the battery is unknown
+    ///   - type: String
+    ///   - formatting options: `%percentage%`
+    ///   - default: "%percentage%%"
+    ///
+    /// - `interval`: how often (in seconds) to poll for new values
+    ///   - type: u64
+    ///   - default: 10
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &Config,

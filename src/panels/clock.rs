@@ -12,22 +12,37 @@ use chrono::{Local, Timelike};
 use config::{Config, Value};
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
+use precision::*;
 use tokio::time::{interval, Instant, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
 
-#[derive(Clone, Debug)]
-pub struct Days;
-#[derive(Clone, Debug)]
-pub struct Hours;
-#[derive(Clone, Debug)]
-pub struct Minutes;
-#[derive(Clone, Debug)]
-pub struct Seconds;
+/// Defines options for a [`Clock`]'s precision.
+pub mod precision {
+    use std::time::Duration;
 
-pub trait Precision {
-    fn tick() -> Duration;
+    #[cfg(doc)]
+    use super::Clock;
+
+    /// Update the [`Clock`] when the current day changes.
+    #[derive(Clone, Debug)]
+    pub struct Days;
+    /// Update the [`Clock`] when the current hour changes.
+    #[derive(Clone, Debug)]
+    pub struct Hours;
+    /// Update the [`Clock`] when the current minute changes.
+    #[derive(Clone, Debug)]
+    pub struct Minutes;
+    /// Update the [`Clock`] when the current second changes.
+    #[derive(Clone, Debug)]
+    pub struct Seconds;
+
+    /// The trait implemented by all [`Clock`] subtypes.
+    pub trait Precision {
+        /// Determine how long until the next unit boundary.
+        fn tick() -> Duration;
+    }
 }
 
 impl Precision for Days {
@@ -63,13 +78,13 @@ impl Precision for Seconds {
 }
 
 #[derive(Debug)]
-pub struct ClockStream {
+struct ClockStream {
     get_duration: fn() -> Duration,
     interval: Interval,
 }
 
 impl ClockStream {
-    pub fn new(get_duration: fn() -> Duration) -> Self {
+    fn new(get_duration: fn() -> Duration) -> Self {
         Self {
             get_duration,
             interval: interval(get_duration()),
@@ -93,6 +108,10 @@ impl Stream for ClockStream {
     }
 }
 
+/// Displays the current time, updating at a given precision.
+///
+/// Uses an [`Interval`] to update as close to the unit boundaries as possible.
+#[allow(missing_docs)]
 #[derive(Builder, Debug)]
 pub struct Clock<P: Clone> {
     #[builder(default = r#"String::from("%Y-%m-%d %T")"#)]
@@ -125,46 +144,6 @@ impl<P: Precision + Clone> Clock<P> {
     }
 }
 
-impl Default for Clock<Days> {
-    fn default() -> Self {
-        Self {
-            format: String::from("%Y-%m-%d"),
-            attrs: Attrs::default(),
-            phantom: PhantomData::<Days>,
-        }
-    }
-}
-
-impl Default for Clock<Hours> {
-    fn default() -> Self {
-        Self {
-            format: String::from("%Y-%m-%d %H"),
-            attrs: Attrs::default(),
-            phantom: PhantomData::<Hours>,
-        }
-    }
-}
-
-impl Default for Clock<Minutes> {
-    fn default() -> Self {
-        Self {
-            format: String::from("%Y-%m-%d %H:%M"),
-            attrs: Attrs::default(),
-            phantom: PhantomData::<Minutes>,
-        }
-    }
-}
-
-impl Default for Clock<Seconds> {
-    fn default() -> Self {
-        Self {
-            format: String::from("%Y-%m-%d %T"),
-            attrs: Attrs::default(),
-            phantom: PhantomData::<Seconds>,
-        }
-    }
-}
-
 impl<P> PanelConfig for Clock<P>
 where
     P: Precision + Clone + 'static,
@@ -180,6 +159,14 @@ where
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `format`: format string
+    ///   - type: String
+    ///   - formatting options: see [`chrono::format::strftime`] for format
+    ///     sequences.
+    ///
+    /// - `attrs`: see [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,

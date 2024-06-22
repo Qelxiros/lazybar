@@ -25,6 +25,8 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream, Ramp};
 
+/// Displays the current volume and mute status of a given sink.
+#[allow(missing_docs)]
 #[derive(Builder)]
 pub struct Pulseaudio {
     #[builder(default = r#"String::from("@DEFAULT_SINK@")"#)]
@@ -115,22 +117,6 @@ impl Pulseaudio {
     }
 }
 
-impl Default for Pulseaudio {
-    fn default() -> Self {
-        let (send, recv) = channel();
-        Self {
-            sink: String::from("@DEFAULT_SINK@"),
-            server: None,
-            ramp: None,
-            muted_ramp: None,
-            attrs: Attrs::default(),
-            send,
-            recv: Arc::new(Mutex::new(recv)),
-            handle: None,
-        }
-    }
-}
-
 impl PanelConfig for Pulseaudio {
     fn into_stream(
         mut self: Box<Self>,
@@ -203,6 +189,27 @@ impl PanelConfig for Pulseaudio {
         Ok(Box::pin(stream))
     }
 
+    /// Configuration options:
+    ///
+    /// - `sink`: the sink about which to display information
+    ///   - type: String
+    ///   - default: "@DEFAULT_SINK@"
+    ///
+    /// - `server`: the pulseaudio server to which to connect
+    ///   - type: String
+    ///   - default: None (This does not mean no default; rather
+    ///     [`Option::None`] is passed to the connect function and pulseaudio
+    ///     will make its best guess. This is the right option on most systems.)
+    ///
+    /// - `ramp`: Shows an icon based on the volume level. See [`Ramp::parse`]
+    ///   for parsing details. This ramp is used when the sink is unmuted or
+    ///   when no `muted_ramp` is specified.-
+    ///
+    /// - `muted_ramp`: Shows an icon based on the volume level. See
+    ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
+    ///   is muted.
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
         table: &mut HashMap<String, Value>,
         global: &Config,
