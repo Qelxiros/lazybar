@@ -11,11 +11,9 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let name = std::env::args()
-        .skip(1)
-        .next()
-        .expect("Specify the name of a bar");
-    let config = parser::parse(name.as_str())?;
+    let name = std::env::args().skip(1).next();
+
+    let config = parser::parse(name.as_deref())?;
 
     config.run()?;
 

@@ -37,10 +37,17 @@ lazy_static! {
     };
 }
 
-pub fn parse(bar_name: &str) -> Result<BarConfig> {
+/// Parses a bar with a given name from the global [`Config`]
+pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
     let bars_table = CONFIG
         .get_table("bars")
         .context("`bars` doesn't exist or isn't a table")?;
+
+    let bar_name = bar_name.unwrap_or_else(|| {
+        let mut keys = bars_table.keys().collect::<Vec<_>>();
+        keys.sort();
+        keys.get(0).expect("No bars specified in config file")
+    });
 
     let bar_table = bars_table
         .get(bar_name)
