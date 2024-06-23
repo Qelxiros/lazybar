@@ -1,4 +1,5 @@
-//! This is a lightweight, event-driven status bar for X11.
+//! This is a lightweight, event-driven status bar for EWMH-compliant window
+//! managers on X11.
 //!
 //! It uses [`tokio`] in combination with existing event APIs to poll as rarely
 //! as possible. For example, the [`Inotify`][panels::Inotify] panel uses
@@ -22,7 +23,9 @@
 //!
 //! None of these tables need to be declared explicitly, as they hold no values
 //! of their own. `[bars.example]` is sufficient to define a bar named
-//! `example`. See <https://toml.io/> for more information.
+//! `example`. Any values in these top level tables will be ignored, along with
+//! any top level table with a different name. See <https://toml.io/> for more
+//! information.
 //!
 //! # Example Config
 //! ```toml
