@@ -17,7 +17,9 @@ use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+};
 
 struct InotifyStream {
     i: Arc<inotify::Inotify>,
@@ -138,16 +140,8 @@ impl PanelConfig for Inotify {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = InotifyBuilder::default();
-        if let Some(path) = table.remove("path") {
-            if let Ok(path) = path.clone().into_string() {
-                builder.path(path);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {path:?} (location attempt: \
-                     {:?})",
-                    path.origin()
-                );
-            }
+        if let Some(path) = remove_string_from_config("path", table) {
+            builder.path(path);
         } else {
             log::error!("No path found for inotify panel");
         }

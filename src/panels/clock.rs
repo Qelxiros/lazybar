@@ -16,7 +16,9 @@ use precision::*;
 use tokio::time::{interval, Instant, Interval};
 use tokio_stream::{Stream, StreamExt};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+};
 
 /// Defines options for a [`Clock`]'s precision.
 pub mod precision {
@@ -102,7 +104,7 @@ impl Stream for ClockStream {
         let ret = self.interval.poll_tick(cx).map(Some);
         if ret.is_ready() {
             let duration = (self.get_duration)();
-            self.interval.reset_at(Instant::now() + duration);
+            self.interval.reset_after(duration);
         }
         ret
     }
@@ -172,16 +174,8 @@ where
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = ClockBuilder::default();
-        if let Some(format) = table.remove("format") {
-            if let Ok(format) = format.clone().into_string() {
-                builder.format(format);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format:?} (location attempt: \
-                     {:?})",
-                    format.origin()
-                );
-            }
+        if let Some(format) = remove_string_from_config("format", table) {
+            builder.format(format);
         }
         builder.attrs(Attrs::parse(table, ""));
 

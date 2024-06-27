@@ -18,7 +18,10 @@ use pangocairo::functions::{create_layout, show_layout};
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelDrawFn, PanelStream,
+};
 
 #[repr(C)]
 struct Essid {
@@ -209,52 +212,21 @@ impl PanelConfig for Network {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = NetworkBuilder::default();
-        if let Some(if_name) = table.remove("if_name") {
-            if let Ok(if_name) = if_name.clone().into_string() {
-                builder.if_name(if_name);
-            } else {
-                log::warn!(
-                    "Ignoring non=string value {if_name:?} (location attempt: \
-                     {:?})",
-                    if_name.origin()
-                );
-            }
+        if let Some(if_name) = remove_string_from_config("if_name", table) {
+            builder.if_name(if_name);
         }
-        if let Some(format_connected) = table.remove("format_connected") {
-            if let Ok(format_connected) = format_connected.clone().into_string()
-            {
-                builder.format_connected(format_connected);
-            } else {
-                log::warn!(
-                    "Ignoring non=string value {format_connected:?} (location \
-                     attempt: {:?})",
-                    format_connected.origin()
-                );
-            }
+        if let Some(format_connected) =
+            remove_string_from_config("format_connected", table)
+        {
+            builder.format_connected(format_connected);
         }
-        if let Some(format_disconnected) = table.remove("format_disconnected") {
-            if let Ok(format_disconnected) =
-                format_disconnected.clone().into_string()
-            {
-                builder.format_disconnected(format_disconnected);
-            } else {
-                log::warn!(
-                    "Ignoring non=string value {format_disconnected:?} \
-                     (location attempt: {:?})",
-                    format_disconnected.origin()
-                );
-            }
+        if let Some(format_disconnected) =
+            remove_string_from_config("format_disconnected", table)
+        {
+            builder.format_disconnected(format_disconnected);
         }
-        if let Some(duration) = table.remove("interval") {
-            if let Ok(duration) = duration.clone().into_uint() {
-                builder.duration(Duration::from_secs(duration));
-            } else {
-                log::warn!(
-                    "Ignoring non-uint value {duration:?} (location attempt: \
-                     {:?})",
-                    duration.origin()
-                );
-            }
+        if let Some(duration) = remove_uint_from_config("interval", table) {
+            builder.duration(Duration::from_secs(duration));
         }
 
         builder.attrs(Attrs::parse(table, ""));

@@ -7,7 +7,10 @@ use pangocairo::functions::show_layout;
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelDrawFn, PanelStream,
+};
 
 /// Shows the current battery level.
 #[allow(missing_docs)]
@@ -152,97 +155,39 @@ impl PanelConfig for Battery {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = BatteryBuilder::default();
-        if let Some(battery) = table.remove("battery") {
-            if let Ok(battery) = battery.clone().into_string() {
-                builder.battery(battery);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {battery:?} (location attempt: \
-                     {:?})",
-                    battery.origin()
-                );
-            }
+        if let Some(battery) = remove_string_from_config("battery", table) {
+            builder.battery(battery);
         }
-        if let Some(adapter) = table.remove("adapter") {
-            if let Ok(adapter) = adapter.clone().into_string() {
-                builder.adapter(adapter);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {adapter:?} (location attempt: \
-                     {:?})",
-                    adapter.origin()
-                );
-            }
+        if let Some(adapter) = remove_string_from_config("adapter", table) {
+            builder.adapter(adapter);
         }
-        if let Some(format_charging) = table.remove("format_charging") {
-            if let Ok(format_charging) = format_charging.clone().into_string() {
-                builder.charging_format(format_charging);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format_charging:?} (location \
-                     attempt: {:?})",
-                    format_charging.origin()
-                );
-            }
+        if let Some(format_charging) =
+            remove_string_from_config("format_charging", table)
+        {
+            builder.charging_format(format_charging);
         }
-        if let Some(format_discharging) = table.remove("format_discharging") {
-            if let Ok(format_discharging) =
-                format_discharging.clone().into_string()
-            {
-                builder.discharging_format(format_discharging);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format_discharging:?} \
-                     (location attempt: {:?})",
-                    format_discharging.origin()
-                );
-            }
+        if let Some(format_discharging) =
+            remove_string_from_config("format_discharging", table)
+        {
+            builder.discharging_format(format_discharging);
         }
-        if let Some(format_not_charging) = table.remove("format_not_charging") {
-            if let Ok(format_not_charging) =
-                format_not_charging.clone().into_string()
-            {
-                builder.not_charging_format(format_not_charging);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format_not_charging:?} \
-                     (location attempt: {:?})",
-                    format_not_charging.origin()
-                );
-            }
+        if let Some(format_not_charging) =
+            remove_string_from_config("format_not_charging", table)
+        {
+            builder.not_charging_format(format_not_charging);
         }
-        if let Some(format_full) = table.remove("format_full") {
-            if let Ok(format_full) = format_full.clone().into_string() {
-                builder.full_format(format_full);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format_full:?} (location \
-                     attempt: {:?})",
-                    format_full.origin()
-                );
-            }
+        if let Some(format_full) =
+            remove_string_from_config("format_full", table)
+        {
+            builder.full_format(format_full);
         }
-        if let Some(format_unknown) = table.remove("format_unknown") {
-            if let Ok(format_unknown) = format_unknown.clone().into_string() {
-                builder.unknown_format(format_unknown);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format_unknown:?} (location \
-                     attempt: {:?})",
-                    format_unknown.origin()
-                );
-            }
+        if let Some(format_unknown) =
+            remove_string_from_config("format_unknown", table)
+        {
+            builder.unknown_format(format_unknown);
         }
-        if let Some(duration) = table.remove("interval") {
-            if let Ok(duration) = duration.clone().into_uint() {
-                builder.duration(Duration::from_secs(duration));
-            } else {
-                log::warn!(
-                    "Ignoring non-uint value {duration:?} (location attempt: \
-                     {:?})",
-                    duration.origin()
-                );
-            }
+        if let Some(duration) = remove_uint_from_config("interval", table) {
+            builder.duration(Duration::from_secs(duration));
         }
         builder.attrs(Attrs::parse(table, ""));
 

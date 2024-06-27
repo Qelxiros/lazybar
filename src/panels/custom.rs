@@ -14,7 +14,10 @@ use pangocairo::functions::{create_layout, show_layout};
 use tokio::time::{interval, Interval};
 use tokio_stream::StreamExt;
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream};
+use crate::{
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelDrawFn, PanelStream,
+};
 
 struct CustomStream {
     interval: Option<Interval>,
@@ -122,29 +125,13 @@ impl PanelConfig for Custom {
         _global: &config::Config,
     ) -> Result<Self> {
         let mut builder = CustomBuilder::default();
-        if let Some(command) = table.remove("command") {
-            if let Ok(command) = command.clone().into_string() {
-                builder._command_str(command);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {command:?} (location attempt: \
-                     {:?})",
-                    command.origin()
-                );
-            }
+        if let Some(command) = remove_string_from_config("command", table) {
+            builder._command_str(command);
         } else {
             log::error!("No command found for custom panel");
         }
-        if let Some(duration) = table.remove("interval") {
-            if let Ok(duration) = duration.clone().into_uint() {
-                builder.duration(Duration::from_secs(duration));
-            } else {
-                log::warn!(
-                    "Ignoring non-uint value {duration:?} (location attempt: \
-                     {:?})",
-                    duration.origin()
-                );
-            }
+        if let Some(duration) = remove_uint_from_config("interval", table) {
+            builder.duration(Duration::from_secs(duration));
         }
 
         Ok(builder.build())

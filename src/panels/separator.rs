@@ -5,7 +5,7 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn};
+use crate::{remove_string_from_config, Attrs, PanelConfig, PanelDrawFn};
 
 /// Displays static text with [pango] markup.
 #[allow(missing_docs)]
@@ -50,16 +50,8 @@ impl PanelConfig for Separator {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = SeparatorBuilder::default();
-        if let Some(format) = table.remove("format") {
-            if let Ok(format) = format.clone().into_string() {
-                builder.format(format);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {format:?} (location attempt: \
-                     {:?})",
-                    format.origin()
-                );
-            }
+        if let Some(format) = remove_string_from_config("format", table) {
+            builder.format(format);
         }
 
         Ok(builder.build()?)

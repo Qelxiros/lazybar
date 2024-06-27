@@ -23,7 +23,10 @@ use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
-use crate::{Attrs, PanelConfig, PanelDrawFn, PanelStream, Ramp};
+use crate::{
+    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+    Ramp,
+};
 
 /// Displays the current volume and mute status of a given sink.
 #[allow(missing_docs)]
@@ -215,58 +218,25 @@ impl PanelConfig for Pulseaudio {
         global: &Config,
     ) -> Result<Self> {
         let mut builder = PulseaudioBuilder::default();
-        if let Some(sink) = table.remove("sink") {
-            if let Ok(sink) = sink.clone().into_string() {
-                builder.sink(sink);
+        if let Some(sink) = remove_string_from_config("sink", table) {
+            builder.sink(sink);
+        }
+        if let Some(server) = remove_string_from_config("server", table) {
+            builder.server(server);
+        }
+        if let Some(ramp) = remove_string_from_config("ramp", table) {
+            if let Some(ramp) = Ramp::parse(ramp.as_str(), global) {
+                builder.ramp(ramp);
             } else {
-                log::warn!(
-                    "Ignoring non-string value {sink:?} (location attempt: \
-                     {:?})",
-                    sink.origin()
-                );
+                log::warn!("Invalid ramp {ramp}");
             }
         }
-        if let Some(server) = table.remove("server") {
-            if let Ok(server) = server.clone().into_string() {
-                builder.server(server);
+        if let Some(muted_ramp) = remove_string_from_config("muted_ramp", table)
+        {
+            if let Some(muted_ramp) = Ramp::parse(muted_ramp.as_str(), global) {
+                builder.muted_ramp(muted_ramp);
             } else {
-                log::warn!(
-                    "Ignoring non-string value {server:?} (location attempt: \
-                     {:?})",
-                    server.origin()
-                );
-            }
-        }
-        if let Some(ramp) = table.remove("ramp") {
-            if let Ok(ramp) = ramp.clone().into_string() {
-                if let Some(ramp) = Ramp::parse(ramp.as_str(), global) {
-                    builder.ramp(ramp);
-                } else {
-                    log::warn!("Invalid ramp {ramp}");
-                }
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {ramp:?} (location attempt: \
-                     {:?})",
-                    ramp.origin()
-                );
-            }
-        }
-        if let Some(muted_ramp) = table.remove("muted_ramp") {
-            if let Ok(muted_ramp) = muted_ramp.clone().into_string() {
-                if let Some(muted_ramp) =
-                    Ramp::parse(muted_ramp.as_str(), global)
-                {
-                    builder.muted_ramp(muted_ramp);
-                } else {
-                    log::warn!("Invalid muted_ramp {muted_ramp}");
-                }
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {muted_ramp:?} (location \
-                     attempt: {:?})",
-                    muted_ramp.origin()
-                );
+                log::warn!("Invalid muted_ramp {muted_ramp}");
             }
         }
 

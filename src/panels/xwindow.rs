@@ -15,7 +15,8 @@ use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
 use crate::{
-    x::intern_named_atom, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+    remove_string_from_config, x::intern_named_atom, Attrs, PanelConfig,
+    PanelDrawFn, PanelStream,
 };
 
 struct XStream {
@@ -210,19 +211,12 @@ impl PanelConfig for XWindow {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = XWindowBuilder::default();
-        let screen = table.remove("screen").and_then(|screen| {
-            screen.clone().into_string().map_or_else(
-                |_| {
-                    log::warn!(
-                        "Ignoring non-string value {screen:?} (location \
-                         attempt: {:?})",
-                        screen.origin()
-                    );
-                    None
-                },
-                |screen| Some(screen),
-            )
-        });
+        let screen =
+            if let Some(screen) = remove_string_from_config("screen", table) {
+                Some(screen)
+            } else {
+                None
+            };
         if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
         {
             builder.conn(Arc::new(conn)).screen(screen);
