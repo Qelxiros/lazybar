@@ -1,6 +1,7 @@
-use std::ops::Sub;
+use std::{collections::HashMap, ops::Sub};
 
-use config::Config;
+use config::{Config, Value};
+use csscolorparser::Color;
 
 /// Utility data structure to display one of several strings based on a value in
 /// a range, like a volume icon.
@@ -52,5 +53,115 @@ impl FromIterator<String> for Ramp {
         Self {
             icons: iter.into_iter().collect(),
         }
+    }
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into a string
+pub fn remove_string_from_config(
+    id: &str,
+    table: &mut HashMap<String, Value>,
+) -> Option<String> {
+    if let Some(val) = table.remove(id) {
+        if let Ok(val) = val.clone().into_string() {
+            Some(val)
+        } else {
+            log::warn!(
+                "Ignoring non-string value {val:?} (location attempt: {:?})",
+                val.origin()
+            );
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into a uint
+pub fn remove_uint_from_config(
+    id: &str,
+    table: &mut HashMap<String, Value>,
+) -> Option<u64> {
+    if let Some(val) = table.remove(id) {
+        if let Ok(val) = val.clone().into_uint() {
+            Some(val)
+        } else {
+            log::warn!(
+                "Ignoring non-uint value {val:?} (location attempt: {:?})",
+                val.origin()
+            );
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into a bool
+pub fn remove_bool_from_config(
+    id: &str,
+    table: &mut HashMap<String, Value>,
+) -> Option<bool> {
+    if let Some(val) = table.remove(id) {
+        if let Ok(val) = val.clone().into_bool() {
+            Some(val)
+        } else {
+            log::warn!(
+                "Ignoring non-boolean value {val:?} (location attempt: {:?})",
+                val.origin()
+            );
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into a float
+pub fn remove_float_from_config(
+    id: &str,
+    table: &mut HashMap<String, Value>,
+) -> Option<f64> {
+    if let Some(val) = table.remove(id) {
+        if let Ok(val) = val.clone().into_float() {
+            Some(val)
+        } else {
+            log::warn!(
+                "Ignoring non-float value {val:?} (location attempt: {:?})",
+                val.origin()
+            );
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into a color
+pub fn remove_color_from_config(
+    id: &str,
+    table: &mut HashMap<String, Value>,
+) -> Option<Color> {
+    if let Some(val) = table.remove(id) {
+        if let Ok(val) = val.clone().into_string() {
+            if let Ok(val) = val.parse() {
+                Some(val)
+            } else {
+                log::warn!("Invalid color {val}");
+                None
+            }
+        } else {
+            log::warn!(
+                "Ignoring non-string value {val:?} (location attempt: {:?})",
+                val.origin()
+            );
+            None
+        }
+    } else {
+        None
     }
 }
