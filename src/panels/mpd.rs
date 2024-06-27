@@ -66,6 +66,7 @@ pub struct Mpd {
     last_progress_width: f64,
     // in characters if strategy is truncate or scroll, in pixels if strategy
     // is ellipsize
+    #[builder(default = "0")]
     max_width: usize,
 }
 
