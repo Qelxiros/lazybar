@@ -12,7 +12,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] xwindow
 - [x] xworkspaces
 - [x] ethernet (merged with wireless into the network module)
-- [ ] mpd
+- [x] mpd
 - [ ] sensors (internal temperatures)
 - [ ] CPU usage
 - [ ] RAM usage
