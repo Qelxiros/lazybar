@@ -36,8 +36,10 @@
 mod attrs;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
+mod highlight;
 /// The parser for the `config.toml` file.
 pub mod parser;
+mod ramp;
 mod utils;
 mod x;
 
@@ -50,6 +52,8 @@ use config::{Config, Value};
 use csscolorparser::Color;
 use derive_builder::Builder;
 use futures::Stream;
+pub use highlight::Highlight;
+pub use ramp::Ramp;
 use tokio::{runtime::Runtime, task};
 use tokio_stream::{StreamExt, StreamMap};
 pub use utils::*;
