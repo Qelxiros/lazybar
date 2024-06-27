@@ -211,12 +211,7 @@ impl PanelConfig for XWindow {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = XWindowBuilder::default();
-        let screen =
-            if let Some(screen) = remove_string_from_config("screen", table) {
-                Some(screen)
-            } else {
-                None
-            };
+        let screen = remove_string_from_config("screen", table);
         if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
         {
             builder.conn(Arc::new(conn)).screen(screen);

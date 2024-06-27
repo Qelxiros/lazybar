@@ -47,7 +47,7 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
     let bar_name = bar_name.unwrap_or_else(|| {
         let mut keys = bars_table.keys().collect::<Vec<_>>();
         keys.sort();
-        keys.get(0).expect("No bars specified in config file")
+        keys.first().expect("No bars specified in config file")
     });
 
     let bar_table = bars_table

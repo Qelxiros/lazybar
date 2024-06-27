@@ -76,7 +76,7 @@ pub struct Inotify {
 
 impl Inotify {
     fn draw(
-        &mut self,
+        &self,
         cr: &Rc<cairo::Context>,
         file: &Rc<Mutex<File>>,
     ) -> Result<((i32, i32), PanelDrawFn)> {

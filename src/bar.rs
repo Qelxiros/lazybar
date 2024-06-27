@@ -63,6 +63,7 @@ pub struct Panel {
 
 impl Panel {
     /// Create a new panel.
+    #[must_use]
     pub const fn new(draw_info: Option<DrawInfo>) -> Self {
         Self { draw_info }
     }

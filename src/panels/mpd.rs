@@ -41,7 +41,7 @@ enum EventType {
     Progress,
 }
 
-/// Displays information about music currently playing through [https://musicpd.org](MPD)
+/// Displays information about music currently playing through [MPD](https://musicpd.org)
 #[allow(missing_docs)]
 #[derive(Builder, Debug)]
 pub struct Mpd {
@@ -186,15 +186,13 @@ impl Mpd {
             self.last_progress_width = status.elapsed.unwrap().as_secs_f64()
                 / status.duration.unwrap().as_secs_f64()
                 * size.0 as f64;
-            match self.strategy {
-                Strategy::Ellipsize(_) => {}
-                _ => {
-                    let char_width =
-                        size.0 as f64 / text.len().min(self.max_width) as f64;
-                    self.last_progress_width =
-                        (self.last_progress_width / char_width).round()
-                            * char_width;
-                }
+            if let Strategy::Ellipsize(_) = self.strategy {
+            } else {
+                let char_width =
+                    size.0 as f64 / text.len().min(self.max_width) as f64;
+                self.last_progress_width =
+                    (self.last_progress_width / char_width).round()
+                        * char_width;
             }
         }
 
@@ -288,14 +286,14 @@ impl PanelConfig for Mpd {
     /// - `progress_bar`: whether to show a progress bar behind the text
     ///   - type: bool
     ///   - default: `false`
-    /// - progress_bg: the background color of the progress bar (ignored if
+    /// - `progress_bg`: the background color of the progress bar (ignored if
     ///   `!progress_bar`)
     /// - `max_width`: the maximum width of the panel, in pixels when `strategy
     ///   == ellipsize` and in characters otherwise (regardless, 0 means no
     ///   maximum)
     ///   - type: u64
     ///   - default: 0
-    /// - `strategy`: how to handle overflow of max_width
+    /// - `strategy`: how to handle overflow of `max_width`
     ///   - type: String - one of `scroll`, `ellipsize`, or `truncate`
     ///   - default: truncate
     /// - `scroll_interval`: how often in milliseconds to scroll the text
@@ -407,7 +405,7 @@ impl Stream for HighlightStream {
                 *stale.lock().unwrap() = true;
                 waker.wake();
                 Ok(())
-            }))
+            }));
         }
         if *self.stale.lock().unwrap() {
             *self.stale.lock().unwrap() = false;
@@ -418,7 +416,6 @@ impl Stream for HighlightStream {
             self.playing = status.state == State::Play;
             if let Some(length) = self.song_length {
                 self.interval = interval(length / self.max_width as u32);
-                println!("{}", self.interval.period().as_millis())
             }
         }
         if self.playing {

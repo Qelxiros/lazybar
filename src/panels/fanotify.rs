@@ -78,7 +78,7 @@ pub struct Fanotify {
 
 impl Fanotify {
     fn draw(
-        &mut self,
+        &self,
         cr: &Rc<cairo::Context>,
         file: &Rc<Mutex<File>>,
     ) -> Result<((i32, i32), PanelDrawFn)> {

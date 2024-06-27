@@ -128,10 +128,7 @@ pub struct Network {
 }
 
 impl Network {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> ((i32, i32), PanelDrawFn) {
         let essid = glib::markup_escape_text(
             query_essid(self.if_name.as_str())
                 .unwrap_or_default()
@@ -139,17 +136,19 @@ impl Network {
         );
         let ip = query_ip(self.if_name.as_str());
 
-        let text = match ip {
-            Some(ip) => self
-                .format_connected
-                .replace("%ifname%", self.if_name.as_str())
-                .replace("%essid%", essid.as_str())
-                .replace("%local_ip%", ip.to_string().as_str()),
-            None => self
-                .format_disconnected
-                .replace("%ifname%", self.if_name.as_str())
-                .replace("%essid%", essid.as_str()),
-        };
+        let text = ip.map_or_else(
+            || {
+                self.format_disconnected
+                    .replace("%ifname%", self.if_name.as_str())
+                    .replace("%essid%", essid.as_str())
+            },
+            |ip| {
+                self.format_connected
+                    .replace("%ifname%", self.if_name.as_str())
+                    .replace("%essid%", essid.as_str())
+                    .replace("%local_ip%", ip.to_string().as_str())
+            },
+        );
 
         let layout = create_layout(cr);
         layout.set_markup(text.as_str());
@@ -157,7 +156,7 @@ impl Network {
         let dims = layout.pixel_size();
         let attrs = self.attrs.clone();
 
-        Ok((
+        (
             dims,
             Box::new(move |cr| {
                 attrs.apply_bg(cr);
@@ -167,7 +166,7 @@ impl Network {
                 show_layout(cr, &layout);
                 Ok(())
             }),
-        ))
+        )
     }
 }
 
@@ -180,7 +179,7 @@ impl PanelConfig for Network {
     ) -> Result<PanelStream> {
         self.attrs = global_attrs.overlay(self.attrs);
         let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr));
+            .map(move |_| Ok(self.draw(&cr)));
 
         Ok(Box::pin(stream))
     }

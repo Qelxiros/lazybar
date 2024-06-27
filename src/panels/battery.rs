@@ -39,7 +39,7 @@ pub struct Battery {
 
 impl Battery {
     fn draw(
-        &mut self,
+        &self,
         cr: &Rc<cairo::Context>,
     ) -> Result<((i32, i32), PanelDrawFn)> {
         let mut capacity_f = File::open(format!(

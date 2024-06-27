@@ -11,7 +11,7 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let name = std::env::args().skip(1).next();
+    let name = std::env::args().nth(1);
 
     let config = parser::parse(name.as_deref())?;
 
