@@ -23,10 +23,17 @@ muted_ramp = "pa_muted"
 
 [panels.network]
 type = "network"
-# if_name = "wlp0s20f3"
-if_name = "enp0s31f6"
+if_name = "wlan0"
+# if_name = "eth0"
 format_connected = "<span foreground='#0ff'>%ifname%</span> %essid% %local_ip%"
 format_disconnected = "<span foreground='#0ff'>%ifname%</span> <span foreground='#888'>disconnected</span>"
+
+[panels.mpd]
+type = "mpd"
+progress_bar = true
+max_width = 300
+strategy = "scroll"
+scroll_interval = 300
 
 [panels.battery]
 type = "battery"
@@ -38,7 +45,7 @@ format = "<span foreground='#0ff'>%Y-%m-%d %T</span>"
 
 [panels.separator]
 type = "separator"
-format = "<span font='FiraMono Nerd Font Mono 13' foreground='#666' stretch='expanded'>  //  </span>"
+format = "<span font='FiraMono Nerd Font Mono 13' foreground='#666'>  //  </span>"
 
 [ramps.pa]
 0 = "<span font_size='25pt' rise='-7.5pt'>󰕿</span> "
