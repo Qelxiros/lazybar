@@ -17,6 +17,7 @@ chrono = "0.4.38"
 config = { version = "0.14.0", default-features = false, features = ["toml"] }
 csscolorparser = "0.6.2"
 derive_builder = "0.20.0"
+fastping-rs = "0.2.4"
 futures = "0.3.30"
 glib = "0.19.8"
 lazy_static = "1.4.0"

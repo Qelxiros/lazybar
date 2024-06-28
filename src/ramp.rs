@@ -4,7 +4,7 @@ use config::Config;
 
 /// Utility data structure to display one of several strings based on a value in
 /// a range, like a volume icon.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ramp {
     icons: Vec<String>,
 }
@@ -31,9 +31,10 @@ impl Ramp {
     /// a table with keys ranging from 0 to any number. The values should be
     /// [pango] markup strings.
     #[must_use]
-    pub fn parse(name: &str, global: &Config) -> Option<Self> {
+    pub fn parse(name: impl AsRef<str>, global: &Config) -> Option<Self> {
         let ramps_table = global.get_table("ramps").ok()?;
-        let ramp_table = ramps_table.get(name)?.clone().into_table().ok()?;
+        let ramp_table =
+            ramps_table.get(name.as_ref())?.clone().into_table().ok()?;
         let mut key = 0;
         let mut icons = Vec::new();
         while let Some(icon) = ramp_table.get(&key.to_string()) {

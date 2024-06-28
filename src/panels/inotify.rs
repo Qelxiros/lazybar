@@ -46,7 +46,7 @@ impl Stream for InotifyStream {
     ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &mut self.handle {
             let value = handle.poll_unpin(cx).map(|_| Some(self.file.clone()));
-            if let Poll::Ready(_) = value {
+            if value.is_ready() {
                 self.handle = None;
             }
             value

@@ -5,6 +5,7 @@ mod fanotify;
 mod inotify;
 mod mpd;
 mod network;
+mod ping;
 mod pulseaudio;
 mod separator;
 mod xwindow;
@@ -17,6 +18,7 @@ pub use fanotify::Fanotify;
 pub use inotify::Inotify;
 pub use mpd::Mpd;
 pub use network::Network;
+pub use ping::Ping;
 pub use pulseaudio::Pulseaudio;
 pub use separator::Separator;
 pub use xwindow::XWindow;
@@ -32,6 +34,7 @@ pub mod builders {
         inotify::{InotifyBuilder, InotifyBuilderError},
         mpd::{MpdBuilder, MpdBuilderError},
         network::{NetworkBuilder, NetworkBuilderError},
+        ping::{PingBuilder, PingBuilderError},
         pulseaudio::{PulseaudioBuilder, PulseaudioBuilderError},
         separator::{SeparatorBuilder, SeparatorBuilderError},
         xwindow::{XWindowBuilder, XWindowBuilderError},
