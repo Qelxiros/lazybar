@@ -115,7 +115,7 @@ impl Stream for ClockStream {
 /// Uses an [`Interval`] to update as close to the unit boundaries as possible.
 #[allow(missing_docs)]
 #[derive(Builder, Debug)]
-pub struct Clock<P: Clone> {
+pub struct Clock<P: Clone + Precision> {
     #[builder(default = r#"String::from("%Y-%m-%d %T")"#)]
     format: String,
     attrs: Attrs,

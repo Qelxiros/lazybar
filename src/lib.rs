@@ -49,7 +49,7 @@ use anyhow::Result;
 pub use attrs::Attrs;
 use bar::{Bar, Panel};
 use config::{Config, Value};
-use csscolorparser::Color;
+pub use csscolorparser::Color;
 use derive_builder::Builder;
 use futures::Stream;
 pub use highlight::Highlight;

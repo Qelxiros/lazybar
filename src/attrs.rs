@@ -1,14 +1,30 @@
 use std::collections::HashMap;
 
 use csscolorparser::Color;
+use derive_builder::Builder;
 use pango::FontDescription;
 
+use crate::{remove_color_from_config, remove_string_from_config};
+
 /// Attributes of a panel, or the defaults for the bar.
-#[derive(Clone, Default, Debug)]
+#[derive(Builder, Clone, Default, Debug)]
 pub struct Attrs {
+    #[builder(default = "None", setter(strip_option))]
     font: Option<FontDescription>,
+    #[builder(default = "None", setter(strip_option))]
     fg: Option<Color>,
+    #[builder(default = "None", setter(strip_option))]
     bg: Option<Color>,
+}
+
+impl AttrsBuilder {
+    fn global() -> Self {
+        Self {
+            font: None,
+            fg: Some(Some(Color::new(1.0, 1.0, 1.0, 1.0))),
+            bg: Some(Some(Color::new(0.0, 0.0, 0.0, 1.0))),
+        }
+    }
 }
 
 impl Attrs {
@@ -30,38 +46,26 @@ impl Attrs {
         table: &mut HashMap<String, config::Value>,
         prefix: &str,
     ) -> Self {
-        let mut attrs = Self::default();
-        if let Some(fg) = table.remove(format!("{prefix}fg").as_str()) {
-            if let Ok(fg) = fg.clone().into_string() {
-                if let Ok(fg) = fg.parse() {
-                    attrs.fg = Some(fg);
-                } else {
-                    log::warn!("Invalid color {fg}");
-                }
-            } else {
-                log::warn!("Ignoring non-string value {fg:?}");
-            }
+        let mut builder = AttrsBuilder::default();
+        if let Some(fg) =
+            remove_color_from_config(format!("{prefix}fg").as_str(), table)
+        {
+            builder.fg(fg);
         }
-        if let Some(bg) = table.remove(format!("{prefix}bg").as_str()) {
-            if let Ok(bg) = bg.clone().into_string() {
-                if let Ok(bg) = bg.parse() {
-                    attrs.bg = Some(bg);
-                } else {
-                    log::warn!("Invalid color {bg}");
-                }
-            } else {
-                log::warn!("Ignoring non-string value {bg:?}");
-            }
+        if let Some(bg) =
+            remove_color_from_config(format!("{prefix}bg").as_str(), table)
+        {
+            builder.bg(bg);
         }
-        if let Some(font) = table.remove(format!("{prefix}font").as_str()) {
-            if let Ok(font) = font.clone().into_string() {
-                attrs.font = Some(FontDescription::from_string(font.as_str()));
-            } else {
-                log::warn!("Ignoring non-string value {font:?}");
-            }
+        if let Some(font) =
+            remove_string_from_config(format!("{prefix}font").as_str(), table)
+        {
+            builder.font(FontDescription::from_string(font.as_str()));
         }
 
-        attrs
+        // this can never panic: no validator functions, and all fields are
+        // optional
+        builder.build().unwrap()
     }
 
     /// Parses an instance of this type from a subset of the global
@@ -74,46 +78,24 @@ impl Attrs {
         table: &mut HashMap<String, config::Value>,
         prefix: &str,
     ) -> Self {
-        let mut attrs = Self::default();
-        if let Some(fg) = table.remove(format!("{prefix}fg").as_str()) {
-            if let Ok(fg) = fg.clone().into_string() {
-                if let Ok(fg) = fg.parse() {
-                    attrs.fg = Some(fg);
-                } else {
-                    log::warn!("Invalid color {fg}");
-                    attrs.fg = Some("#fff".parse().unwrap());
-                }
-            } else {
-                log::warn!("Ignoring non-string value {fg:?}");
-                attrs.fg = Some("#fff".parse().unwrap());
-            }
-        } else {
-            attrs.fg = Some("#fff".parse().unwrap());
+        let mut builder = AttrsBuilder::global();
+        if let Some(fg) =
+            remove_color_from_config(format!("{prefix}fg").as_str(), table)
+        {
+            builder.fg(fg);
         }
-        if let Some(bg) = table.remove(format!("{prefix}bg").as_str()) {
-            if let Ok(bg) = bg.clone().into_string() {
-                if let Ok(bg) = bg.parse() {
-                    attrs.bg = Some(bg);
-                } else {
-                    log::warn!("Invalid color {bg}");
-                    attrs.bg = Some("#000".parse().unwrap());
-                }
-            } else {
-                log::warn!("Ignoring non-string value {bg:?}");
-                attrs.bg = Some("#000".parse().unwrap());
-            }
-        } else {
-            attrs.bg = Some("#000".parse().unwrap());
+        if let Some(bg) =
+            remove_color_from_config(format!("{prefix}bg").as_str(), table)
+        {
+            builder.bg(bg);
         }
-        if let Some(font) = table.remove(format!("{prefix}font").as_str()) {
-            if let Ok(font) = font.clone().into_string() {
-                attrs.font = Some(FontDescription::from_string(font.as_str()));
-            } else {
-                log::warn!("Ignoring non-string value {font:?}");
-            }
+        if let Some(font) =
+            remove_string_from_config(format!("{prefix}font").as_str(), table)
+        {
+            builder.font(FontDescription::from_string(font.as_str()));
         }
 
-        attrs
+        builder.build().unwrap()
     }
 
     /// Sets the font of a [`pango::Layout`].
