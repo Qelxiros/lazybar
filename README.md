@@ -14,7 +14,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] ethernet (merged with wireless into the network module)
 - [x] mpd
 - [x] ping
-- [ ] sensors (internal temperatures)
+- [x] temperature
 - [x] CPU usage
 - [x] RAM usage
 - [ ] storage usage?
