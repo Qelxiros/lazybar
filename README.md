@@ -15,7 +15,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] mpd
 - [x] ping
 - [ ] sensors (internal temperatures)
-- [ ] CPU usage
+- [x] CPU usage
 - [x] RAM usage
 - [ ] storage usage?
 - [ ] systray
