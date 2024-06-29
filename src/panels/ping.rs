@@ -29,7 +29,8 @@ use crate::{
 /// <https://man7.org/linux/man-pages/man7/capabilities.7.html> for more
 /// details.
 #[derive(Builder, Debug)]
-#[allow(missing_docs)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Ping {
     address: String,
     #[builder(default = "Some(Duration::from_secs(60))")]

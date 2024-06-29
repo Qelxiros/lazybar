@@ -69,8 +69,9 @@ impl Stream for FanotifyStream {
 
 /// Uses fanotify to monitor and display the contents of a file. Useful for
 /// one-off scripts that can write to a file easily.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Fanotify {
     path: String,
     attrs: Attrs,

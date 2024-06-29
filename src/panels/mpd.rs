@@ -42,8 +42,9 @@ enum EventType {
 }
 
 /// Displays information about music currently playing through [MPD](https://musicpd.org)
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Mpd {
     #[builder(default = r#"String::from("%title% - %artist%")"#)]
     format: String,

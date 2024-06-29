@@ -79,8 +79,9 @@ impl Stream for XStream {
 /// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
 ///
 /// Requires an EWMH-compliant window manager
-#[allow(missing_docs)]
 #[derive(Builder)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,

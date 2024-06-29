@@ -54,8 +54,9 @@ impl Stream for CustomStream {
 
 /// Runs a custom command with `sh -c <command>`, either once or on a given
 /// interval.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 #[builder(build_fn(skip))]
 pub struct Custom {
     #[builder(setter(skip), default = r#"Command::new("echo")"#)]

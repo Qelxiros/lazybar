@@ -86,8 +86,9 @@ impl Stream for XStream {
 /// Display information about workspaces
 ///
 /// Requires an EWMH-compliant window manager
-#[allow(missing_docs)]
 #[derive(Clone, Builder)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct XWorkspaces {
     conn: Arc<xcb::Connection>,
     screen: i32,

@@ -67,8 +67,9 @@ impl Stream for InotifyStream {
 
 /// Uses inotify to monitor and display the contents of a file. Useful for
 /// one-off scripts that can write to a file easily.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Inotify {
     path: String,
     attrs: Attrs,

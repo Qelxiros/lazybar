@@ -112,8 +112,9 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 
 /// Displays information about the current network connection on a given
 /// interface.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Network {
     #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,

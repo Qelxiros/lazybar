@@ -21,7 +21,8 @@ lazy_static! {
 /// Displays memory/swap usage based on information from (by default)
 /// `/proc/meminfo`
 #[derive(Builder, Debug)]
-#[allow(missing_docs)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Memory {
     #[builder(default = r#"String::from("RAM: %percentage_used%%")"#)]
     format: String,

@@ -28,8 +28,9 @@ use crate::{
 };
 
 /// Displays the current volume and mute status of a given sink.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Pulseaudio {
     #[builder(default = r#"String::from("@DEFAULT_SINK@")"#)]
     sink: String,

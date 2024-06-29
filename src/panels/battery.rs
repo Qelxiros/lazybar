@@ -12,8 +12,9 @@ use crate::{
 };
 
 /// Shows the current battery level.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 #[allow(dead_code)]
 pub struct Battery {
     #[builder(default = r#"String::from("BAT0")"#)]

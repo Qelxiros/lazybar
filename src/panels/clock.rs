@@ -113,8 +113,9 @@ impl Stream for ClockStream {
 /// Displays the current time, updating at a given precision.
 ///
 /// Uses an [`Interval`] to update as close to the unit boundaries as possible.
-#[allow(missing_docs)]
 #[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Clock<P: Clone + Precision> {
     #[builder(default = r#"String::from("%Y-%m-%d %T")"#)]
     format: String,
