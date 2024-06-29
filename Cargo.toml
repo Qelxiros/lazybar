@@ -27,6 +27,7 @@ mpd = "0.1.0"
 nix = { version = "0.29.0", features = ["net", "ioctl", "fanotify", "inotify"] }
 pango = { version = "0.19.8", features = ["v1_46"] }
 pangocairo = "0.19.8"
+regex = "1.10.5"
 simple_logger = "5.0.0"
 tokio = { version = "1.38.0", features = ["rt", "net", "time", "macros", "rt-multi-thread"] }
 tokio-stream = "0.1.15"

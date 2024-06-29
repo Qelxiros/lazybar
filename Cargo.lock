@@ -601,6 +601,7 @@ dependencies = [
  "nix",
  "pango",
  "pangocairo",
+ "regex",
  "simple_logger",
  "tokio",
  "tokio-stream",

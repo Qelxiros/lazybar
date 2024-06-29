@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use crate::{
     panels::{
         precision::{Days, Hours, Minutes, Seconds},
-        Battery, Clock, Custom, Fanotify, Inotify, Mpd, Network, Ping,
+        Battery, Clock, Custom, Fanotify, Inotify, Memory, Mpd, Network, Ping,
         Pulseaudio, Separator, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
@@ -269,6 +269,9 @@ fn parse_panel(
                             .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "inotify" => Inotify::parse(table, &CONFIG)
+                            .ok()
+                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                        "memory" => Memory::parse(table, &CONFIG)
                             .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "mpd" => {

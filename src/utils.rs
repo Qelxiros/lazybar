@@ -1,7 +1,38 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
+use anyhow::Result;
 use config::Value;
 use csscolorparser::Color;
+use pangocairo::functions::show_layout;
+
+use crate::{Attrs, PanelDrawFn};
+
+/// The end of a typical draw function. Takes a cairo context, a string to
+/// display, and attributes to use, and returns a closure that will do the
+/// drawing and a tuple representing the final width and height.
+pub fn draw_common(
+    cr: &Rc<cairo::Context>,
+    text: &str,
+    attrs: &Attrs,
+) -> Result<((i32, i32), PanelDrawFn)> {
+    let layout = pangocairo::functions::create_layout(cr);
+    layout.set_text(text);
+    attrs.apply_font(&layout);
+    let dims = layout.pixel_size();
+    let attrs = attrs.clone();
+
+    Ok((
+        dims,
+        Box::new(move |cr| {
+            attrs.apply_bg(cr);
+            cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
+            cr.fill()?;
+            attrs.apply_fg(cr);
+            show_layout(cr, &layout);
+            Ok(())
+        }),
+    ))
+}
 
 /// Removes a value from a given config table and returns an attempt at parsing
 /// it into a string
