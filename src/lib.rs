@@ -27,6 +27,10 @@
 //! any top level table with a different name. See <https://toml.io/> for more
 //! information.
 //!
+//! Note: types are pretty flexible, and [`config`] will try its best to
+//! figure out what you mean, but if you have issues, make sure that your types
+//! are correct.
+//!
 //! # Example Config
 //! ```toml
 #![doc = include_str!("../examples/config.toml")]
@@ -51,6 +55,7 @@ use bar::{Bar, Panel};
 use config::{Config, Value};
 pub use csscolorparser::Color;
 use derive_builder::Builder;
+pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 pub use ramp::Ramp;
 use tokio::{runtime::Runtime, task};

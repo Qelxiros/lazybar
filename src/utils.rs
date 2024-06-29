@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use config::Value;
+use config::{Map, Value};
 use csscolorparser::Color;
 use pangocairo::functions::show_layout;
 
@@ -10,6 +10,10 @@ use crate::{Attrs, PanelDrawFn};
 /// The end of a typical draw function. Takes a cairo context, a string to
 /// display, and attributes to use, and returns a closure that will do the
 /// drawing and a tuple representing the final width and height.
+///
+/// The text will be interpreted as markup. If this is not your intended
+/// behavior, use [`markup_escape_text`][crate::markup_escape_text] to display
+/// what you want.
 pub fn draw_common(
     cr: &Rc<cairo::Context>,
     text: &str,
@@ -35,6 +39,23 @@ pub fn draw_common(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
+/// it into a table
+pub fn get_table_from_config<S: std::hash::BuildHasher>(
+    id: &str,
+    table: &mut HashMap<String, Value, S>,
+) -> Option<Map<String, Value>> {
+    table.get(id).and_then(|val| {
+        val.clone().into_table().map_or_else(
+            |_| {
+                log::warn!("Ignoring non-table value {val:?}");
+                None
+            },
+            Some,
+        )
+    })
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
 /// it into a string
 pub fn remove_string_from_config<S: std::hash::BuildHasher>(
     id: &str,
@@ -43,11 +64,7 @@ pub fn remove_string_from_config<S: std::hash::BuildHasher>(
     table.remove(id).and_then(|val| {
         val.clone().into_string().map_or_else(
             |_| {
-                log::warn!(
-                    "Ignoring non-string value {val:?} (location attempt: \
-                     {:?})",
-                    val.origin()
-                );
+                log::warn!("Ignoring non-string value {val:?}");
                 None
             },
             Some,
@@ -64,10 +81,7 @@ pub fn remove_uint_from_config<S: std::hash::BuildHasher>(
     table.remove(id).and_then(|val| {
         val.clone().into_uint().map_or_else(
             |_| {
-                log::warn!(
-                    "Ignoring non-uint value {val:?} (location attempt: {:?})",
-                    val.origin()
-                );
+                log::warn!("Ignoring non-uint value {val:?}");
                 None
             },
             Some,
@@ -84,11 +98,7 @@ pub fn remove_bool_from_config<S: std::hash::BuildHasher>(
     table.remove(id).and_then(|val| {
         val.clone().into_bool().map_or_else(
             |_| {
-                log::warn!(
-                    "Ignoring non-boolean value {val:?} (location attempt: \
-                     {:?})",
-                    val.origin()
-                );
+                log::warn!("Ignoring non-boolean value {val:?}");
                 None
             },
             Some,
@@ -105,10 +115,7 @@ pub fn remove_float_from_config<S: std::hash::BuildHasher>(
     table.remove(id).and_then(|val| {
         val.clone().into_float().map_or_else(
             |_| {
-                log::warn!(
-                    "Ignoring non-float value {val:?} (location attempt: {:?})",
-                    val.origin()
-                );
+                log::warn!("Ignoring non-float value {val:?}");
                 None
             },
             Some,
@@ -125,11 +132,7 @@ pub fn remove_color_from_config<S: std::hash::BuildHasher>(
     table.remove(id).and_then(|val| {
         val.clone().into_string().map_or_else(
             |_| {
-                log::warn!(
-                    "Ignoring non-string value {val:?} (location attempt: \
-                     {:?})",
-                    val.origin()
-                );
+                log::warn!("Ignoring non-string value {val:?}");
                 None
             },
             |val| {

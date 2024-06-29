@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Context, Result};
-use config::{Config, File, FileFormat, Value, ValueKind};
+use config::{Config, File, FileFormat, Value};
 use lazy_static::lazy_static;
 
 use crate::{
+    get_table_from_config,
     panels::{
         precision::{Days, Hours, Minutes, Seconds},
         Battery, Clock, Cpu, Custom, Fanotify, Inotify, Memory, Mpd, Network,
         Ping, Pulseaudio, Separator, Temp, XWindow, XWorkspaces,
     },
-    Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
-    Position,
+    remove_string_from_config, Alignment, Attrs, BarConfig, BarConfigBuilder,
+    Margins, PanelConfig, Position,
 };
 
 lazy_static! {
@@ -40,25 +41,23 @@ lazy_static! {
 
 /// Parses a bar with a given name from the global [`Config`]
 pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
-    let bars_table = CONFIG
+    let mut bars_table = CONFIG
         .get_table("bars")
         .context("`bars` doesn't exist or isn't a table")?;
 
-    let bar_name = bar_name.unwrap_or_else(|| {
-        let mut keys = bars_table.keys().collect::<Vec<_>>();
-        keys.sort();
-        keys.first().expect("No bars specified in config file")
-    });
+    let bar_name = bar_name
+        .unwrap_or_else(|| {
+            let mut keys = bars_table.keys().collect::<Vec<_>>();
+            keys.sort();
+            keys.first().expect("No bars specified in config file")
+        })
+        .to_owned();
 
-    let bar_table = bars_table
-        .get(bar_name)
-        .context(format!("`{bar_name}` doesn't exist"))?;
-
-    let mut bar_table = match &bar_table.kind {
-        ValueKind::Table(table) => Ok(table),
-        _ => Err(anyhow!("`{bar_name}` isn't a table")),
-    }?
-    .clone();
+    let mut bar_table = bars_table
+        .remove(bar_name.as_str())
+        .with_context(|| format!("`{bar_name}` doesn't exist"))?
+        .into_table()
+        .with_context(|| format!("`{bar_name}` isn't a table"))?;
 
     let mut bar = BarConfigBuilder::default()
         .name(String::from(bar_name))
@@ -123,52 +122,47 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
     let mut center_final = Vec::new();
     let mut right_final = Vec::new();
 
-    let panels_left = bar_table.get("panels_left");
+    let panels_left = bar_table.remove("panels_left");
     if let Some(pl) = panels_left {
-        if let ValueKind::Array(panel_list) = &pl.kind {
-            for p in panel_list {
-                if let Ok(name) = p.clone().into_string() {
-                    left_final.push(name);
-                } else {
-                    log::warn!(
-                        "Ignoring non-string value {p:?} in `panels-left`"
-                    );
-                }
+        let panel_list = pl
+            .into_array()
+            .with_context(|| format!("`panels_left` isn't an array"))?;
+        for p in panel_list {
+            if let Ok(name) = p.clone().into_string() {
+                left_final.push(name);
+            } else {
+                log::warn!("Ignoring non-string value {p:?} in `panels_left`");
             }
-        } else {
-            log::warn!("`panels_left` isn't an array");
         }
     }
-    let panels_center = bar_table.get("panels_center");
-    if let Some(pl) = panels_center {
-        if let ValueKind::Array(panel_list) = &pl.kind {
-            for p in panel_list {
-                if let Ok(name) = p.clone().into_string() {
-                    center_final.push(name);
-                } else {
-                    log::warn!(
-                        "Ignoring non-string value {p:?} in `panels-center`"
-                    );
-                }
+
+    let panels_center = bar_table.remove("panels_center");
+    if let Some(pc) = panels_center {
+        let panel_list = pc
+            .into_array()
+            .with_context(|| format!("`panels_center` isn't an array"))?;
+        for p in panel_list {
+            if let Ok(name) = p.clone().into_string() {
+                center_final.push(name);
+            } else {
+                log::warn!(
+                    "Ignoring non-string value {p:?} in `panels_center`"
+                );
             }
-        } else {
-            log::warn!("`panels_center` isn't an array");
         }
     }
-    let panels_right = bar_table.get("panels_right");
-    if let Some(pl) = panels_right {
-        if let ValueKind::Array(panel_list) = &pl.kind {
-            for p in panel_list {
-                if let Ok(name) = p.clone().into_string() {
-                    right_final.push(name);
-                } else {
-                    log::warn!(
-                        "Ignoring non-string value {p:?} in `panels-right`"
-                    );
-                }
+
+    let panels_right = bar_table.remove("panels_right");
+    if let Some(pr) = panels_right {
+        let panel_list = pr
+            .into_array()
+            .with_context(|| format!("`panels_right` isn't an array"))?;
+        for p in panel_list {
+            if let Ok(name) = p.clone().into_string() {
+                right_final.push(name);
+            } else {
+                log::warn!("Ignoring non-string value {p:?} in `panels_right`");
             }
-        } else {
-            log::warn!("`panels_right` isn't an array");
         }
     }
 
@@ -196,116 +190,106 @@ fn parse_panel(
     p: &str,
     panels_table: &mut HashMap<String, Value>,
 ) -> Option<Box<dyn PanelConfig>> {
-    if let Some(mut pt) = panels_table.get_mut(p).cloned() {
-        if let ValueKind::Table(table) = &mut pt.kind {
-            if let Some(r#type) = table.get("type") {
-                if let ValueKind::String(s) = &r#type.kind {
-                    return match s.as_str() {
-                        "battery" => {
-                            Battery::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "clock" => {
-                            if let Some(precision) = table.remove("precision") {
-                                if let Ok(precision) =
-                                    precision.clone().into_string()
-                                {
-                                    match precision.as_str() {
-                                        "days" => {
-                                            Clock::<Days>::parse(table, &CONFIG)
-                                                .map::<Box<dyn PanelConfig>, _>(
-                                                    |p| Box::new(p),
-                                                )
-                                        }
-                                        "hours" => Clock::<Hours>::parse(
-                                            table, &CONFIG,
-                                        )
-                                        .map::<Box<dyn PanelConfig>, _>(|p| {
-                                            Box::new(p)
-                                        }),
-                                        "minutes" => Clock::<Minutes>::parse(
-                                            table, &CONFIG,
-                                        )
-                                        .map::<Box<dyn PanelConfig>, _>(|p| {
-                                            Box::new(p)
-                                        }),
-                                        "seconds" | _ => {
-                                            Clock::<Seconds>::parse(
-                                                table, &CONFIG,
-                                            )
-                                            .map::<Box<dyn PanelConfig>, _>(
-                                                |p| Box::new(p),
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    log::warn!(
-                                        "Ignoring non-string value \
-                                         {precision:?} (location attempt: \
-                                         {:?})",
-                                        precision.origin()
-                                    );
-                                    Clock::<Seconds>::parse(table, &CONFIG)
+    if let Some(mut table) = get_table_from_config(p, panels_table) {
+        if let Some(s) = remove_string_from_config("type", &mut table) {
+            return match s.as_str() {
+                "battery" => {
+                    Battery::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "clock" => {
+                    if let Some(precision) = &mut table.remove("precision") {
+                        if let Ok(precision) = precision.clone().into_string() {
+                            match precision.as_str() {
+                                "days" => {
+                                    Clock::<Days>::parse(&mut table, &CONFIG)
                                         .map::<Box<dyn PanelConfig>, _>(|p| {
                                             Box::new(p)
                                         })
                                 }
-                            } else {
-                                Clock::<Seconds>::parse(table, &CONFIG)
-                                    .map::<Box<dyn PanelConfig>, _>(|p| {
+                                "hours" => {
+                                    Clock::<Hours>::parse(&mut table, &CONFIG)
+                                        .map::<Box<dyn PanelConfig>, _>(|p| {
                                         Box::new(p)
                                     })
+                                }
+                                "minutes" => {
+                                    Clock::<Minutes>::parse(&mut table, &CONFIG)
+                                        .map::<Box<dyn PanelConfig>, _>(|p| {
+                                            Box::new(p)
+                                        })
+                                }
+                                "seconds" | _ => {
+                                    Clock::<Seconds>::parse(&mut table, &CONFIG)
+                                        .map::<Box<dyn PanelConfig>, _>(|p| {
+                                            Box::new(p)
+                                        })
+                                }
                             }
-                        }
-                        "cpu" => Cpu::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "custom" => {
-                            Custom::parse(table, &CONFIG)
+                        } else {
+                            log::warn!(
+                                "Ignoring non-string value {precision:?} \
+                                 (location attempt: {:?})",
+                                precision.origin()
+                            );
+                            Clock::<Seconds>::parse(&mut table, &CONFIG)
                                 .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
-                        "fanotify" => Fanotify::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "inotify" => {
-                            Inotify::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "memory" => {
-                            Memory::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "mpd" => Mpd::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "network" => {
-                            Network::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "ping" => {
-                            Ping::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "pulseaudio" => Pulseaudio::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "separator" => Separator::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "temp" => {
-                            Temp::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "xwindow" => {
-                            XWindow::parse(table, &CONFIG)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                        "xworkspaces" => XWorkspaces::parse(table, &CONFIG)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        s => Err(anyhow!("Unknown panel type {s}")),
+                    } else {
+                        Clock::<Seconds>::parse(&mut table, &CONFIG).map::<Box<
+                            dyn PanelConfig,
+                        >, _>(
+                            |p| Box::new(p),
+                        )
                     }
-                    .map_err(|e| {
-                        log::error!("{e}");
-                        e
-                    })
-                    .ok();
                 }
+                "cpu" => Cpu::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "custom" => {
+                    Custom::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "fanotify" => {
+                    Fanotify::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "inotify" => {
+                    Inotify::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "memory" => {
+                    Memory::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "mpd" => Mpd::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "network" => {
+                    Network::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "ping" => Ping::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "pulseaudio" => Pulseaudio::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "separator" => {
+                    Separator::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "temp" => Temp::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "xwindow" => {
+                    XWindow::parse(&mut table, &CONFIG)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                "xworkspaces" => XWorkspaces::parse(&mut table, &CONFIG)
+                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                s => Err(anyhow!("Unknown panel type {s}")),
             }
+            .map_err(|e| {
+                log::error!("{e}");
+                e
+            })
+            .ok();
         }
     }
     None
