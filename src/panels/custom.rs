@@ -115,7 +115,7 @@ impl PanelConfig for Custom {
             builder.duration(Duration::from_secs(duration));
         }
 
-        Ok(builder.build()?)
+        builder.build()
     }
 }
 

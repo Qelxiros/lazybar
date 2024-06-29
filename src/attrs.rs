@@ -18,7 +18,7 @@ pub struct Attrs {
 }
 
 impl AttrsBuilder {
-    fn global() -> Self {
+    const fn global() -> Self {
         Self {
             font: None,
             fg: Some(Some(Color::new(1.0, 1.0, 1.0, 1.0))),

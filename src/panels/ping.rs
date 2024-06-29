@@ -54,17 +54,16 @@ impl Ping {
         cr: &Rc<cairo::Context>,
         ping: Result<u128>,
     ) -> Result<((i32, i32), PanelDrawFn)> {
-        let text = match ping {
-            Ok(ping) => self
-                .format
-                .replace("%ping%", ping.to_string().as_str())
-                .replace(
-                    "%ramp%",
-                    self.ramp
-                        .as_ref()
-                        .map_or_else(
-                            || String::new(),
-                            |r| {
+        let text = ping.map_or_else(
+            |_| self.format_disconnected.clone(),
+            |ping| {
+                self.format
+                    .replace("%ping%", ping.to_string().as_str())
+                    .replace(
+                        "%ramp%",
+                        self.ramp
+                            .as_ref()
+                            .map_or_else(String::new, |r| {
                                 r.choose::<u32>(
                                     ping as u32,
                                     0,
@@ -72,12 +71,11 @@ impl Ping {
                                         .unwrap_or(2000)
                                         .clamp(0, 2000),
                                 )
-                            },
-                        )
-                        .as_str(),
-                ),
-            Err(_) => self.format_disconnected.clone(),
-        };
+                            })
+                            .as_str(),
+                    )
+            },
+        );
 
         draw_common(cr, text.as_str(), &self.attrs)
     }
@@ -184,8 +182,8 @@ struct PingStream {
 
 fn ping(
     pings: usize,
-    pinger: Arc<Mutex<Pinger>>,
-    recv: Arc<Mutex<Receiver<PingResult>>>,
+    pinger: &Arc<Mutex<Pinger>>,
+    recv: &Arc<Mutex<Receiver<PingResult>>>,
 ) -> Result<u128> {
     // hold both ends for the duration of the test to avoid weird behavior
     // around short intervals
@@ -207,7 +205,7 @@ fn ping(
     }
     pinger.stop_pinger();
 
-    if results.len() > 0 {
+    if !results.is_empty() {
         Ok((results.iter().sum::<Duration>() / results.len() as u32)
             .as_millis())
     } else {
@@ -236,7 +234,7 @@ impl Stream for PingStream {
                     let recv = self.recv.clone();
                     let waker = cx.waker().clone();
                     self.handle = Some(task::spawn_blocking(move || {
-                        let ping = ping(pings, pinger, recv);
+                        let ping = ping(pings, &pinger, &recv);
                         waker.wake();
                         ping
                     }));
@@ -250,7 +248,7 @@ impl Stream for PingStream {
                         let recv = self.recv.clone();
                         let waker = cx.waker().clone();
                         self.handle = Some(task::spawn_blocking(move || {
-                            let ping = ping(pings, pinger, recv);
+                            let ping = ping(pings, &pinger, &recv);
                             waker.wake();
                             ping
                         }));

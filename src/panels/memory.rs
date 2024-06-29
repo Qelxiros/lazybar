@@ -53,7 +53,7 @@ impl Memory {
             .ok_or_else(|| anyhow!("couldn't find MemTotal"))?;
         let mem_free = map
             .get("MemAvailable")
-            .cloned()
+            .copied()
             .or_else(|| {
                 Some(
                     map.get("MemFree")?

@@ -55,7 +55,7 @@ impl Stream for InotifyStream {
             let waker = cx.waker().clone();
             self.handle = Some(task::spawn_blocking(move || loop {
                 let result = i.read_events();
-                if let Ok(_) = result {
+                if result.is_ok() {
                     waker.wake();
                     break;
                 }
