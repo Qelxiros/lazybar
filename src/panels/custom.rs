@@ -9,9 +9,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use derive_builder::Builder;
-use futures::Stream;
 use tokio::time::{interval, Interval};
-use tokio_stream::StreamExt;
+use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     draw_common, remove_string_from_config, remove_uint_from_config, Attrs,

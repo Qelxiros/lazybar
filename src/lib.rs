@@ -51,11 +51,10 @@ use bar::{Bar, Panel};
 use config::{Config, Value};
 pub use csscolorparser::Color;
 use derive_builder::Builder;
-use futures::Stream;
 pub use highlight::Highlight;
 pub use ramp::Ramp;
 use tokio::{runtime::Runtime, task};
-use tokio_stream::{StreamExt, StreamMap};
+use tokio_stream::{Stream, StreamExt, StreamMap};
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
 
