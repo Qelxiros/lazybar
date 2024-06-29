@@ -13,9 +13,10 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] xworkspaces
 - [x] ethernet (merged with wireless into the network module)
 - [x] mpd
+- [x] ping
 - [ ] sensors (internal temperatures)
 - [ ] CPU usage
-- [ ] RAM usage
+- [x] RAM usage
 - [ ] storage usage?
 - [ ] systray
 - [ ] clickable panels
