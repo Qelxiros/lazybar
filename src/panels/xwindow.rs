@@ -15,8 +15,8 @@ use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
 use crate::{
-    remove_string_from_config, x::intern_named_atom, Attrs, PanelConfig,
-    PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, x::intern_named_atom, Attrs,
+    PanelConfig, PanelDrawFn, PanelStream,
 };
 
 struct XStream {
@@ -86,6 +86,8 @@ pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
+    #[builder(default = r#"String::from("%name%")"#)]
+    format: String,
     attrs: Attrs,
 }
 
@@ -144,23 +146,12 @@ impl XWindow {
             unsafe { String::from_utf8_unchecked(bytes) }
         };
 
-        let layout = pangocairo::functions::create_layout(cr);
-        layout.set_text(name.as_str());
-        self.attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = self.attrs.clone();
+        let text = self.format.replace(
+            "%name%",
+            glib::markup_escape_text(name.as_str()).as_str(),
+        );
 
-        Ok((
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        ))
+        draw_common(cr, text.as_str(), &self.attrs)
     }
 }
 
@@ -204,6 +195,10 @@ impl PanelConfig for XWindow {
     ///   - type: String
     ///   - default: None (This will tell X to choose the default screen, which
     ///     is probably what you want.)
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%name%`
+    ///   - formatting options: `%name%`
     ///
     /// - `attrs`: See [`Attrs::parse`] for parsing options
     fn parse(
@@ -217,6 +212,9 @@ impl PanelConfig for XWindow {
             builder.conn(Arc::new(conn)).screen(screen);
         } else {
             log::error!("Failed to connect to X server");
+        }
+        if let Some(format) = remove_string_from_config("format", table) {
+            builder.format(format);
         }
 
         builder.windows(HashSet::new());

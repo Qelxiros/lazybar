@@ -8,8 +8,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
+    PanelConfig, PanelDrawFn, PanelStream,
 };
 
 /// Shows the current battery level.
@@ -73,23 +73,7 @@ impl Battery {
             _ => String::from("Unknown battery state"),
         };
 
-        let layout = pangocairo::functions::create_layout(cr);
-        layout.set_text(text.as_str());
-        self.attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = self.attrs.clone();
-
-        Ok((
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        ))
+        draw_common(cr, text.as_str(), &self.attrs)
     }
 }
 

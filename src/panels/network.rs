@@ -19,8 +19,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
+    PanelConfig, PanelDrawFn, PanelStream,
 };
 
 #[repr(C)]
@@ -128,7 +128,10 @@ pub struct Network {
 }
 
 impl Network {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> ((i32, i32), PanelDrawFn) {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+    ) -> Result<((i32, i32), PanelDrawFn)> {
         let essid = glib::markup_escape_text(
             query_essid(self.if_name.as_str())
                 .unwrap_or_default()
@@ -150,23 +153,7 @@ impl Network {
             },
         );
 
-        let layout = create_layout(cr);
-        layout.set_markup(text.as_str());
-        self.attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = self.attrs.clone();
-
-        (
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        )
+        draw_common(cr, text.as_str(), &self.attrs)
     }
 }
 
@@ -179,7 +166,7 @@ impl PanelConfig for Network {
     ) -> Result<PanelStream> {
         self.attrs = global_attrs.overlay(self.attrs);
         let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| Ok(self.draw(&cr)));
+            .map(move |_| self.draw(&cr));
 
         Ok(Box::pin(stream))
     }

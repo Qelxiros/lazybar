@@ -3,9 +3,8 @@ use std::{collections::HashMap, rc::Rc};
 use anyhow::Result;
 use config::{Config, Value};
 use derive_builder::Builder;
-use pangocairo::functions::{create_layout, show_layout};
 
-use crate::{remove_string_from_config, Attrs, PanelConfig, PanelDrawFn};
+use crate::{draw_common, remove_string_from_config, Attrs, PanelConfig};
 
 /// Displays static text with [pango] markup.
 #[allow(missing_docs)]
@@ -24,20 +23,11 @@ impl PanelConfig for Separator {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<crate::PanelStream> {
-        let layout = create_layout(&cr);
-        layout.set_markup(self.format.as_str());
-        let dims = layout.pixel_size();
-
-        let draw_fn: PanelDrawFn = Box::new(move |cr| {
-            global_attrs.apply_bg(cr);
-            cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-            cr.fill()?;
-            global_attrs.apply_fg(cr);
-            show_layout(cr, &layout);
-            Ok(())
-        });
-
-        Ok(Box::pin(tokio_stream::once(Ok((dims, draw_fn)))))
+        Ok(Box::pin(tokio_stream::once(draw_common(
+            &cr,
+            self.format.as_str(),
+            &global_attrs,
+        ))))
     }
 
     /// Configuration options:

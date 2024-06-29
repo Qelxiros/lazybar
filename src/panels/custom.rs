@@ -15,8 +15,8 @@ use tokio::time::{interval, Interval};
 use tokio_stream::StreamExt;
 
 use crate::{
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
+    PanelConfig, PanelDrawFn, PanelStream,
 };
 
 struct CustomStream {
@@ -72,26 +72,9 @@ impl Custom {
         cr: &Rc<cairo::Context>,
         attrs: &Attrs,
     ) -> Result<((i32, i32), PanelDrawFn)> {
-        let layout = create_layout(cr);
-        layout.set_text(
-            String::from_utf8_lossy(self.command.output()?.stdout.as_slice())
-                .trim(),
-        );
-        attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = attrs.clone();
-
-        Ok((
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        ))
+        let output = self.command.output()?;
+        let text = String::from_utf8_lossy(output.stdout.as_slice());
+        draw_common(cr, text.trim(), attrs)
     }
 }
 

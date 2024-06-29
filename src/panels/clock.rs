@@ -17,7 +17,8 @@ use tokio::time::{interval, Instant, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
+    PanelStream,
 };
 
 /// Defines options for a [`Clock`]'s precision.
@@ -124,25 +125,14 @@ pub struct Clock<P: Clone + Precision> {
 }
 
 impl<P: Precision + Clone> Clock<P> {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> ((i32, i32), PanelDrawFn) {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+    ) -> Result<((i32, i32), PanelDrawFn)> {
         let now = chrono::Local::now();
         let text = now.format(&self.format).to_string();
-        let layout = pangocairo::functions::create_layout(cr);
-        layout.set_markup(text.as_str());
-        self.attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = self.attrs.clone();
-        (
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        )
+
+        draw_common(cr, text.as_str(), &self.attrs)
     }
 }
 
@@ -157,7 +147,7 @@ where
         _height: i32,
     ) -> Result<PanelStream> {
         self.attrs = global_attrs.overlay(self.attrs);
-        let stream = ClockStream::new(P::tick).map(move |_| Ok(self.draw(&cr)));
+        let stream = ClockStream::new(P::tick).map(move |_| self.draw(&cr));
         Ok(Box::pin(stream))
     }
 

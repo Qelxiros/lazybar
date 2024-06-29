@@ -18,7 +18,8 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
+    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
+    PanelStream,
 };
 
 struct InotifyStream {
@@ -85,23 +86,7 @@ impl Inotify {
         file.lock().unwrap().rewind()?;
         let text = buf.chars().take_while(|&c| c != '\n').collect::<String>();
 
-        let layout = create_layout(cr);
-        layout.set_markup(text.as_str());
-        self.attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = self.attrs.clone();
-
-        Ok((
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        ))
+        draw_common(cr, text.as_str(), &self.attrs)
     }
 }
 

@@ -16,7 +16,7 @@ pub fn draw_common(
     attrs: &Attrs,
 ) -> Result<((i32, i32), PanelDrawFn)> {
     let layout = pangocairo::functions::create_layout(cr);
-    layout.set_text(text);
+    layout.set_markup(text);
     attrs.apply_font(&layout);
     let dims = layout.pixel_size();
     let attrs = attrs.clone();

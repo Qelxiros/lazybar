@@ -24,8 +24,8 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    remove_string_from_config, Attrs, PanelConfig, PanelDrawFn, PanelStream,
-    Ramp,
+    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
+    PanelStream, Ramp,
 };
 
 /// Displays the current volume and mute status of a given sink.
@@ -86,7 +86,7 @@ impl Pulseaudio {
         ramp: Option<&Ramp>,
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
-    ) -> ((i32, i32), PanelDrawFn) {
+    ) -> Result<((i32, i32), PanelDrawFn)> {
         let (volume, mute) = data;
         let ramp = match (mute, muted_ramp) {
             (false, _) | (true, None) => ramp,
@@ -100,23 +100,8 @@ impl Pulseaudio {
             prefix.unwrap_or(String::new()),
             volume.to_string().as_str()
         );
-        let layout = pangocairo::functions::create_layout(cr);
-        layout.set_markup(text.as_str());
-        attrs.apply_font(&layout);
-        let dims = layout.pixel_size();
-        let attrs = attrs.clone();
 
-        (
-            dims,
-            Box::new(move |cr| {
-                attrs.apply_bg(cr);
-                cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-                cr.fill()?;
-                attrs.apply_fg(cr);
-                show_layout(cr, &layout);
-                Ok(())
-            }),
-        )
+        draw_common(cr, text.as_str(), attrs)
     }
 }
 
@@ -180,13 +165,7 @@ impl PanelConfig for Pulseaudio {
         let attrs = self.attrs.clone();
 
         let stream = self.map(move |data| {
-            Ok(Self::draw(
-                &cr,
-                data,
-                ramp.as_ref(),
-                muted_ramp.as_ref(),
-                &attrs,
-            ))
+            Self::draw(&cr, data, ramp.as_ref(), muted_ramp.as_ref(), &attrs)
         });
 
         Ok(Box::pin(stream))
