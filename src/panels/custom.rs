@@ -3,11 +3,11 @@ use std::{
     pin::Pin,
     process::Command,
     rc::Rc,
-    task::{Context, Poll},
+    task::{self, Poll},
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use derive_builder::Builder;
 use futures::Stream;
 use tokio::time::{interval, Interval};
@@ -36,7 +36,7 @@ impl Stream for CustomStream {
     type Item = ();
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         match &mut self.interval {
             Some(ref mut interval) => interval.poll_tick(cx).map(|_| Some(())),
@@ -110,28 +110,27 @@ impl PanelConfig for Custom {
         let mut builder = CustomBuilder::default();
         if let Some(command) = remove_string_from_config("command", table) {
             builder._command_str(command);
-        } else {
-            log::error!("No command found for custom panel");
         }
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
         }
 
-        Ok(builder.build())
+        Ok(builder.build()?)
     }
 }
 
 impl CustomBuilder {
-    fn build(self) -> Custom {
-        let command_str = self._command_str.unwrap();
+    fn build(self) -> Result<Custom> {
+        let command_str =
+            self._command_str.context("`command` must be initialized")?;
         let mut command = Command::new("sh");
         command.arg("-c").arg(command_str.as_str());
-        let duration = self.duration.unwrap();
+        let duration = self.duration.flatten();
 
-        Custom {
+        Ok(Custom {
             command,
             _command_str: command_str,
             duration,
-        }
+        })
     }
 }

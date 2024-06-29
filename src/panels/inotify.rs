@@ -127,8 +127,6 @@ impl PanelConfig for Inotify {
         let mut builder = InotifyBuilder::default();
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
-        } else {
-            log::error!("No path found for inotify panel");
         }
         builder.attrs(Attrs::parse(table, ""));
 

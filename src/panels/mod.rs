@@ -10,6 +10,7 @@ mod network;
 mod ping;
 mod pulseaudio;
 mod separator;
+mod temp;
 mod xwindow;
 mod xworkspaces;
 
@@ -25,6 +26,7 @@ pub use network::Network;
 pub use ping::Ping;
 pub use pulseaudio::Pulseaudio;
 pub use separator::Separator;
+pub use temp::Temp;
 pub use xwindow::XWindow;
 pub use xworkspaces::XWorkspaces;
 
@@ -43,6 +45,7 @@ pub mod builders {
         ping::{PingBuilder, PingBuilderError},
         pulseaudio::{PulseaudioBuilder, PulseaudioBuilderError},
         separator::{SeparatorBuilder, SeparatorBuilderError},
+        temp::{TempBuilder, TempBuilderError},
         xwindow::{XWindowBuilder, XWindowBuilderError},
         xworkspaces::{XWorkspacesBuilder, XWorkspacesBuilderError},
     };

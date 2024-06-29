@@ -135,8 +135,6 @@ impl PanelConfig for Fanotify {
         let mut builder = FanotifyBuilder::default();
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
-        } else {
-            log::error!("No path found for fanotify panel");
         }
         builder.attrs(Attrs::parse(table, ""));
 

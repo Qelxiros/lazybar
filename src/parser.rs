@@ -8,7 +8,7 @@ use crate::{
     panels::{
         precision::{Days, Hours, Minutes, Seconds},
         Battery, Clock, Cpu, Custom, Fanotify, Inotify, Memory, Mpd, Network,
-        Ping, Pulseaudio, Separator, XWindow, XWorkspaces,
+        Ping, Pulseaudio, Separator, Temp, XWindow, XWorkspaces,
     },
     Alignment, Attrs, BarConfig, BarConfigBuilder, Margins, PanelConfig,
     Position,
@@ -201,9 +201,10 @@ fn parse_panel(
             if let Some(r#type) = table.get("type") {
                 if let ValueKind::String(s) = &r#type.kind {
                     return match s.as_str() {
-                        "battery" => Battery::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                        "battery" => {
+                            Battery::parse(table, &CONFIG)
+                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                        }
                         "clock" => {
                             if let Some(precision) = table.remove("precision") {
                                 if let Ok(precision) =
@@ -212,7 +213,6 @@ fn parse_panel(
                                     match precision.as_str() {
                                         "days" => {
                                             Clock::<Days>::parse(table, &CONFIG)
-                                                .ok()
                                                 .map::<Box<dyn PanelConfig>, _>(
                                                     |p| Box::new(p),
                                                 )
@@ -220,14 +220,12 @@ fn parse_panel(
                                         "hours" => Clock::<Hours>::parse(
                                             table, &CONFIG,
                                         )
-                                        .ok()
                                         .map::<Box<dyn PanelConfig>, _>(|p| {
                                             Box::new(p)
                                         }),
                                         "minutes" => Clock::<Minutes>::parse(
                                             table, &CONFIG,
                                         )
-                                        .ok()
                                         .map::<Box<dyn PanelConfig>, _>(|p| {
                                             Box::new(p)
                                         }),
@@ -235,7 +233,6 @@ fn parse_panel(
                                             Clock::<Seconds>::parse(
                                                 table, &CONFIG,
                                             )
-                                            .ok()
                                             .map::<Box<dyn PanelConfig>, _>(
                                                 |p| Box::new(p),
                                             )
@@ -249,68 +246,64 @@ fn parse_panel(
                                         precision.origin()
                                     );
                                     Clock::<Seconds>::parse(table, &CONFIG)
-                                        .ok()
                                         .map::<Box<dyn PanelConfig>, _>(|p| {
                                             Box::new(p)
                                         })
                                 }
                             } else {
                                 Clock::<Seconds>::parse(table, &CONFIG)
-                                    .ok()
                                     .map::<Box<dyn PanelConfig>, _>(|p| {
                                         Box::new(p)
                                     })
                             }
                         }
-                        "cpu" => {
-                            Cpu::parse(table, &CONFIG)
-                                .ok()
+                        "cpu" => Cpu::parse(table, &CONFIG)
+                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                        "custom" => {
+                            Custom::parse(table, &CONFIG)
                                 .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
-                        "custom" => Custom::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "fanotify" => Fanotify::parse(table, &CONFIG)
-                            .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "inotify" => Inotify::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "memory" => Memory::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "mpd" => {
-                            Mpd::parse(table, &CONFIG)
-                                .ok()
+                        "inotify" => {
+                            Inotify::parse(table, &CONFIG)
                                 .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
-                        "network" => Network::parse(table, &CONFIG)
-                            .ok()
+                        "memory" => {
+                            Memory::parse(table, &CONFIG)
+                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                        }
+                        "mpd" => Mpd::parse(table, &CONFIG)
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                        "network" => {
+                            Network::parse(table, &CONFIG)
+                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                        }
                         "ping" => {
                             Ping::parse(table, &CONFIG)
-                                .ok()
                                 .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
                         "pulseaudio" => Pulseaudio::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| {
-                            Box::new(p)
-                        }),
+                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                         "separator" => Separator::parse(table, &CONFIG)
-                            .ok()
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "xwindow" => XWindow::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        "xworkspaces" => XWorkspaces::parse(table, &CONFIG)
-                            .ok()
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                        s => {
-                            log::warn!("Unknown panel type {s}");
-                            None
+                        "temp" => {
+                            Temp::parse(table, &CONFIG)
+                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
-                    };
+                        "xwindow" => {
+                            XWindow::parse(table, &CONFIG)
+                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                        }
+                        "xworkspaces" => XWorkspaces::parse(table, &CONFIG)
+                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                        s => Err(anyhow!("Unknown panel type {s}")),
+                    }
+                    .map_err(|e| {
+                        log::error!("{e}");
+                        e
+                    })
+                    .ok();
                 }
             }
         }
