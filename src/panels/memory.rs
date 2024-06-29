@@ -18,7 +18,8 @@ lazy_static! {
         Regex::new(r"(?<key>[^:]*):\s*(?<value>\d*)(?: kB)?").unwrap();
 }
 
-/// Displays memory usage
+/// Displays memory/swap usage based on information from (by default)
+/// `/proc/meminfo`
 #[derive(Builder, Debug)]
 #[allow(missing_docs)]
 pub struct Memory {
