@@ -39,6 +39,8 @@ pub struct Ping {
     pings: usize,
     #[builder(default = r#"String::from("%ping%ms")"#)]
     format: String,
+    #[builder(default = r#"String::from("disconnected")"#)]
+    format_disconnected: String,
     #[builder(default)]
     ramp: Option<Ramp>,
     #[builder(default, setter(strip_option))]
@@ -52,27 +54,30 @@ impl Ping {
         cr: &Rc<cairo::Context>,
         ping: Result<u128>,
     ) -> Result<((i32, i32), PanelDrawFn)> {
-        let ping = ping?;
-
-        let text = self
-            .format
-            .replace("%ping%", ping.to_string().as_str())
-            .replace(
-                "%ramp%",
-                self.ramp
-                    .as_ref()
-                    .map_or_else(
-                        || String::new(),
-                        |r| {
-                            r.choose::<u32>(
-                                ping as u32,
-                                0,
-                                self.max_ping.unwrap_or(2000).clamp(0, 2000),
-                            )
-                        },
-                    )
-                    .as_str(),
-            );
+        let text = match ping {
+            Ok(ping) => self
+                .format
+                .replace("%ping%", ping.to_string().as_str())
+                .replace(
+                    "%ramp%",
+                    self.ramp
+                        .as_ref()
+                        .map_or_else(
+                            || String::new(),
+                            |r| {
+                                r.choose::<u32>(
+                                    ping as u32,
+                                    0,
+                                    self.max_ping
+                                        .unwrap_or(2000)
+                                        .clamp(0, 2000),
+                                )
+                            },
+                        )
+                        .as_str(),
+                ),
+            Err(_) => self.format_disconnected.clone(),
+        };
 
         let layout = create_layout(cr);
         layout.set_markup(text.as_str());
@@ -134,8 +139,11 @@ impl PanelConfig for Ping {
     ///   - default 5
     /// - `format`: the format string
     ///   - type: String
-    ///   - formatting options: %ping%, %ramp%
+    ///   - formatting options: `%ping%`, `%ramp%`
     ///   - default: `%ping%ms`
+    /// - `format_disconnected`: the format string when all pings fail
+    ///   - type: String
+    ///   - default: `disconnected`
     /// - `ramp`: the ramp to display based on the ping time. See
     ///   [`Ramp::parse`] for parsing details.
     /// - `max_ping`: the value to use as the maximum for the ramp. Ignored if
@@ -163,6 +171,11 @@ impl PanelConfig for Ping {
         }
         if let Some(format) = remove_string_from_config("format", table) {
             builder.format(format);
+        }
+        if let Some(format_disconnected) =
+            remove_string_from_config("format_disconnected", table)
+        {
+            builder.format_disconnected(format_disconnected);
         }
         if let Some(ramp) = remove_string_from_config("ramp", table) {
             builder.ramp(Ramp::parse(ramp, global));
@@ -210,7 +223,12 @@ fn ping(
     }
     pinger.stop_pinger();
 
-    Ok((results.iter().sum::<Duration>() / results.len() as u32).as_millis())
+    if results.len() > 0 {
+        Ok((results.iter().sum::<Duration>() / results.len() as u32)
+            .as_millis())
+    } else {
+        Err(anyhow!("No connection"))
+    }
 }
 
 impl Stream for PingStream {
