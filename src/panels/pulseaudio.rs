@@ -19,7 +19,6 @@ use libpulse_binding::{
     mainloop::threaded,
     volume::Volume,
 };
-use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
@@ -30,7 +29,7 @@ use crate::{
 
 /// Displays the current volume and mute status of a given sink.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Pulseaudio {
     #[builder(default = r#"String::from("@DEFAULT_SINK@")"#)]
     sink: String,

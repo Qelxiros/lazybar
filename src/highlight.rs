@@ -6,7 +6,7 @@ use config::Value;
 use csscolorparser::Color;
 
 /// Describes a bar to be drawn below a workspace name
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Highlight {
     /// the height in pixels of the bar
     pub height: f64,

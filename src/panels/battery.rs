@@ -3,7 +3,6 @@ use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 use anyhow::Result;
 use config::Config;
 use derive_builder::Builder;
-use pangocairo::functions::show_layout;
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
@@ -14,7 +13,7 @@ use crate::{
 
 /// Shows the current battery level.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 #[allow(dead_code)]
 pub struct Battery {
     #[builder(default = r#"String::from("BAT0")"#)]

@@ -13,7 +13,6 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::fanotify::{self, EventFFlags, InitFlags, MarkFlags, MaskFlags};
-use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
@@ -71,7 +70,7 @@ impl Stream for FanotifyStream {
 /// Uses fanotify to monitor and display the contents of a file. Useful for
 /// one-off scripts that can write to a file easily.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Fanotify {
     path: String,
     attrs: Attrs,

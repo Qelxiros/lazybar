@@ -12,7 +12,6 @@ use config::Config;
 use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
 use futures::FutureExt;
-use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
     task::{self, JoinHandle},
     time::{interval, Interval},

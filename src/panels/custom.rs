@@ -10,7 +10,6 @@ use std::{
 use anyhow::Result;
 use derive_builder::Builder;
 use futures::Stream;
-use pangocairo::functions::{create_layout, show_layout};
 use tokio::time::{interval, Interval};
 use tokio_stream::StreamExt;
 
@@ -56,7 +55,7 @@ impl Stream for CustomStream {
 /// Runs a custom command with `sh -c <command>`, either once or on a given
 /// interval.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 #[builder(build_fn(skip))]
 pub struct Custom {
     #[builder(setter(skip), default = r#"Command::new("echo")"#)]

@@ -14,7 +14,6 @@ use nix::{
     ifaddrs::getifaddrs,
     sys::socket::{self, AddressFamily, SockFlag, SockType},
 };
-use pangocairo::functions::{create_layout, show_layout};
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
@@ -114,7 +113,7 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 /// Displays information about the current network connection on a given
 /// interface.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Network {
     #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,

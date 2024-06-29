@@ -96,7 +96,7 @@ pub trait PanelConfig {
 }
 
 /// Describes where on the screen the bar should appear.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Position {
     /// The top of the screen
     Top,
@@ -126,7 +126,7 @@ impl Display for Alignment {
 }
 
 /// Describes the minimum width of gaps around panel groups.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Margins {
     /// The distance in pixels from the left side of the screen to the start
     /// of the leftmost panel.

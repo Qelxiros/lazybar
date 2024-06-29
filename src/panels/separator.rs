@@ -8,7 +8,7 @@ use crate::{draw_common, remove_string_from_config, Attrs, PanelConfig};
 
 /// Displays static text with [pango] markup.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Separator {
     #[builder(
         default = r#"String::from(" <span foreground='#666'>|</span> ")"#

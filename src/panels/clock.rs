@@ -11,7 +11,6 @@ use anyhow::Result;
 use chrono::{Local, Timelike};
 use config::{Config, Value};
 use derive_builder::Builder;
-use pangocairo::functions::show_layout;
 use precision::*;
 use tokio::time::{interval, Instant, Interval};
 use tokio_stream::{Stream, StreamExt};

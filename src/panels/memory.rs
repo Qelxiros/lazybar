@@ -19,7 +19,7 @@ lazy_static! {
 }
 
 /// Displays memory usage
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 #[allow(missing_docs)]
 pub struct Memory {
     #[builder(default = r#"String::from("RAM: %percentage_used%%")"#)]

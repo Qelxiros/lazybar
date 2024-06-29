@@ -9,7 +9,6 @@ use std::{
 use anyhow::{anyhow, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
-use pangocairo::functions::show_layout;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};

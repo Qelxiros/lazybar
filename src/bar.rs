@@ -10,7 +10,7 @@ use crate::{
     Margins, PanelDrawFn, PanelStream, Position,
 };
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 enum CenterState {
     Center,
     Left,
@@ -27,6 +27,7 @@ enum Region {
     Custom { start_x: f64, end_x: f64 },
 }
 
+#[derive(Debug)]
 struct Extents {
     left: f64,
     center: (f64, f64),

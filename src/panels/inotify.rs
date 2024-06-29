@@ -13,7 +13,6 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
-use pangocairo::functions::{create_layout, show_layout};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
@@ -69,7 +68,7 @@ impl Stream for InotifyStream {
 /// Uses inotify to monitor and display the contents of a file. Useful for
 /// one-off scripts that can write to a file easily.
 #[allow(missing_docs)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Inotify {
     path: String,
     attrs: Attrs,
