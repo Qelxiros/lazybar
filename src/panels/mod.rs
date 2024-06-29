@@ -1,5 +1,6 @@
 mod battery;
 mod clock;
+mod cpu;
 mod custom;
 mod fanotify;
 mod inotify;
@@ -14,6 +15,7 @@ mod xworkspaces;
 
 pub use battery::Battery;
 pub use clock::{precision, Clock};
+pub use cpu::Cpu;
 pub use custom::Custom;
 pub use fanotify::Fanotify;
 pub use inotify::Inotify;
@@ -31,6 +33,7 @@ pub mod builders {
     pub use super::{
         battery::{BatteryBuilder, BatteryBuilderError},
         clock::{ClockBuilder, ClockBuilderError},
+        cpu::{CpuBuilder, CpuBuilderError},
         custom::{CustomBuilder, CustomBuilderError},
         fanotify::{FanotifyBuilder, FanotifyBuilderError},
         inotify::{InotifyBuilder, InotifyBuilderError},

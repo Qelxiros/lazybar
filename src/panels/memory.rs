@@ -15,7 +15,7 @@ use crate::{
 
 lazy_static! {
     static ref REGEX: Regex =
-        Regex::new(r"(?<key>[^:]*):\s*(?<value>\d*)(?: kB)?").unwrap();
+        Regex::new(r"(?<key>[^:]+):\s*(?<value>\d+)(?: kB)?").unwrap();
 }
 
 /// Displays memory/swap usage based on information from (by default)
