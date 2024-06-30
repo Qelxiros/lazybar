@@ -17,6 +17,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] temperature
 - [x] CPU usage
 - [x] RAM usage
+- [x] conditional rendering
 - [ ] storage usage?
 - [ ] systray
 - [ ] clickable panels

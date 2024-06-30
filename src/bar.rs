@@ -36,6 +36,9 @@ struct Extents {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Which neighbor(s) a panel depends on to be shown
+///
+/// If a panel is dependent on another panel with non-None dependence, it will
+/// not be shown.
 pub enum Dependence {
     /// The panel will always be shown
     None,
@@ -109,16 +112,6 @@ impl From<&Panel> for PanelStatus {
             .unwrap_or(Self::ZeroWidth)
     }
 }
-
-// impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
-//     fn from(value: ((i32, i32), PanelDrawFn)) -> Self {
-//         Self {
-//             width: value.0 .0,
-//             height: value.0 .1,
-//             draw_fn: value.1,
-//         }
-//     }
-// }
 
 /// A panel on the bar
 pub struct Panel {
