@@ -16,7 +16,7 @@ use tokio::time::{interval, Instant, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
+    bar::PanelDrawInfo, draw_common, Attrs, PanelCommon, PanelConfig,
     PanelStream,
 };
 
@@ -117,22 +117,22 @@ impl Stream for ClockStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Clock<P: Clone + Precision> {
-    #[builder(default = r#"String::from("%Y-%m-%d %T")"#)]
-    format: String,
-    attrs: Attrs,
+    common: PanelCommon,
     #[builder(default)]
     phantom: PhantomData<P>,
 }
 
 impl<P: Precision + Clone> Clock<P> {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let now = chrono::Local::now();
-        let text = now.format(&self.format).to_string();
+        let text = now.format(&self.common.formats[0]).to_string();
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -146,28 +146,28 @@ where
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
         let stream = ClockStream::new(P::tick).map(move |_| self.draw(&cr));
         Ok(Box::pin(stream))
     }
 
     /// Configuration options:
     ///
-    /// - `format`: format string
-    ///   - type: String
-    ///   - formatting options: see [`chrono::format::strftime`] for format
-    ///     sequences.
-    ///
-    /// - `attrs`: see [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = ClockBuilder::default();
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
-        builder.attrs(Attrs::parse(table, ""));
+
+        builder.common(PanelCommon::parse(
+            table,
+            &[""],
+            &["%Y-%m-%d %T"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

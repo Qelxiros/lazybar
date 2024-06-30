@@ -7,8 +7,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Shows the current battery level.
@@ -21,27 +21,13 @@ pub struct Battery {
     battery: String,
     #[builder(default = r#"String::from("AC")"#)]
     adapter: String,
-    #[builder(default = r#"String::from("CHG: %percentage%%")"#)]
-    charging_format: String,
-    #[builder(default = r#"String::from("DSCHG: %percentage%%")"#)]
-    discharging_format: String,
-    #[builder(default = r#"String::from("NCHG: %percentage%%")"#)]
-    not_charging_format: String,
-    #[builder(default = r#"String::from("FULL: %percentage%%")"#)]
-    full_format: String,
-    #[builder(default = r#"String::from("%percentage%%")"#)]
-    unknown_format: String,
     #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
-    #[builder(default)]
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl Battery {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let mut capacity_f = File::open(format!(
             "/sys/class/power_supply/{}/capacity",
             self.battery
@@ -56,24 +42,27 @@ impl Battery {
         let mut status = String::new();
         status_f.read_to_string(&mut status)?;
 
-        let text = match status.trim() {
-            "Charging" => self
-                .charging_format
-                .replace("%percentage%", capacity.trim()),
-            "Discharging" => self
-                .discharging_format
-                .replace("%percentage%", capacity.trim()),
-            "Not charging" => self
-                .not_charging_format
-                .replace("%percentage%", capacity.trim()),
-            "Full" => self.full_format.replace("%percentage%", capacity.trim()),
-            "Unknown" => {
-                self.unknown_format.replace("%percentage%", capacity.trim())
-            }
-            _ => String::from("Unknown battery state"),
-        };
+        let text =
+            match status.trim() {
+                "Charging" => self.common.formats[0]
+                    .replace("%percentage%", capacity.trim()),
+                "Discharging" => self.common.formats[1]
+                    .replace("%percentage%", capacity.trim()),
+                "Not charging" => self.common.formats[2]
+                    .replace("%percentage%", capacity.trim()),
+                "Full" => self.common.formats[3]
+                    .replace("%percentage%", capacity.trim()),
+                "Unknown" => self.common.formats[4]
+                    .replace("%percentage%", capacity.trim()),
+                _ => String::from("Unknown battery state"),
+            };
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -84,7 +73,9 @@ impl PanelConfig for Battery {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let stream = IntervalStream::new(interval(self.duration))
             .map(move |_| self.draw(&cr));
@@ -133,7 +124,7 @@ impl PanelConfig for Battery {
     ///   - type: u64
     ///   - default: 10
     ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
@@ -145,35 +136,27 @@ impl PanelConfig for Battery {
         if let Some(adapter) = remove_string_from_config("adapter", table) {
             builder.adapter(adapter);
         }
-        if let Some(format_charging) =
-            remove_string_from_config("format_charging", table)
-        {
-            builder.charging_format(format_charging);
-        }
-        if let Some(format_discharging) =
-            remove_string_from_config("format_discharging", table)
-        {
-            builder.discharging_format(format_discharging);
-        }
-        if let Some(format_not_charging) =
-            remove_string_from_config("format_not_charging", table)
-        {
-            builder.not_charging_format(format_not_charging);
-        }
-        if let Some(format_full) =
-            remove_string_from_config("format_full", table)
-        {
-            builder.full_format(format_full);
-        }
-        if let Some(format_unknown) =
-            remove_string_from_config("format_unknown", table)
-        {
-            builder.unknown_format(format_unknown);
-        }
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
         }
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &[
+                "_charging",
+                "_discharging",
+                "_not_charging",
+                "_full",
+                "_unknown",
+            ],
+            &[
+                "CHG: %percentage%%",
+                "DSCHG: %percentage%%",
+                "NCHG: %percentage%%",
+                "FULL: %percentage%%",
+                "%percentage%%",
+            ],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

@@ -23,7 +23,8 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
+    bar::{Dependence, PanelDrawInfo},
+    draw_common, remove_string_from_config, Attrs, PanelCommon, PanelConfig,
     PanelStream, Ramp,
 };
 
@@ -39,12 +40,12 @@ pub struct Pulseaudio {
     #[builder(default, setter(strip_option))]
     ramp: Option<Ramp>,
     #[builder(default, setter(strip_option))]
-    muted_ramp: Option<Ramp>,
-    attrs: Attrs,
+    ramp_muted: Option<Ramp>,
     send: Sender<(Volume, bool)>,
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
     #[builder(default, setter(skip))]
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
+    common: PanelCommon,
 }
 
 impl Stream for Pulseaudio {
@@ -86,7 +87,8 @@ impl Pulseaudio {
         ramp: Option<&Ramp>,
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+        dependence: &Dependence,
+    ) -> Result<PanelDrawInfo> {
         let (volume, mute) = data;
         let ramp = match (mute, muted_ramp) {
             (false, _) | (true, None) => ramp,
@@ -97,11 +99,11 @@ impl Pulseaudio {
             .map(|r| r.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0));
         let text = format!(
             "{}{}",
-            prefix.unwrap_or(String::new()),
+            prefix.as_deref().unwrap_or(""),
             volume.to_string().as_str()
         );
 
-        draw_common(cr, text.as_str(), attrs)
+        draw_common(cr, text.as_str(), attrs, dependence)
     }
 }
 
@@ -159,19 +161,39 @@ impl PanelConfig for Pulseaudio {
         Box::leak(Box::new(context));
         Box::leak(Box::new(mainloop));
 
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
         let ramp = self.ramp.clone();
-        let muted_ramp = self.muted_ramp.clone();
-        let attrs = self.attrs.clone();
+        let muted_ramp = self.ramp_muted.clone();
+        let attrs = self.common.attrs[0].clone();
+        let dependence = self.common.dependence;
 
         let stream = self.map(move |data| {
-            Self::draw(&cr, data, ramp.as_ref(), muted_ramp.as_ref(), &attrs)
+            Self::draw(
+                &cr,
+                data,
+                ramp.as_ref(),
+                muted_ramp.as_ref(),
+                &attrs,
+                &dependence,
+            )
         });
 
         Ok(Box::pin(stream))
     }
 
     /// Configuration options:
+    ///
+    /// - `format_unmuted`: the format string when the default sink is unmuted
+    ///   - type: String
+    ///   - default: `%ramp%%volume%%`
+    ///   - formatting options: `%volume%`, `%ramp%`
+    ///
+    /// - `format_muted`: the format string when the default sink is muted
+    ///   - type: String
+    ///   - default: `%ramp%%volume%%`
+    ///   - formatting options: `%volume%`, `%ramp%`
     ///
     /// - `sink`: the sink about which to display information
     ///   - type: String
@@ -187,11 +209,11 @@ impl PanelConfig for Pulseaudio {
     ///   for parsing details. This ramp is used when the sink is unmuted or
     ///   when no `muted_ramp` is specified.-
     ///
-    /// - `muted_ramp`: Shows an icon based on the volume level. See
+    /// - `ramp_muted`: Shows an icon based on the volume level. See
     ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
     ///   is muted.
     ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, Value>,
         global: &Config,
@@ -210,19 +232,24 @@ impl PanelConfig for Pulseaudio {
                 log::warn!("Invalid ramp {ramp}");
             }
         }
-        if let Some(muted_ramp) = remove_string_from_config("muted_ramp", table)
+        if let Some(ramp_muted) = remove_string_from_config("ramp_muted", table)
         {
-            if let Some(muted_ramp) = Ramp::parse(muted_ramp.as_str(), global) {
-                builder.muted_ramp(muted_ramp);
+            if let Some(ramp_muted) = Ramp::parse(ramp_muted.as_str(), global) {
+                builder.ramp_muted(ramp_muted);
             } else {
-                log::warn!("Invalid muted_ramp {muted_ramp}");
+                log::warn!("Invalid ramp_muted {ramp_muted}");
             }
         }
 
         let (send, recv) = channel();
         builder.send(send);
         builder.recv(Arc::new(Mutex::new(recv)));
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &["_unmuted", "_muted"],
+            &["%ramp%%volume%%", "%ramp%%volume%%"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

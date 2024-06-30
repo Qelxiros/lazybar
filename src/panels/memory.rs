@@ -9,8 +9,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 lazy_static! {
@@ -24,20 +24,15 @@ lazy_static! {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Memory {
-    #[builder(default = r#"String::from("RAM: %percentage_used%%")"#)]
-    format: String,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
     #[builder(default = r#"String::from("/proc/meminfo")"#)]
     path: String,
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl Memory {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let mut meminfo = String::new();
         File::open(self.path.as_str())?.read_to_string(&mut meminfo)?;
 
@@ -82,8 +77,7 @@ impl Memory {
         let percentage_swap_used =
             (swap_used as f64 / swap_total as f64 * 100.0) as u64;
 
-        let text = self
-            .format
+        let text = self.common.formats[0]
             .replace(
                 "%gb_used%",
                 format!("{:.2}", (mem_used as f64 / 1024.0 / 1024.0)).as_str(),
@@ -152,7 +146,12 @@ impl Memory {
                 (100 - percentage_swap_used).to_string().as_str(),
             );
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -163,7 +162,9 @@ impl PanelConfig for Memory {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let stream = IntervalStream::new(interval(self.interval))
             .map(move |_| self.draw(&cr));
@@ -177,9 +178,9 @@ impl PanelConfig for Memory {
     ///   - type: String
     ///   - default: `RAM: %percentage_used%`
     ///   - formatting options: `%{gb,mb}_[swap_]{total,used,free}%,
-    ///     %percentage_[swap_]{used,free}%`, where exactly one comma-separated
+    ///     %percentage_[swap_]{used,free}%` (where exactly one comma-separated
     ///     value must be selected from each set of curly braces and the values
-    ///     in square brackets are optional
+    ///     in square brackets are optional)
     /// - `interval`: how long to wait in seconds between each check
     ///   - type: u64
     ///   - default: 10
@@ -188,23 +189,25 @@ impl PanelConfig for Memory {
     ///   - default: `/proc/meminfo` - If you're considering changing this, you
     ///     might want to use a different panel like
     ///     [`Inotify`][crate::panels::Inotify]
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = MemoryBuilder::default();
 
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
         if let Some(interval) = remove_uint_from_config("interval", table) {
             builder.interval(Duration::from_secs(interval));
         }
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
         }
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &[""],
+            &["RAM: %percentage_used%%"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

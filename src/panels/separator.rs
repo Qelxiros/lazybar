@@ -4,30 +4,32 @@ use anyhow::Result;
 use config::{Config, Value};
 use derive_builder::Builder;
 
-use crate::{draw_common, remove_string_from_config, Attrs, PanelConfig};
+use crate::{draw_common, Attrs, PanelCommon, PanelConfig};
 
 /// Displays static text with [pango] markup.
 #[derive(Builder, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Separator {
-    #[builder(
-        default = r#"String::from(" <span foreground='#666'>|</span> ")"#
-    )]
-    format: String,
+    common: PanelCommon,
 }
 
 impl PanelConfig for Separator {
     fn into_stream(
-        self: Box<Self>,
+        mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<crate::PanelStream> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
         Ok(Box::pin(tokio_stream::once(draw_common(
             &cr,
-            self.format.as_str(),
-            &global_attrs,
+            self.common.formats[0].as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
         ))))
     }
 
@@ -41,9 +43,12 @@ impl PanelConfig for Separator {
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = SeparatorBuilder::default();
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
+        builder.common(PanelCommon::parse(
+            table,
+            &[""],
+            &[" <span foreground='#666'>|</span> "],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

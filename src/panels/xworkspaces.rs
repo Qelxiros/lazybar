@@ -15,8 +15,9 @@ use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
 use crate::{
-    remove_string_from_config, remove_uint_from_config, x::intern_named_atom,
-    Attrs, Highlight, PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, remove_string_from_config, remove_uint_from_config,
+    x::intern_named_atom, Attrs, Highlight, PanelCommon, PanelConfig,
+    PanelStream,
 };
 
 struct XStream {
@@ -94,11 +95,9 @@ pub struct XWorkspaces {
     screen: i32,
     #[builder(default = "0")]
     padding: i32,
-    active: Attrs,
-    inactive: Attrs,
-    nonempty: Attrs,
     #[builder(setter(strip_option))]
     highlight: Option<Highlight>,
+    common: PanelCommon,
 }
 
 impl XWorkspaces {
@@ -115,7 +114,7 @@ impl XWorkspaces {
         type_atom: x::Atom,
         normal_atom: x::Atom,
         desktop_atom: x::Atom,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    ) -> Result<PanelDrawInfo> {
         let workspaces = get_workspaces(
             &self.conn,
             root,
@@ -136,9 +135,9 @@ impl XWorkspaces {
         // TODO: avoid cloning?
         let nonempty_set2 = nonempty_set.clone();
 
-        let active = self.active.clone();
-        let nonempty = self.nonempty.clone();
-        let inactive = self.inactive.clone();
+        let active = self.common.attrs[0].clone();
+        let nonempty = self.common.attrs[1].clone();
+        let inactive = self.common.attrs[2].clone();
         let layouts: Vec<_> = workspaces
             .into_iter()
             .enumerate()
@@ -164,13 +163,14 @@ impl XWorkspaces {
             - self.padding;
 
         let padding = self.padding;
-        let active = self.active.clone();
-        let nonempty = self.nonempty.clone();
-        let inactive = self.inactive.clone();
+        let active = self.common.attrs[0].clone();
+        let nonempty = self.common.attrs[1].clone();
+        let inactive = self.common.attrs[2].clone();
         let highlight = self.highlight.clone();
 
-        Ok((
+        Ok(PanelDrawInfo::new(
             (width, height),
+            self.common.dependence,
             Box::new(move |cr| {
                 for (i, layout) in &layouts {
                     if *i == current {
@@ -270,9 +270,9 @@ impl PanelConfig for XWorkspaces {
             },
         ))?;
 
-        self.active = global_attrs.clone().overlay(self.active);
-        self.nonempty = global_attrs.clone().overlay(self.nonempty);
-        self.inactive = global_attrs.overlay(self.inactive);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let stream = tokio_stream::once(())
             .chain(XStream::new(
@@ -311,17 +311,12 @@ impl PanelConfig for XWorkspaces {
     ///   - type: u64
     ///   - default: 0
     ///
-    /// - `active`: The attributes that will apply to active workspaces. See
-    ///   [`Attrs::parse`] for parsing options. The prefix is `active_`
-    ///
-    /// - `inactive`: The attributes that will apply to inactive workspaces. See
-    ///   [`Attrs::parse`] for parsing options. The prefix is `inactive_`
-    ///
-    /// - `nonempty`: The attributes that will apply to nonempty workspaces. See
-    ///   [`Attrs::parse`] for parsing options. The prefix is `nonempty_`
-    ///
     /// - `highlight`: The highlight that will appear on the active workspaces.
     ///   See [`Highlight::parse`] for parsing options.
+    ///
+    /// - See [`PanelCommon::parse`]. No format strings are used for this panel.
+    ///   Three instances of [`Attrs`] are parsed using the prefixes `active_`,
+    ///   `nonempty_`, and `inactive_`
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,
@@ -338,9 +333,12 @@ impl PanelConfig for XWorkspaces {
             builder.padding(padding as i32);
         }
 
-        builder.active(Attrs::parse(table, "active_"));
-        builder.inactive(Attrs::parse(table, "inactive_"));
-        builder.nonempty(Attrs::parse(table, "nonempty_"));
+        builder.common(PanelCommon::parse(
+            table,
+            &[],
+            &[],
+            &["active_", "nonempty_", "inactive_"],
+        )?);
 
         builder.highlight(Highlight::parse(table));
 

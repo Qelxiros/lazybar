@@ -7,14 +7,14 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use derive_builder::Builder;
 use tokio::time::{interval, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct CustomStream {
@@ -56,24 +56,33 @@ impl Stream for CustomStream {
 #[derive(Builder, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
-#[builder(build_fn(skip))]
+#[builder(pattern = "owned")]
 pub struct Custom {
-    #[builder(setter(skip), default = r#"Command::new("echo")"#)]
+    #[builder(default = r#"Command::new("echo")"#)]
     command: Command,
-    _command_str: String,
     #[builder(setter(strip_option))]
     duration: Option<Duration>,
+    common: PanelCommon,
 }
 
 impl Custom {
-    fn draw(
-        &mut self,
-        cr: &Rc<cairo::Context>,
-        attrs: &Attrs,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&mut self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let output = self.command.output()?;
-        let text = String::from_utf8_lossy(output.stdout.as_slice());
-        draw_common(cr, text.trim(), attrs)
+        let text = self.common.formats[0]
+            .replace(
+                "%stdout%",
+                String::from_utf8_lossy(output.stdout.as_slice()).as_ref(),
+            )
+            .replace(
+                "%stderr%",
+                String::from_utf8_lossy(output.stderr.as_slice()).as_ref(),
+            );
+        draw_common(
+            cr,
+            text.trim(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -84,13 +93,22 @@ impl PanelConfig for Custom {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
         Ok(Box::pin(
             CustomStream::new(self.duration.map(|d| interval(d)))
-                .map(move |_| self.draw(&cr, &global_attrs)),
+                .map(move |_| self.draw(&cr)),
         ))
     }
 
     /// Configuration options:
+    ///
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%stdout%`
+    ///   - formatting options: `%stdout%`, `%stderr%`
     ///
     /// - `command`: the command to run
     ///   - type: String
@@ -101,35 +119,35 @@ impl PanelConfig for Custom {
     ///   - default: none
     ///   - if not present, the command will run exactly once.
     ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &config::Config,
     ) -> Result<Self> {
-        let mut builder = CustomBuilder::default();
-        if let Some(command) = remove_string_from_config("command", table) {
-            builder._command_str(command);
-        }
-        if let Some(duration) = remove_uint_from_config("interval", table) {
-            builder.duration(Duration::from_secs(duration));
-        }
+        let builder = match (
+            remove_string_from_config("command", table),
+            remove_uint_from_config("interval", table),
+        ) {
+            (Some(command), Some(duration)) => {
+                let mut cmd = Command::new("sh");
+                cmd.arg("-c").arg(command.as_str());
+                CustomBuilder::default()
+                    .command(cmd)
+                    .duration(Duration::from_secs(duration))
+            }
+            (Some(command), None) => {
+                let mut cmd = Command::new("sh");
+                cmd.arg("-c").arg(command.as_str());
+                CustomBuilder::default().command(cmd)
+            }
+            (None, Some(duration)) => {
+                CustomBuilder::default().duration(Duration::from_secs(duration))
+            }
+            (None, None) => CustomBuilder::default(),
+        };
 
-        builder.build()
-    }
-}
-
-impl CustomBuilder {
-    fn build(self) -> Result<Custom> {
-        let command_str =
-            self._command_str.context("`command` must be initialized")?;
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(command_str.as_str());
-        let duration = self.duration.flatten();
-
-        Ok(Custom {
-            command,
-            _command_str: command_str,
-            duration,
-        })
+        Ok(builder
+            .common(PanelCommon::parse(table, &[""], &["%stdout%"], &[""])?)
+            .build()?)
     }
 }

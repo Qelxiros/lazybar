@@ -22,9 +22,9 @@ use tokio::{
 use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, remove_bool_from_config, remove_color_from_config,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
+    PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
@@ -46,8 +46,6 @@ enum EventType {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Mpd {
-    #[builder(default = r#"String::from("%title% - %artist%")"#)]
-    format: String,
     conn: Arc<Mutex<Client>>,
     noidle_conn: Arc<Mutex<Client>>,
     #[builder(setter(strip_option))]
@@ -60,7 +58,6 @@ pub struct Mpd {
     scroll_idx: usize,
     #[builder(default = r#"String::from("  ")"#)]
     scroll_separator: String,
-    attrs: Attrs,
     #[builder(default = r##"Color::from_str("#f00").unwrap()"##)]
     progress_bg: Color,
     #[builder(default = "0.0", setter(skip))]
@@ -69,6 +66,7 @@ pub struct Mpd {
     // is ellipsize
     #[builder(default = "0")]
     max_width: usize,
+    common: PanelCommon,
 }
 
 impl Mpd {
@@ -77,12 +75,11 @@ impl Mpd {
         cr: &Rc<cairo::Context>,
         height: i32,
         event: EventType,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    ) -> Result<PanelDrawInfo> {
         let conn = self.noidle_conn.clone();
         let status = conn.lock().unwrap().status()?;
         let song = conn.lock().unwrap().currentsong()?;
-        let mut text = self
-            .format
+        let mut text = self.common.formats[0]
             .replace(
                 "%title%",
                 match song {
@@ -181,7 +178,7 @@ impl Mpd {
             }
         };
 
-        self.attrs.apply_font(&layout);
+        self.common.attrs[0].apply_font(&layout);
         let size = layout.pixel_size();
 
         if event == EventType::Progress {
@@ -199,11 +196,12 @@ impl Mpd {
         }
 
         let bar_width = self.last_progress_width;
-        let attrs = self.attrs.clone();
+        let attrs = self.common.attrs[0].clone();
         let progress_bg = self.progress_bg.clone();
 
-        Ok((
+        Ok(PanelDrawInfo::new(
             (size.0, height),
+            self.common.dependence,
             Box::new(move |cr| {
                 cr.save()?;
                 cr.set_source_rgba(
@@ -267,7 +265,9 @@ impl PanelConfig for Mpd {
                 Box::pin(IntervalStream::new(interval(i)).map(|_| Ok(()))),
             );
         }
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
         Ok(Box::pin(map.map(move |(t, r)| {
             r?;
             self.draw(&cr, height, t)
@@ -309,7 +309,7 @@ impl PanelConfig for Mpd {
     ///   [`pango::EllipsizeMode`] for details)
     ///   - type: String - one of `start`, `middle`, `end`, or `none`
     ///   - default: end
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
@@ -336,9 +336,6 @@ impl PanelConfig for Mpd {
             )?)));
         }
 
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
         if let Some(strategy) = remove_string_from_config("strategy", table) {
             builder.strategy(match strategy.as_str() {
                 "scroll" => Strategy::Scroll {
@@ -373,7 +370,12 @@ impl PanelConfig for Mpd {
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as usize);
         }
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &[""],
+            &["%title% - %artist%"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

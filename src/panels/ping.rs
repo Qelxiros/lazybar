@@ -19,8 +19,9 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream, Ramp,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
+    Ramp,
 };
 
 /// Displays the ping to a given address
@@ -37,15 +38,11 @@ pub struct Ping {
     interval: Option<Duration>,
     #[builder(default = "5")]
     pings: usize,
-    #[builder(default = r#"String::from("%ping%ms")"#)]
-    format: String,
-    #[builder(default = r#"String::from("disconnected")"#)]
-    format_disconnected: String,
     #[builder(default)]
     ramp: Option<Ramp>,
     #[builder(default, setter(strip_option))]
     max_ping: Option<u32>,
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl Ping {
@@ -53,11 +50,11 @@ impl Ping {
         &self,
         cr: &Rc<cairo::Context>,
         ping: Result<u128>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    ) -> Result<PanelDrawInfo> {
         let text = ping.map_or_else(
-            |_| self.format_disconnected.clone(),
+            |_| self.common.formats[1].clone(),
             |ping| {
-                self.format
+                self.common.formats[0]
                     .replace("%ping%", ping.to_string().as_str())
                     .replace(
                         "%ramp%",
@@ -77,7 +74,12 @@ impl Ping {
             },
         );
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -88,7 +90,9 @@ impl PanelConfig for Ping {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let (pinger, recv) = Pinger::new(None, None).map_err(|s| anyhow!(s))?;
 
@@ -119,7 +123,7 @@ impl PanelConfig for Ping {
     /// - `pings`: how many times to ping per run (the results will be averaged)
     ///   - type: u64
     ///   - default 5
-    /// - `format`: the format string
+    /// - `format_connected`: the format string
     ///   - type: String
     ///   - formatting options: `%ping%`, `%ramp%`
     ///   - default: `%ping%ms`
@@ -132,6 +136,7 @@ impl PanelConfig for Ping {
     ///   `ramp` is unset. Clamped to [0, 2000].
     ///   - type: u64
     ///   - default: 2000
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         global: &Config,
@@ -151,14 +156,6 @@ impl PanelConfig for Ping {
         if let Some(pings) = remove_uint_from_config("pings", table) {
             builder.pings(pings as usize);
         }
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
-        if let Some(format_disconnected) =
-            remove_string_from_config("format_disconnected", table)
-        {
-            builder.format_disconnected(format_disconnected);
-        }
         if let Some(ramp) = remove_string_from_config("ramp", table) {
             builder.ramp(Ramp::parse(ramp, global));
         }
@@ -166,7 +163,12 @@ impl PanelConfig for Ping {
             builder.max_ping(max_ping as u32);
         }
 
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &["_connected", "_disconnected"],
+            &["%ping%ms", "disconnected"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

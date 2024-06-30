@@ -18,8 +18,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 #[repr(C)]
@@ -118,20 +118,13 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 pub struct Network {
     #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,
-    #[builder(default = r#"String::from("%ifname% %essid% %local_ip%")"#)]
-    format_connected: String,
-    #[builder(default = r#"String::from("%ifname% disconnected")"#)]
-    format_disconnected: String,
-    attrs: Attrs,
     #[builder(default = r#"Duration::from_secs(10)"#)]
     duration: Duration,
+    common: PanelCommon,
 }
 
 impl Network {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let essid = glib::markup_escape_text(
             query_essid(self.if_name.as_str())
                 .unwrap_or_default()
@@ -141,19 +134,24 @@ impl Network {
 
         let text = ip.map_or_else(
             || {
-                self.format_disconnected
+                self.common.formats[1]
                     .replace("%ifname%", self.if_name.as_str())
                     .replace("%essid%", essid.as_str())
             },
             |ip| {
-                self.format_connected
+                self.common.formats[0]
                     .replace("%ifname%", self.if_name.as_str())
                     .replace("%essid%", essid.as_str())
                     .replace("%local_ip%", ip.to_string().as_str())
             },
         );
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -164,7 +162,9 @@ impl PanelConfig for Network {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
         let stream = IntervalStream::new(interval(self.duration))
             .map(move |_| self.draw(&cr));
 
@@ -192,7 +192,7 @@ impl PanelConfig for Network {
     ///   - type: u64
     ///   - default: 10
     ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,
@@ -201,21 +201,16 @@ impl PanelConfig for Network {
         if let Some(if_name) = remove_string_from_config("if_name", table) {
             builder.if_name(if_name);
         }
-        if let Some(format_connected) =
-            remove_string_from_config("format_connected", table)
-        {
-            builder.format_connected(format_connected);
-        }
-        if let Some(format_disconnected) =
-            remove_string_from_config("format_disconnected", table)
-        {
-            builder.format_disconnected(format_disconnected);
-        }
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
         }
 
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &["_connected", "_disconnected"],
+            &["%ifname% %essid% %local_ip%", "%ifname% disconnected"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

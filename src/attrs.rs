@@ -42,8 +42,8 @@ impl Attrs {
     /// `font: String`: Specify the font to be used. This will be turned into a
     /// [`pango::FontDescription`], so it's very configurable. Font family,
     /// weight, size, and more can be specified.
-    pub fn parse(
-        table: &mut HashMap<String, config::Value>,
+    pub fn parse<S: std::hash::BuildHasher>(
+        table: &mut HashMap<String, config::Value, S>,
         prefix: &str,
     ) -> Self {
         let mut builder = AttrsBuilder::default();
@@ -119,15 +119,17 @@ impl Attrs {
         }
     }
 
-    /// Combines two [`Attrs`] instances into one, choosing options from `new`
-    /// as long as they are [`Some`], otherwise leaving the options on
-    /// `self` unchanged.
-    #[must_use]
-    pub fn overlay(self, new: Self) -> Self {
-        Self {
-            font: new.font.or(self.font),
-            fg: new.fg.or(self.fg),
-            bg: new.bg.or(self.bg),
+    /// Combines two [`Attrs`] instances into one, choosing options from `self`
+    /// as long as they are [`Some`], otherwise choosing them from `new`.
+    pub fn apply_to(&mut self, new: &Self) {
+        if self.font.is_none() {
+            self.font = new.font.clone();
+        }
+        if self.fg.is_none() {
+            self.fg = new.fg.clone();
+        }
+        if self.bg.is_none() {
+            self.bg = new.bg.clone();
         }
     }
 }

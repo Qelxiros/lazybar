@@ -8,8 +8,8 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 lazy_static! {
@@ -22,21 +22,16 @@ lazy_static! {
 #[builder_impl_attr(allow(missing_docs))]
 /// Display information about CPU usage based on `/proc/stat`
 pub struct Cpu {
-    #[builder(default = r#"String::from("CPU: %percentage%")"#)]
-    format: String,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
     #[builder(default = r#"String::from("/proc/stat")"#)]
     path: String,
     last_load: Load,
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl Cpu {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let load = read_current_load(self.path.as_str())?;
 
         let diff = load.total - self.last_load.total;
@@ -44,11 +39,15 @@ impl Cpu {
             / diff as f64
             * 100.0;
 
-        let text = self
-            .format
+        let text = self.common.formats[0]
             .replace("%percentage%", format!("{percentage:.0}").as_str());
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -59,7 +58,9 @@ impl PanelConfig for Cpu {
         global_attrs: Attrs,
         _height: i32,
     ) -> Result<PanelStream> {
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let stream = IntervalStream::new(interval(self.interval))
             .map(move |_| self.draw(&cr));
@@ -81,16 +82,13 @@ impl PanelConfig for Cpu {
     ///   - default: `/proc/stat` - If you're considering changing this, you
     ///     might want to use a different panel like
     ///     [`Inotify`][crate::panels::Inotify]
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, config::Value>,
         _global: &config::Config,
     ) -> Result<Self> {
         let mut builder = CpuBuilder::default();
 
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
         if let Some(interval) = remove_uint_from_config("interval", table) {
             builder.interval(Duration::from_secs(interval));
         }
@@ -100,7 +98,12 @@ impl PanelConfig for Cpu {
         } else {
             builder.last_load(read_current_load("/proc/stat")?);
         }
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(
+            table,
+            &[""],
+            &["CPU: %percentage%%"],
+            &[""],
+        )?);
 
         Ok(builder.build()?)
     }

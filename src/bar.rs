@@ -1,4 +1,4 @@
-use std::{fmt::Debug, rc::Rc};
+use std::{fmt::Debug, ops::BitAnd, rc::Rc};
 
 use anyhow::Result;
 use csscolorparser::Color;
@@ -34,39 +34,111 @@ struct Extents {
     right: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which neighbor(s) a panel depends on to be shown
+pub enum Dependence {
+    /// The panel will always be shown
+    None,
+    /// The panel will be shown if its left neighbor has a nonzero width
+    Left,
+    /// The panel will be shown if its right neighbor has a nonzero width
+    Right,
+    /// The panel will be shown if both of its neighbors have a nonzero width
+    Both,
+}
+
 /// Information describing how to draw/redraw a [`Panel`].
-pub struct DrawInfo {
+pub struct PanelDrawInfo {
     /// The width in pixels of the panel.
     pub width: i32,
     /// The height in pixels of the panel.
     pub height: i32,
+    /// When the panel should be hidden
+    pub dependence: Dependence,
     /// A [`FnMut`] that draws the panel to the [`cairo::Context`], starting at
     /// (0, 0). Translating the Context is the responsibility of functions in
     /// this module.
     pub draw_fn: PanelDrawFn,
 }
 
-impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
-    fn from(value: ((i32, i32), PanelDrawFn)) -> Self {
+impl PanelDrawInfo {
+    /// Creates a new [`PanelDrawInfo`] from its components.
+    pub const fn new(
+        dims: (i32, i32),
+        dependence: Dependence,
+        draw_fn: PanelDrawFn,
+    ) -> Self {
         Self {
-            width: value.0 .0,
-            height: value.0 .1,
-            draw_fn: value.1,
+            width: dims.0,
+            height: dims.1,
+            dependence,
+            draw_fn,
         }
     }
 }
 
-/// A panel on the bar. This struct may be expanded in the future.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PanelStatus {
+    Shown,
+    ZeroWidth,
+    Dependent(Dependence),
+}
+
+impl BitAnd for PanelStatus {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        if self == PanelStatus::Shown && rhs == PanelStatus::Shown {
+            PanelStatus::Shown
+        } else {
+            PanelStatus::ZeroWidth
+        }
+    }
+}
+
+impl From<&Panel> for PanelStatus {
+    fn from(value: &Panel) -> Self {
+        value
+            .draw_info
+            .as_ref()
+            .map(|d| match (d.dependence, d.width) {
+                (Dependence::None, 0) => Self::ZeroWidth,
+                (Dependence::None, _) => Self::Shown,
+                (dep, _) => Self::Dependent(dep),
+            })
+            .unwrap_or(Self::ZeroWidth)
+    }
+}
+
+// impl From<((i32, i32), PanelDrawFn)> for DrawInfo {
+//     fn from(value: ((i32, i32), PanelDrawFn)) -> Self {
+//         Self {
+//             width: value.0 .0,
+//             height: value.0 .1,
+//             draw_fn: value.1,
+//         }
+//     }
+// }
+
+/// A panel on the bar
 pub struct Panel {
     /// How to draw the panel.
-    pub draw_info: Option<DrawInfo>,
+    pub draw_info: Option<PanelDrawInfo>,
+    /// The current x-coordinate of the panel
+    pub x: f64,
+    /// The current y-coordinate of the panel
+    pub y: f64,
 }
 
 impl Panel {
     /// Create a new panel.
     #[must_use]
-    pub const fn new(draw_info: Option<DrawInfo>) -> Self {
-        Self { draw_info }
+    pub const fn new(draw_info: Option<PanelDrawInfo>) -> Self {
+        Self {
+            draw_info,
+            x: 0.0,
+            y: 0.0,
+        }
     }
 }
 
@@ -144,6 +216,34 @@ impl Bar {
         })
     }
 
+    fn apply_dependence(panels: &Vec<Panel>) -> Vec<PanelStatus> {
+        (0..panels.len())
+            .map(|idx| match PanelStatus::from(&panels[idx]) {
+                PanelStatus::Shown => PanelStatus::Shown,
+                PanelStatus::ZeroWidth => PanelStatus::ZeroWidth,
+                PanelStatus::Dependent(Dependence::Left) => panels
+                    .get(idx - 1)
+                    .map(PanelStatus::from)
+                    .unwrap_or(PanelStatus::ZeroWidth),
+                PanelStatus::Dependent(Dependence::Right) => panels
+                    .get(idx + 1)
+                    .map(PanelStatus::from)
+                    .unwrap_or(PanelStatus::ZeroWidth),
+                PanelStatus::Dependent(Dependence::Both) => {
+                    panels
+                        .get(idx - 1)
+                        .map(PanelStatus::from)
+                        .unwrap_or(PanelStatus::ZeroWidth)
+                        & panels
+                            .get(idx + 1)
+                            .map(PanelStatus::from)
+                            .unwrap_or(PanelStatus::ZeroWidth)
+                }
+                PanelStatus::Dependent(Dependence::None) => unreachable!(),
+            })
+            .collect()
+    }
+
     /// Handle an event from the X server.
     pub fn process_event(&mut self, event: &Event) -> Result<()> {
         match event {
@@ -204,7 +304,7 @@ impl Bar {
         &mut self,
         alignment: Alignment,
         idx: usize,
-        draw_info: DrawInfo,
+        draw_info: PanelDrawInfo,
     ) -> Result<()> {
         let new_width = f64::from(draw_info.width);
         match alignment {
@@ -285,7 +385,7 @@ impl Bar {
                     - self.margins.internal
                     > self.extents.center.1
                 {
-                    self.redraw_right(true)?;
+                    self.redraw_right(true, None)?;
                 } else if (self.extents.right
                     - self.extents.center.1
                     - self.margins.internal)
@@ -312,29 +412,17 @@ impl Bar {
         match alignment {
             Alignment::Left => {
                 self.cr.save()?;
-                let offset = f64::from(
-                    self.left
-                        .iter()
-                        .take(idx)
-                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
-                        .sum::<i32>(),
-                ) + self.margins.left;
 
-                if let Some(draw_info) = &self
+                let panel = self
                     .left
                     .get(idx)
-                    .expect("one or more panels have vanished")
-                    .draw_info
-                {
+                    .expect("one or more panels have vanished");
+                if let Some(draw_info) = &panel.draw_info {
                     self.redraw_background(&Region::Custom {
-                        start_x: offset,
-                        end_x: offset + f64::from(draw_info.width),
+                        start_x: panel.x,
+                        end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(
-                        offset,
-                        f64::from(i32::from(self.height) - draw_info.height)
-                            / 2.0,
-                    );
+                    self.cr.translate(panel.x, panel.y);
                     (draw_info.draw_fn)(&self.cr)?;
                 }
 
@@ -424,7 +512,8 @@ impl Bar {
     ///
     /// Note: this function is not called for every panel update. If the width
     /// doesn't change, only one panel is redrawn, and there are a number of
-    /// other cases in which we can redraw only the left or right side.
+    /// other cases in which we can redraw only the left or right side. See
+    /// [`Bar::update_panel`] for specifics.
     pub fn redraw_bar(&mut self) -> Result<()> {
         self.redraw_background(&Region::All)?;
 
@@ -439,13 +528,25 @@ impl Bar {
 
         self.extents.left = self.margins.left;
 
-        for panel in &self.left {
+        let statuses = Self::apply_dependence(&self.left);
+
+        for panel in self
+            .left
+            .iter_mut()
+            .enumerate()
+            .filter(|(idx, _)| {
+                statuses.get(*idx).unwrap() == &PanelStatus::Shown
+            })
+            .map(|(_, panel)| panel)
+        {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
-                self.cr.translate(
-                    self.extents.left,
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
-                );
+                let x = self.extents.left;
+                let y =
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
+                panel.x = x;
+                panel.y = y;
+                self.cr.translate(x, y);
                 (draw_info.draw_fn)(&self.cr)?;
                 self.extents.left += f64::from(draw_info.width);
                 self.cr.restore()?;
@@ -463,8 +564,31 @@ impl Bar {
             self.redraw_background(&Region::CenterRight)?;
         }
 
+        let center_statuses = Self::apply_dependence(&self.center);
+
+        let center_panels = self
+            .center
+            .iter_mut()
+            .enumerate()
+            .filter(|(idx, _)| {
+                center_statuses.get(*idx).unwrap() == &PanelStatus::Shown
+            })
+            .map(|(_, panel)| panel)
+            .collect::<Vec<_>>();
+
+        let right_statuses = Self::apply_dependence(&self.right);
+
+        let right_panels = self
+            .right
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| {
+                right_statuses.get(*idx).unwrap() == &PanelStatus::Shown
+            })
+            .map(|(_, panel)| panel);
+
         let center_width = f64::from(
-            self.center
+            center_panels
                 .iter()
                 .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                 .sum::<i32>(),
@@ -472,9 +596,7 @@ impl Bar {
 
         self.extents.right = f64::from(
             self.width
-                - self
-                    .right
-                    .iter()
+                - right_panels
                     .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                     .sum::<i32>(),
         ) - self.margins.internal;
@@ -514,20 +636,22 @@ impl Bar {
             self.center_state = CenterState::Center;
         }
 
-        for panel in &self.center {
+        for panel in center_panels {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
-                self.cr.translate(
-                    self.extents.center.1,
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
-                );
+                let x = self.extents.center.1;
+                let y =
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
+                panel.x = x;
+                panel.y = y;
+                self.cr.translate(x, y);
                 (draw_info.draw_fn)(&self.cr)?;
                 self.extents.center.1 += f64::from(draw_info.width);
                 self.cr.restore()?;
             }
         }
 
-        self.redraw_right(standalone)?;
+        self.redraw_right(standalone, Some(right_statuses))?;
 
         self.surface.flush();
         self.conn.flush()?;
@@ -535,14 +659,26 @@ impl Bar {
         Ok(())
     }
 
-    fn redraw_right(&mut self, standalone: bool) -> Result<()> {
+    fn redraw_right(
+        &mut self,
+        standalone: bool,
+        statuses: Option<Vec<PanelStatus>>,
+    ) -> Result<()> {
         if standalone {
             self.redraw_background(&Region::Right)?;
         }
 
+        let statuses =
+            statuses.unwrap_or_else(|| Self::apply_dependence(&self.right));
+
         let total_width = f64::from(
             self.right
                 .iter()
+                .enumerate()
+                .filter(|(idx, _)| {
+                    statuses.get(*idx).unwrap() == &PanelStatus::Shown
+                })
+                .map(|(_, panel)| panel)
                 .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
                 .sum::<i32>(),
         ) + self.margins.right;
@@ -555,13 +691,23 @@ impl Bar {
 
         let mut temp = self.extents.right;
 
-        for panel in &self.right {
+        for panel in self
+            .right
+            .iter_mut()
+            .enumerate()
+            .filter(|(idx, _)| {
+                statuses.get(*idx).unwrap() == &PanelStatus::Shown
+            })
+            .map(|(_, panel)| panel)
+        {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
-                self.cr.translate(
-                    temp,
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0,
-                );
+                let x = temp;
+                let y =
+                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
+                panel.x = x;
+                panel.y = y;
+                self.cr.translate(x, y);
                 (draw_info.draw_fn)(&self.cr)?;
                 temp += f64::from(draw_info.width);
                 self.cr.restore()?;

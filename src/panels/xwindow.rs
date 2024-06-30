@@ -14,8 +14,8 @@ use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
 use crate::{
-    draw_common, remove_string_from_config, x::intern_named_atom, Attrs,
-    PanelConfig, PanelDrawFn, PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config,
+    x::intern_named_atom, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct XStream {
@@ -86,9 +86,7 @@ pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
-    #[builder(default = r#"String::from("%name%")"#)]
-    format: String,
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl XWindow {
@@ -99,7 +97,7 @@ impl XWindow {
         window_atom: x::Atom,
         root: x::Window,
         utf8_atom: x::Atom,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    ) -> Result<PanelDrawInfo> {
         let active: u32 = self
             .conn
             .wait_for_reply(self.conn.send_request(&x::GetProperty {
@@ -146,12 +144,17 @@ impl XWindow {
             unsafe { String::from_utf8_unchecked(bytes) }
         };
 
-        let text = self.format.replace(
+        let text = self.common.formats[0].replace(
             "%name%",
             glib::markup_escape_text(name.as_str()).as_str(),
         );
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -179,7 +182,9 @@ impl PanelConfig for XWindow {
             },
         ))?;
 
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let stream = tokio_stream::once(())
             .chain(XStream::new(self.conn.clone(), name_atom, window_atom))
@@ -213,12 +218,9 @@ impl PanelConfig for XWindow {
         } else {
             log::error!("Failed to connect to X server");
         }
-        if let Some(format) = remove_string_from_config("format", table) {
-            builder.format(format);
-        }
 
         builder.windows(HashSet::new());
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(table, &[""], &["%name%"], &[""])?);
 
         Ok(builder.build()?)
     }

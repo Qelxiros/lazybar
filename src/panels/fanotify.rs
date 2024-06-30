@@ -17,8 +17,8 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    draw_common, remove_string_from_config, Attrs, PanelConfig, PanelDrawFn,
-    PanelStream,
+    bar::PanelDrawInfo, draw_common, remove_string_from_config, Attrs,
+    PanelCommon, PanelConfig, PanelStream,
 };
 
 struct FanotifyStream {
@@ -74,7 +74,7 @@ impl Stream for FanotifyStream {
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Fanotify {
     path: String,
-    attrs: Attrs,
+    common: PanelCommon,
 }
 
 impl Fanotify {
@@ -82,13 +82,19 @@ impl Fanotify {
         &self,
         cr: &Rc<cairo::Context>,
         file: &Rc<Mutex<File>>,
-    ) -> Result<((i32, i32), PanelDrawFn)> {
+    ) -> Result<PanelDrawInfo> {
         let mut buf = String::new();
         file.lock().unwrap().read_to_string(&mut buf)?;
         file.lock().unwrap().rewind()?;
-        let text = buf.chars().take_while(|&c| c != '\n').collect::<String>();
+        let text = self.common.formats[0]
+            .replace("%file%", buf.lines().next().unwrap_or(""));
 
-        draw_common(cr, text.as_str(), &self.attrs)
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            &self.common.dependence,
+        )
     }
 }
 
@@ -111,7 +117,9 @@ impl PanelConfig for Fanotify {
             | MaskFlags::FAN_MOVE_SELF;
         fanotify.mark(mark_flags, mask, None, Some(self.path.as_str()))?;
 
-        self.attrs = global_attrs.overlay(self.attrs);
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
 
         let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
         let stream = tokio_stream::once(file.clone())
@@ -123,11 +131,16 @@ impl PanelConfig for Fanotify {
 
     /// Configuration options:
     ///
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%file%`
+    ///   - formatting options: `%file%`
+    ///
     /// - `path`: the file to monitor
     ///   - type: String
     ///   - default: none
     ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - See [`PanelCommon::parse`].
     fn parse(
         table: &mut HashMap<String, Value>,
         _global: &Config,
@@ -136,7 +149,7 @@ impl PanelConfig for Fanotify {
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
         }
-        builder.attrs(Attrs::parse(table, ""));
+        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
 
         Ok(builder.build()?)
     }

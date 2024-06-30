@@ -51,7 +51,7 @@ use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc};
 
 use anyhow::Result;
 pub use attrs::Attrs;
-use bar::{Bar, Panel};
+use bar::{Bar, Panel, PanelDrawInfo};
 use config::{Config, Value};
 pub use csscolorparser::Color;
 use derive_builder::Builder;
@@ -71,8 +71,7 @@ pub mod panels;
 pub type PanelDrawFn = Box<dyn Fn(&cairo::Context) -> Result<()>>;
 /// A stream that produces panel changes when the underlying data source
 /// changes.
-pub type PanelStream =
-    Pin<Box<dyn Stream<Item = Result<((i32, i32), PanelDrawFn)>>>>;
+pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
