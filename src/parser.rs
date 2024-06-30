@@ -5,14 +5,15 @@ use config::{Config, File, FileFormat, Value};
 use lazy_static::lazy_static;
 
 use crate::{
+    builders::BarConfigBuilder,
     get_table_from_config,
     panels::{
         precision::{Days, Hours, Minutes, Seconds},
         Battery, Clock, Cpu, Custom, Fanotify, Inotify, Memory, Mpd, Network,
         Ping, Pulseaudio, Separator, Temp, XWindow, XWorkspaces,
     },
-    remove_string_from_config, Alignment, Attrs, BarConfig, BarConfigBuilder,
-    Margins, PanelConfig, Position,
+    remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
+    PanelConfig, Position,
 };
 
 lazy_static! {
@@ -185,7 +186,7 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
 
 fn parse_panel(
     p: &str,
-    panels_table: &mut HashMap<String, Value>,
+    panels_table: &HashMap<String, Value>,
 ) -> Option<Box<dyn PanelConfig>> {
     if let Some(mut table) = get_table_from_config(p, panels_table) {
         if let Some(s) = remove_string_from_config("type", &mut table) {

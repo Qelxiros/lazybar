@@ -56,7 +56,7 @@ impl Stream for FanotifyStream {
             self.handle = Some(task::spawn_blocking(move || loop {
                 let result = f.read_events();
                 if let Ok(vec) = result {
-                    if vec.iter().any(|e| e.check_version()) {
+                    if vec.iter().any(fanotify::FanotifyEvent::check_version) {
                         waker.wake();
                         break;
                     }

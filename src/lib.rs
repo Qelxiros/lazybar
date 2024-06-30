@@ -52,14 +52,13 @@ use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc};
 use anyhow::Result;
 pub use attrs::Attrs;
 use bar::{Bar, Panel, PanelDrawInfo};
+pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
-use derive_builder::Builder;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 pub use ramp::Ramp;
-use tokio::{runtime::Runtime, task};
-use tokio_stream::{Stream, StreamExt, StreamMap};
+use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
 
@@ -156,106 +155,119 @@ impl Margins {
     }
 }
 
-/// A set of options for a bar.
-#[allow(missing_docs)]
-#[derive(Builder)]
-#[builder(pattern = "owned")]
-pub struct BarConfig {
-    pub name: String,
-    left: Vec<Box<dyn PanelConfig>>,
-    center: Vec<Box<dyn PanelConfig>>,
-    right: Vec<Box<dyn PanelConfig>>,
-    pub position: Position,
-    /// In pixels
-    pub height: u16,
-    pub transparent: bool,
-    pub bg: Color,
-    pub margins: Margins,
-    pub attrs: Attrs,
-}
+/// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
+/// [`panels::builders`][crate::panels::builders] for panel builders.
+pub mod builders {
+    use anyhow::Result;
+    use derive_builder::Builder;
+    use tokio::{runtime::Runtime, task};
+    use tokio_stream::{StreamExt, StreamMap};
 
-impl BarConfig {
-    /// Add a panel to the bar with a given [`Alignment`]. It will appear to the
-    /// right of all other panels with the same alignment.
-    pub fn add_panel(
-        &mut self,
-        panel: Box<dyn PanelConfig>,
-        alignment: Alignment,
-    ) {
-        match alignment {
-            Alignment::Left => self.left.push(panel),
-            Alignment::Center => self.center.push(panel),
-            Alignment::Right => self.right.push(panel),
-        };
+    use crate::{
+        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+    };
+    pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
+
+    /// A set of options for a bar.
+    #[allow(missing_docs)]
+    #[derive(Builder)]
+    #[builder(pattern = "owned")]
+    pub struct BarConfig {
+        pub name: String,
+        left: Vec<Box<dyn PanelConfig>>,
+        center: Vec<Box<dyn PanelConfig>>,
+        right: Vec<Box<dyn PanelConfig>>,
+        pub position: Position,
+        /// In pixels
+        pub height: u16,
+        pub transparent: bool,
+        pub bg: Color,
+        pub margins: Margins,
+        pub attrs: Attrs,
     }
 
-    /// Turn the provided [`BarConfig`] into a [`Bar`] and start the main event
-    /// loop.
-    ///
-    /// # Errors
-    ///
-    /// In the case of unrecoverable runtime errors.
-    pub fn run(self) -> Result<()> {
-        let rt = Runtime::new()?;
-        let local = task::LocalSet::new();
-        local.block_on(&rt, self.run_inner())?;
-        Ok(())
-    }
-
-    #[allow(clippy::future_not_send)]
-    async fn run_inner(self) -> Result<()> {
-        let mut bar = Bar::new(
-            self.name,
-            self.position,
-            self.height,
-            self.transparent,
-            self.bg,
-            self.margins,
-        )?;
-
-        let mut left_panels = StreamMap::with_capacity(self.left.len());
-        for (idx, panel) in self.left.into_iter().enumerate() {
-            bar.left.push(Panel::new(None));
-            left_panels.insert(
-                idx,
-                panel.into_stream(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?,
-            );
+    impl BarConfig {
+        /// Add a panel to the bar with a given [`Alignment`]. It will appear to
+        /// the right of all other panels with the same alignment.
+        pub fn add_panel(
+            &mut self,
+            panel: Box<dyn PanelConfig>,
+            alignment: Alignment,
+        ) {
+            match alignment {
+                Alignment::Left => self.left.push(panel),
+                Alignment::Center => self.center.push(panel),
+                Alignment::Right => self.right.push(panel),
+            };
         }
-        bar.streams.insert(Alignment::Left, left_panels);
 
-        let mut center_panels = StreamMap::with_capacity(self.center.len());
-        for (idx, panel) in self.center.into_iter().enumerate() {
-            bar.center.push(Panel::new(None));
-            center_panels.insert(
-                idx,
-                panel.into_stream(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?,
-            );
+        /// Turn the provided [`BarConfig`] into a [`Bar`] and start the main
+        /// event loop.
+        ///
+        /// # Errors
+        ///
+        /// In the case of unrecoverable runtime errors.
+        pub fn run(self) -> Result<()> {
+            let rt = Runtime::new()?;
+            let local = task::LocalSet::new();
+            local.block_on(&rt, self.run_inner())?;
+            Ok(())
         }
-        bar.streams.insert(Alignment::Center, center_panels);
 
-        let mut right_panels = StreamMap::with_capacity(self.right.len());
-        for (idx, panel) in self.right.into_iter().enumerate() {
-            bar.right.push(Panel::new(None));
-            right_panels.insert(
-                idx,
-                panel.into_stream(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?,
-            );
-        }
-        bar.streams.insert(Alignment::Right, right_panels);
+        #[allow(clippy::future_not_send)]
+        async fn run_inner(self) -> Result<()> {
+            let mut bar = Bar::new(
+                self.name,
+                self.position,
+                self.height,
+                self.transparent,
+                self.bg,
+                self.margins,
+            )?;
 
-        task::spawn_local(async move {
+            let mut left_panels = StreamMap::with_capacity(self.left.len());
+            for (idx, panel) in self.left.into_iter().enumerate() {
+                bar.left.push(Panel::new(None));
+                left_panels.insert(
+                    idx,
+                    panel.into_stream(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )?,
+                );
+            }
+            bar.streams.insert(Alignment::Left, left_panels);
+
+            let mut center_panels = StreamMap::with_capacity(self.center.len());
+            for (idx, panel) in self.center.into_iter().enumerate() {
+                bar.center.push(Panel::new(None));
+                center_panels.insert(
+                    idx,
+                    panel.into_stream(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )?,
+                );
+            }
+            bar.streams.insert(Alignment::Center, center_panels);
+
+            let mut right_panels = StreamMap::with_capacity(self.right.len());
+            for (idx, panel) in self.right.into_iter().enumerate() {
+                bar.right.push(Panel::new(None));
+                right_panels.insert(
+                    idx,
+                    panel.into_stream(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )?,
+                );
+            }
+            bar.streams.insert(Alignment::Right, right_panels);
+
+            task::spawn_local(async move {
             loop {
                 tokio::select! {
                     Ok(Some(event)) = async { bar.conn.poll_for_event() } => {
@@ -280,6 +292,7 @@ impl BarConfig {
             }
         }).await?;
 
-        Ok(())
+            Ok(())
+        }
     }
 }
