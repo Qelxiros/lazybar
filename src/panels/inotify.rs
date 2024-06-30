@@ -91,7 +91,7 @@ impl Inotify {
             cr,
             text.as_str(),
             &self.common.attrs[0],
-            &self.common.dependence,
+            self.common.dependence,
         )
     }
 }

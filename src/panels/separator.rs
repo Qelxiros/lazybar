@@ -29,7 +29,7 @@ impl PanelConfig for Separator {
             &cr,
             self.common.formats[0].as_str(),
             &self.common.attrs[0],
-            &self.common.dependence,
+            self.common.dependence,
         ))))
     }
 

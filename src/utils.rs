@@ -22,7 +22,7 @@ pub fn draw_common(
     cr: &Rc<cairo::Context>,
     text: &str,
     attrs: &Attrs,
-    dependence: &Dependence,
+    dependence: Dependence,
 ) -> Result<PanelDrawInfo> {
     let layout = pangocairo::functions::create_layout(cr);
     layout.set_markup(text);
@@ -32,7 +32,7 @@ pub fn draw_common(
 
     Ok(PanelDrawInfo::new(
         dims,
-        *dependence,
+        dependence,
         Box::new(move |cr| {
             attrs.apply_bg(cr);
             cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
@@ -77,14 +77,14 @@ impl PanelCommon {
 
         let mut formats = Vec::new();
         for (suffix, default) in
-            format_suffixes.into_iter().zip(format_defaults.into_iter())
+            format_suffixes.iter().zip(format_defaults.iter())
         {
             formats.push(
                 remove_string_from_config(
                     format!("format{suffix}").as_str(),
                     table,
                 )
-                .unwrap_or(default.to_string()),
+                .unwrap_or_else(|| (*default).to_string()),
             );
         }
         builder.formats(formats);
@@ -116,7 +116,7 @@ impl PanelCommon {
 /// it into a table
 pub fn get_table_from_config<S: std::hash::BuildHasher>(
     id: &str,
-    table: &mut HashMap<String, Value, S>,
+    table: &HashMap<String, Value, S>,
 ) -> Option<Map<String, Value>> {
     table.get(id).and_then(|val| {
         val.clone().into_table().map_or_else(

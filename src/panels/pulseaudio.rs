@@ -60,7 +60,7 @@ impl Stream for Pulseaudio {
                 let value = handle
                     .poll_unpin(cx)
                     .map(|r| r.map(Result::ok).ok().flatten());
-                if let Poll::Ready(_) = value {
+                if value.is_ready() {
                     self.handle = None;
                 }
                 value
@@ -87,7 +87,7 @@ impl Pulseaudio {
         ramp: Option<&Ramp>,
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
-        dependence: &Dependence,
+        dependence: Dependence,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = data;
         let ramp = match (mute, muted_ramp) {
@@ -176,7 +176,7 @@ impl PanelConfig for Pulseaudio {
                 ramp.as_ref(),
                 muted_ramp.as_ref(),
                 &attrs,
-                &dependence,
+                dependence,
             )
         });
 

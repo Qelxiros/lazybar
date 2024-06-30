@@ -123,13 +123,13 @@ impl Attrs {
     /// as long as they are [`Some`], otherwise choosing them from `new`.
     pub fn apply_to(&mut self, new: &Self) {
         if self.font.is_none() {
-            self.font = new.font.clone();
+            self.font.clone_from(&new.font);
         }
         if self.fg.is_none() {
-            self.fg = new.fg.clone();
+            self.fg.clone_from(&new.fg);
         }
         if self.bg.is_none() {
-            self.bg = new.bg.clone();
+            self.bg.clone_from(&new.bg);
         }
     }
 }

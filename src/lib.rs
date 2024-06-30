@@ -269,7 +269,7 @@ impl BarConfig {
                     },
                     Some((alignment, result)) = bar.streams.next() => {
                         match result {
-                            (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info.into()) {
+                            (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info) {
                                 log::warn!("Error updating {alignment} panel at index {idx}: {e}");
                             }
                             (idx, Err(e)) =>

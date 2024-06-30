@@ -66,6 +66,7 @@ pub struct PanelDrawInfo {
 
 impl PanelDrawInfo {
     /// Creates a new [`PanelDrawInfo`] from its components.
+    #[must_use]
     pub const fn new(
         dims: (i32, i32),
         dependence: Dependence,
@@ -91,25 +92,23 @@ impl BitAnd for PanelStatus {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        if self == PanelStatus::Shown && rhs == PanelStatus::Shown {
-            PanelStatus::Shown
+        if self == Self::Shown && rhs == Self::Shown {
+            Self::Shown
         } else {
-            PanelStatus::ZeroWidth
+            Self::ZeroWidth
         }
     }
 }
 
 impl From<&Panel> for PanelStatus {
     fn from(value: &Panel) -> Self {
-        value
-            .draw_info
-            .as_ref()
-            .map(|d| match (d.dependence, d.width) {
+        value.draw_info.as_ref().map_or(Self::ZeroWidth, |d| {
+            match (d.dependence, d.width) {
                 (Dependence::None, 0) => Self::ZeroWidth,
                 (Dependence::None, _) => Self::Shown,
                 (dep, _) => Self::Dependent(dep),
-            })
-            .unwrap_or(Self::ZeroWidth)
+            }
+        })
     }
 }
 
@@ -209,28 +208,24 @@ impl Bar {
         })
     }
 
-    fn apply_dependence(panels: &Vec<Panel>) -> Vec<PanelStatus> {
+    fn apply_dependence(panels: &[Panel]) -> Vec<PanelStatus> {
         (0..panels.len())
             .map(|idx| match PanelStatus::from(&panels[idx]) {
                 PanelStatus::Shown => PanelStatus::Shown,
                 PanelStatus::ZeroWidth => PanelStatus::ZeroWidth,
                 PanelStatus::Dependent(Dependence::Left) => panels
                     .get(idx - 1)
-                    .map(PanelStatus::from)
-                    .unwrap_or(PanelStatus::ZeroWidth),
+                    .map_or(PanelStatus::ZeroWidth, PanelStatus::from),
                 PanelStatus::Dependent(Dependence::Right) => panels
                     .get(idx + 1)
-                    .map(PanelStatus::from)
-                    .unwrap_or(PanelStatus::ZeroWidth),
+                    .map_or(PanelStatus::ZeroWidth, PanelStatus::from),
                 PanelStatus::Dependent(Dependence::Both) => {
                     panels
                         .get(idx - 1)
-                        .map(PanelStatus::from)
-                        .unwrap_or(PanelStatus::ZeroWidth)
+                        .map_or(PanelStatus::ZeroWidth, PanelStatus::from)
                         & panels
                             .get(idx + 1)
-                            .map(PanelStatus::from)
-                            .unwrap_or(PanelStatus::ZeroWidth)
+                            .map_or(PanelStatus::ZeroWidth, PanelStatus::from)
                 }
                 PanelStatus::Dependent(Dependence::None) => unreachable!(),
             })
@@ -521,7 +516,7 @@ impl Bar {
 
         self.extents.left = self.margins.left;
 
-        let statuses = Self::apply_dependence(&self.left);
+        let statuses = Self::apply_dependence(self.left.as_slice());
 
         for panel in self
             .left
@@ -557,7 +552,7 @@ impl Bar {
             self.redraw_background(&Region::CenterRight)?;
         }
 
-        let center_statuses = Self::apply_dependence(&self.center);
+        let center_statuses = Self::apply_dependence(self.center.as_slice());
 
         let center_panels = self
             .center
@@ -569,7 +564,7 @@ impl Bar {
             .map(|(_, panel)| panel)
             .collect::<Vec<_>>();
 
-        let right_statuses = Self::apply_dependence(&self.right);
+        let right_statuses = Self::apply_dependence(self.right.as_slice());
 
         let right_panels = self
             .right
@@ -661,8 +656,8 @@ impl Bar {
             self.redraw_background(&Region::Right)?;
         }
 
-        let statuses =
-            statuses.unwrap_or_else(|| Self::apply_dependence(&self.right));
+        let statuses = statuses
+            .unwrap_or_else(|| Self::apply_dependence(self.right.as_slice()));
 
         let total_width = f64::from(
             self.right

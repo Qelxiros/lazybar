@@ -60,7 +60,7 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
         .with_context(|| format!("`{bar_name}` isn't a table"))?;
 
     let mut bar = BarConfigBuilder::default()
-        .name(String::from(bar_name))
+        .name(bar_name)
         .position(
             match bar_table
                 .remove("position")
@@ -124,9 +124,8 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
 
     let panels_left = bar_table.remove("panels_left");
     if let Some(pl) = panels_left {
-        let panel_list = pl
-            .into_array()
-            .with_context(|| format!("`panels_left` isn't an array"))?;
+        let panel_list =
+            pl.into_array().context("`panels_left` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
                 left_final.push(name);
@@ -138,9 +137,8 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
 
     let panels_center = bar_table.remove("panels_center");
     if let Some(pc) = panels_center {
-        let panel_list = pc
-            .into_array()
-            .with_context(|| format!("`panels_center` isn't an array"))?;
+        let panel_list =
+            pc.into_array().context("`panels_center` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
                 center_final.push(name);
@@ -154,9 +152,8 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
 
     let panels_right = bar_table.remove("panels_right");
     if let Some(pr) = panels_right {
-        let panel_list = pr
-            .into_array()
-            .with_context(|| format!("`panels_right` isn't an array"))?;
+        let panel_list =
+            pr.into_array().context("`panels_right` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
                 right_final.push(name);

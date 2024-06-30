@@ -78,7 +78,7 @@ impl Ping {
             cr,
             text.as_str(),
             &self.common.attrs[0],
-            &self.common.dependence,
+            self.common.dependence,
         )
     }
 }
@@ -206,12 +206,13 @@ fn ping(
         }
     }
     pinger.stop_pinger();
+    drop(pinger);
 
-    if !results.is_empty() {
+    if results.is_empty() {
+        Err(anyhow!("No connection"))
+    } else {
         Ok((results.iter().sum::<Duration>() / results.len() as u32)
             .as_millis())
-    } else {
-        Err(anyhow!("No connection"))
     }
 }
 

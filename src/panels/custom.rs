@@ -81,7 +81,7 @@ impl Custom {
             cr,
             text.trim(),
             &self.common.attrs[0],
-            &self.common.dependence,
+            self.common.dependence,
         )
     }
 }
