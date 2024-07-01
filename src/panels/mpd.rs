@@ -20,6 +20,7 @@ use tokio::{
     time::{self, interval, Interval},
 };
 use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     bar::PanelDrawInfo, remove_bool_from_config, remove_color_from_config,
@@ -120,21 +121,26 @@ impl Mpd {
             Strategy::Scroll { interval: _ } => {
                 if event == EventType::Scroll {
                     self.scroll_idx = (self.scroll_idx + 1)
-                        % (text.len() + self.scroll_separator.len());
+                        % (text.graphemes(true).count()
+                            + self.scroll_separator.len());
                 }
-                let scrolling =
-                    self.max_width > 0 && text.len() > self.max_width;
+                let scrolling = self.max_width > 0
+                    && text.graphemes(true).count() > self.max_width;
                 if scrolling {
                     text.push_str(self.scroll_separator.as_str());
                 }
-                match (scrolling, self.scroll_idx > text.len() - self.max_width)
-                {
+                match (
+                    scrolling,
+                    self.scroll_idx
+                        > text.graphemes(true).count() - self.max_width,
+                ) {
                     (false, _) => {
                         layout.set_text(text.as_str());
                     }
                     (true, false) => {
                         layout.set_text(
-                            text.chars()
+                            text.as_str()
+                                .graphemes(true)
                                 .skip(self.scroll_idx)
                                 .take(self.max_width)
                                 .collect::<String>()
@@ -145,13 +151,16 @@ impl Mpd {
                         layout.set_text(
                             format!(
                                 "{}{}",
-                                text.chars()
+                                text.as_str()
+                                    .graphemes(true)
                                     .skip(self.scroll_idx)
                                     .collect::<String>(),
-                                text.chars()
+                                text.as_str()
+                                    .graphemes(true)
                                     .take(
                                         self.max_width
-                                            - (text.len() - self.scroll_idx)
+                                            - (text.graphemes(true).count()
+                                                - self.scroll_idx)
                                     )
                                     .collect::<String>()
                             )
@@ -170,7 +179,10 @@ impl Mpd {
             Strategy::Truncate => {
                 layout.set_markup(
                     if self.max_width > 0 {
-                        text.chars().take(self.max_width).collect::<String>()
+                        text.as_str()
+                            .graphemes(true)
+                            .take(self.max_width)
+                            .collect::<String>()
                     } else {
                         text.clone()
                     }
@@ -188,8 +200,8 @@ impl Mpd {
                 * size.0 as f64;
             if let Strategy::Ellipsize(_) = self.strategy {
             } else {
-                let char_width =
-                    size.0 as f64 / text.len().min(self.max_width) as f64;
+                let char_width = size.0 as f64
+                    / text.graphemes(true).count().min(self.max_width) as f64;
                 self.last_progress_width =
                     (self.last_progress_width / char_width).round()
                         * char_width;
