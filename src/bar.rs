@@ -640,7 +640,6 @@ impl Bar {
 
         let statuses = statuses
             .unwrap_or_else(|| Self::apply_dependence(self.right.as_slice()));
-        println!("{statuses:?}");
 
         let total_width = f64::from(
             self.right

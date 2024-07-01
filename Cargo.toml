@@ -8,7 +8,7 @@ description = "A lightweight, event-driven X11 status bar"
 readme = "README.md"
 repository = "https://github.com/Qelxiros/lazybar"
 license = "MIT"
-keywords = ["X11","WM","Linux","taskbar","i3"]
+keywords = ["X11","WM","Linux","status-bar","i3"]
 
 [dependencies]
 anyhow = "1.0.86"
