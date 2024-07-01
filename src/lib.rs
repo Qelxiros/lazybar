@@ -169,20 +169,32 @@ pub mod builders {
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
     /// A set of options for a bar.
-    #[allow(missing_docs)]
     #[derive(Builder)]
+    #[builder_struct_attr(allow(missing_docs))]
+    #[builder_impl_attr(allow(missing_docs))]
     #[builder(pattern = "owned")]
     pub struct BarConfig {
+        /// The bar name to look for in the config file
         pub name: String,
         left: Vec<Box<dyn PanelConfig>>,
         center: Vec<Box<dyn PanelConfig>>,
         right: Vec<Box<dyn PanelConfig>>,
+        /// Whether the bar should be rendered at the top or bottom of the
+        /// screen
         pub position: Position,
         /// In pixels
         pub height: u16,
+        /// Whether the bar can be transparent. The background color still
+        /// applies!
         pub transparent: bool,
+        /// The background color. Supports transparency if `transparent` is
+        /// true.
         pub bg: Color,
+        /// The minimum gaps between the edges of the screen and panel
+        /// sections. See [`Margins`] for details.
         pub margins: Margins,
+        /// The default attributes of panels on the bar. See [`Attrs`] for
+        /// details.
         pub attrs: Attrs,
     }
 
