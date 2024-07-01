@@ -422,13 +422,10 @@ impl Bar {
             }
             Alignment::Center => {
                 self.cr.save()?;
-                let offset = f64::from(
-                    self.center
-                        .iter()
-                        .take(idx)
-                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
-                        .sum::<i32>(),
-                );
+                let panel = self
+                    .center
+                    .get(idx)
+                    .expect("one or more panels have vanished");
 
                 if let Some(draw_info) = &self
                     .center
@@ -437,16 +434,10 @@ impl Bar {
                     .draw_info
                 {
                     self.redraw_background(&Region::Custom {
-                        start_x: self.extents.center.0 + offset,
-                        end_x: self.extents.center.0
-                            + offset
-                            + f64::from(draw_info.width),
+                        start_x: panel.x,
+                        end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(
-                        self.extents.center.0 + offset,
-                        f64::from(i32::from(self.height) - draw_info.height)
-                            / 2.0,
-                    );
+                    self.cr.translate(panel.x, panel.y);
                     (draw_info.draw_fn)(&self.cr)?;
                 }
 
@@ -458,13 +449,10 @@ impl Bar {
             }
             Alignment::Right => {
                 self.cr.save()?;
-                let offset = f64::from(
-                    self.right
-                        .iter()
-                        .take(idx)
-                        .filter_map(|p| p.draw_info.as_ref().map(|i| i.width))
-                        .sum::<i32>(),
-                );
+                let panel = self
+                    .right
+                    .get(idx)
+                    .expect("one or more panels have vanished");
 
                 if let Some(draw_info) = &self
                     .right
@@ -473,16 +461,10 @@ impl Bar {
                     .draw_info
                 {
                     self.redraw_background(&Region::Custom {
-                        start_x: self.extents.right + offset,
-                        end_x: self.extents.right
-                            + offset
-                            + f64::from(draw_info.width),
+                        start_x: panel.x,
+                        end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(
-                        self.extents.right + offset,
-                        f64::from(i32::from(self.height) - draw_info.height)
-                            / 2.0,
-                    );
+                    self.cr.translate(panel.x, panel.y);
                     (draw_info.draw_fn)(&self.cr)?;
                 }
 
@@ -658,6 +640,7 @@ impl Bar {
 
         let statuses = statuses
             .unwrap_or_else(|| Self::apply_dependence(self.right.as_slice()));
+        println!("{statuses:?}");
 
         let total_width = f64::from(
             self.right
