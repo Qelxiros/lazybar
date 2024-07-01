@@ -34,14 +34,15 @@ enum Strategy {
     Truncate,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 enum EventType {
     Player,
     Scroll,
     Progress,
 }
 
-/// Displays information about music currently playing through [MPD](https://musicpd.org)
+/// Displays information about music currently playing through
+/// [MPD](https://musicpd.org)
 #[derive(Builder, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
@@ -210,7 +211,12 @@ impl Mpd {
                     progress_bg.b,
                     progress_bg.a,
                 );
-                cr.rectangle(0.0, 0.0, bar_width, f64::from(height));
+                cr.rectangle(
+                    0.0,
+                    0.0,
+                    bar_width.min(size.0 as f64),
+                    f64::from(height),
+                );
                 cr.fill()?;
 
                 cr.translate(0.0, f64::from(height - size.1) / 2.0);
