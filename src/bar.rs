@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::BitAnd, rc::Rc};
+use std::{fmt::Debug, ops::BitAnd, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use csscolorparser::Color;
@@ -150,7 +150,7 @@ impl Panel {
 pub struct Bar {
     name: String,
     position: Position,
-    pub(crate) conn: xcb::Connection,
+    pub(crate) conn: Arc<xcb::Connection>,
     screen: i32,
     window: x::Window,
     surface: cairo::XCBSurface,
@@ -197,7 +197,7 @@ impl Bar {
         Ok(Self {
             name,
             position,
-            conn,
+            conn: Arc::new(conn),
             screen,
             window,
             surface,

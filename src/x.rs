@@ -1,12 +1,58 @@
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{self, Poll},
+};
+
 use anyhow::{Context, Result};
 use cairo::{XCBConnection, XCBSurface};
 use csscolorparser::Color;
+use futures::FutureExt;
+use tokio::task::JoinHandle;
+use tokio_stream::Stream;
 use xcb::{
     x::{self, Visualtype, Window},
     Connection, Xid,
 };
 
 use crate::Position;
+
+pub struct XStream {
+    conn: Arc<xcb::Connection>,
+    handle: Option<JoinHandle<Result<xcb::Event>>>,
+}
+
+impl XStream {
+    pub const fn new(conn: Arc<xcb::Connection>) -> Self {
+        Self { conn, handle: None }
+    }
+}
+
+impl Stream for XStream {
+    type Item = Result<xcb::Event>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        if let Some(handle) = &mut self.handle {
+            let value = handle.poll_unpin(cx).map(Result::ok);
+            if handle.is_finished() {
+                self.handle = None;
+            }
+            value
+        } else {
+            let conn = self.conn.clone();
+            let waker = cx.waker().clone();
+            self.handle = Some(tokio::task::spawn_blocking(move || {
+                let event = conn.wait_for_event();
+                waker.wake();
+                Ok(event?)
+            }));
+            Poll::Pending
+        }
+    }
+}
 
 pub fn intern_named_atom(
     conn: &xcb::Connection,
@@ -119,7 +165,9 @@ pub fn create_window(
         value_list: &[
             x::Cw::BackPixel(bg),
             x::Cw::BorderPixel(bg),
-            x::Cw::EventMask(x::EventMask::EXPOSURE),
+            x::Cw::EventMask(
+                x::EventMask::EXPOSURE | x::EventMask::BUTTON_PRESS,
+            ),
             x::Cw::Colormap(colormap),
         ],
     }))?;

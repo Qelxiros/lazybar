@@ -170,7 +170,8 @@ pub mod builders {
     use tokio_stream::{StreamExt, StreamMap};
 
     use crate::{
-        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        x::XStream, Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig,
+        Position,
     };
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
@@ -282,30 +283,32 @@ pub mod builders {
             }
             bar.streams.insert(Alignment::Right, right_panels);
 
+            let mut x_stream = XStream::new(bar.conn.clone());
+
             task::spawn_local(async move {
-            loop {
-                tokio::select! {
-                    Ok(Some(event)) = async { bar.conn.poll_for_event() } => {
-                        if let Err(e) = bar.process_event(&event) {
-                            log::warn!("X event caused an error: {e}");
-                            // close when X server does
-                            // this could cause problems, maybe only exit under certain
-                            // circumstances?
-                            std::process::exit(0);
-                        }
-                    },
-                    Some((alignment, result)) = bar.streams.next() => {
-                        match result {
-                            (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info) {
-                                log::warn!("Error updating {alignment} panel at index {idx}: {e}");
+                loop {
+                    tokio::select! {
+                        Some(Ok(event)) = x_stream.next() => {
+                            if let Err(e) = bar.process_event(&event) {
+                                log::warn!("X event caused an error: {e}");
+                                // close when X server does
+                                // this could cause problems, maybe only exit under certain
+                                // circumstances?
+                                std::process::exit(0);
                             }
-                            (idx, Err(e)) =>
-                                log::warn!("Error produced by {alignment} panel at index {idx:?}: {e}"),
-                        }
-                    },
+                        },
+                        Some((alignment, result)) = bar.streams.next() => {
+                            match result {
+                                (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info) {
+                                    log::warn!("Error updating {alignment} panel at index {idx}: {e}");
+                                }
+                                (idx, Err(e)) =>
+                                    log::warn!("Error produced by {alignment} panel at index {idx:?}: {e}"),
+                            }
+                        },
+                    }
                 }
-            }
-        }).await?;
+            }).await?;
 
             Ok(())
         }
