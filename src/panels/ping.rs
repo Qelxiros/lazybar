@@ -13,6 +13,7 @@ use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
 use futures::FutureExt;
 use tokio::{
+    sync::mpsc::Sender,
     task::{self, JoinHandle},
     time::{interval, Interval},
 };
@@ -33,6 +34,7 @@ use crate::{
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Ping {
+    name: &'static str,
     address: String,
     #[builder(default = "Some(Duration::from_secs(60))")]
     interval: Option<Duration>,
@@ -84,34 +86,6 @@ impl Ping {
 }
 
 impl PanelConfig for Ping {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        let (pinger, recv) = Pinger::new(None, None).map_err(|s| anyhow!(s))?;
-
-        pinger.add_ipaddr(self.address.as_str());
-        let recv = Arc::new(Mutex::new(recv));
-        let pinger = Arc::new(Mutex::new(pinger));
-
-        let stream = PingStream {
-            pings: self.pings,
-            pinger,
-            recv,
-            interval: self.interval.map(interval),
-            handle: None,
-        }
-        .map(move |ping| self.draw(&cr, ping));
-
-        Ok(Box::pin(stream))
-    }
-
     /// Configuration options:
     ///
     /// - `address`: the IP address to ping
@@ -138,10 +112,13 @@ impl PanelConfig for Ping {
     ///   - default: 2000
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, config::Value>,
         global: &Config,
     ) -> Result<Self> {
         let mut builder = PingBuilder::default();
+
+        builder.name(name);
         if let Some(address) = remove_string_from_config("address", table) {
             builder.address(address);
         } else {
@@ -171,6 +148,38 @@ impl PanelConfig for Ping {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let (pinger, recv) = Pinger::new(None, None).map_err(|s| anyhow!(s))?;
+
+        pinger.add_ipaddr(self.address.as_str());
+        let recv = Arc::new(Mutex::new(recv));
+        let pinger = Arc::new(Mutex::new(pinger));
+
+        let stream = PingStream {
+            pings: self.pings,
+            pinger,
+            recv,
+            interval: self.interval.map(interval),
+            handle: None,
+        }
+        .map(move |ping| self.draw(&cr, ping));
+
+        Ok((Box::pin(stream), None))
     }
 }
 

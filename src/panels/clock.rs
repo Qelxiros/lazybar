@@ -3,6 +3,7 @@ use std::{
     marker::PhantomData,
     pin::Pin,
     rc::Rc,
+    sync::Mutex,
     task::{Context, Poll},
     time::Duration,
 };
@@ -12,8 +13,11 @@ use chrono::{Local, Timelike};
 use config::{Config, Value};
 use derive_builder::Builder;
 use precision::*;
-use tokio::time::{interval, Instant, Interval};
-use tokio_stream::{Stream, StreamExt};
+use tokio::{
+    sync::mpsc::{channel, Sender},
+    time::{interval, Instant, Interval},
+};
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
     bar::PanelDrawInfo, draw_common, Attrs, PanelCommon, PanelConfig,
@@ -117,7 +121,9 @@ impl Stream for ClockStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Clock<P: Clone + Precision> {
+    name: &'static str,
     common: PanelCommon,
+    format_idx: Rc<Mutex<(usize, usize)>>,
     #[builder(default)]
     phantom: PhantomData<P>,
 }
@@ -125,7 +131,9 @@ pub struct Clock<P: Clone + Precision> {
 impl<P: Precision + Clone> Clock<P> {
     fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
         let now = chrono::Local::now();
-        let text = now.format(&self.common.formats[0]).to_string();
+        let text = now
+            .format(&self.common.formats[self.format_idx.lock().unwrap().0])
+            .to_string();
 
         draw_common(
             cr,
@@ -134,41 +142,77 @@ impl<P: Precision + Clone> Clock<P> {
             self.common.dependence,
         )
     }
+
+    fn process_event(idx: Rc<Mutex<(usize, usize)>>, event: &'static str) {
+        match event {
+            "cycle" => {
+                let mut idx = idx.lock().unwrap();
+                *idx = ((idx.0 + 1) % idx.1, idx.1);
+            }
+            "cycle_back" => {
+                let mut idx = idx.lock().unwrap();
+                *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
+            }
+            _ => {}
+        }
+    }
 }
 
 impl<P> PanelConfig for Clock<P>
 where
     P: Precision + Clone + 'static,
 {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-        let stream = ClockStream::new(P::tick).map(move |_| self.draw(&cr));
-        Ok(Box::pin(stream))
-    }
-
     /// Configuration options:
     ///
-    /// - See [`PanelCommon::parse`].
+    /// - See [`PanelCommon::parse_variadic`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = ClockBuilder::default();
 
-        builder.common(PanelCommon::parse(
+        builder.name(name);
+        builder.common(PanelCommon::parse_variadic(
             table,
-            &[""],
             &["%Y-%m-%d %T"],
             &[""],
         )?);
+        builder.format_idx(Rc::new(Mutex::new((
+            0,
+            builder.common.as_ref().unwrap().formats.len(),
+        ))));
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let idx = self.format_idx.clone();
+        let (send, recv) = channel(16);
+        let mut map =
+            StreamMap::<usize, Pin<Box<dyn Stream<Item = ()>>>>::new();
+        map.insert(
+            0,
+            Box::pin(
+                ReceiverStream::new(recv)
+                    .map(move |s| Self::process_event(idx.clone(), s)),
+            ),
+        );
+        map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| ())));
+
+        Ok((Box::pin(map.map(move |_| self.draw(&cr))), Some(send)))
     }
 }

@@ -13,7 +13,10 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::fanotify::{self, EventFFlags, InitFlags, MarkFlags, MaskFlags};
-use tokio::task::{self, JoinHandle};
+use tokio::{
+    sync::mpsc::Sender,
+    task::{self, JoinHandle},
+};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
@@ -73,6 +76,7 @@ impl Stream for FanotifyStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Fanotify {
+    name: &'static str,
     path: String,
     common: PanelCommon,
 }
@@ -99,12 +103,44 @@ impl Fanotify {
 }
 
 impl PanelConfig for Fanotify {
-    fn into_stream(
+    /// Configuration options:
+    ///
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%file%`
+    ///   - formatting options: `%file%`
+    ///
+    /// - `path`: the file to monitor
+    ///   - type: String
+    ///   - default: none
+    ///
+    /// - See [`PanelCommon::parse`].
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = FanotifyBuilder::default();
+
+        builder.name(name);
+        if let Some(path) = remove_string_from_config("path", table) {
+            builder.path(path);
+        }
+        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
+
+        Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<PanelStream> {
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
         // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
         // doesn't know that it's real
         let init_flags = InitFlags::from_bits_retain(0x00000200);
@@ -126,31 +162,6 @@ impl PanelConfig for Fanotify {
             .chain(FanotifyStream::new(fanotify, file))
             .map(move |f| self.draw(&cr, &f));
 
-        Ok(Box::pin(stream))
-    }
-
-    /// Configuration options:
-    ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `%file%`
-    ///   - formatting options: `%file%`
-    ///
-    /// - `path`: the file to monitor
-    ///   - type: String
-    ///   - default: none
-    ///
-    /// - See [`PanelCommon::parse`].
-    fn parse(
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = FanotifyBuilder::default();
-        if let Some(path) = remove_string_from_config("path", table) {
-            builder.path(path);
-        }
-        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
-
-        Ok(builder.build()?)
+        Ok((Box::pin(stream), None))
     }
 }

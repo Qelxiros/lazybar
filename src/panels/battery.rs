@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 use anyhow::Result;
 use config::Config;
 use derive_builder::Builder;
-use tokio::time::interval;
+use tokio::{sync::mpsc::Sender, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
 #[builder_impl_attr(allow(missing_docs))]
 #[allow(dead_code)]
 pub struct Battery {
+    name: &'static str,
     #[builder(default = r#"String::from("BAT0")"#)]
     battery: String,
     #[builder(default = r#"String::from("AC")"#)]
@@ -67,22 +68,6 @@ impl Battery {
 }
 
 impl PanelConfig for Battery {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr));
-
-        Ok(Box::pin(stream))
-    }
-
     /// Parses an instance of the panel from the global [`Config`]
     ///
     /// Configuration options:
@@ -126,10 +111,13 @@ impl PanelConfig for Battery {
     ///
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = BatteryBuilder::default();
+
+        builder.name(name);
         if let Some(battery) = remove_string_from_config("battery", table) {
             builder.battery(battery);
         }
@@ -159,5 +147,25 @@ impl PanelConfig for Battery {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let stream = IntervalStream::new(interval(self.duration))
+            .map(move |_| self.draw(&cr));
+
+        Ok((Box::pin(stream), None))
     }
 }

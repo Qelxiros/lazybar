@@ -2,12 +2,12 @@ use std::{fs::File, io::Read, rc::Rc, time::Duration};
 
 use anyhow::Result;
 use derive_builder::Builder;
-use tokio::time::interval;
+use tokio::{sync::mpsc::Sender, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
     bar::PanelDrawInfo, draw_common, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig,
+    PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -18,6 +18,7 @@ use crate::{
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Temp {
+    name: &'static str,
     #[builder(default = "0")]
     zone: usize,
     #[builder(default = "Duration::from_secs(10)")]
@@ -49,22 +50,6 @@ impl Temp {
 }
 
 impl PanelConfig for Temp {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<crate::PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr));
-
-        Ok(Box::pin(stream))
-    }
-
     /// Configuration options:
     ///
     /// - `format`: the format string
@@ -79,11 +64,13 @@ impl PanelConfig for Temp {
     ///   - default: 0
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut std::collections::HashMap<String, config::Value>,
         _global: &config::Config,
     ) -> Result<Self> {
         let mut builder = TempBuilder::default();
 
+        builder.name(name);
         if let Some(interval) = remove_uint_from_config("interval", table) {
             builder.interval(Duration::from_secs(interval));
         }
@@ -98,5 +85,25 @@ impl PanelConfig for Temp {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let stream = IntervalStream::new(interval(self.interval))
+            .map(move |_| self.draw(&cr));
+
+        Ok((Box::pin(stream), None))
     }
 }

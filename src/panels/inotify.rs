@@ -13,7 +13,10 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
-use tokio::task::{self, JoinHandle};
+use tokio::{
+    sync::mpsc::Sender,
+    task::{self, JoinHandle},
+};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
@@ -71,6 +74,7 @@ impl Stream for InotifyStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Inotify {
+    name: &'static str,
     path: String,
     common: PanelCommon,
 }
@@ -97,12 +101,44 @@ impl Inotify {
 }
 
 impl PanelConfig for Inotify {
-    fn into_stream(
+    /// Configuration options:
+    ///
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%file%`
+    ///   - formatting options: `%file%`
+    ///
+    /// - `path`: the file to monitor
+    ///   - type: String
+    ///   - default: none
+    ///
+    /// - See [`PanelCommon::parse`].
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = InotifyBuilder::default();
+
+        builder.name(name);
+        if let Some(path) = remove_string_from_config("path", table) {
+            builder.path(path);
+        }
+        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
+
+        Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<PanelStream> {
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
         let init_flags = InitFlags::empty();
         let inotify = inotify::Inotify::init(init_flags)?;
 
@@ -118,31 +154,6 @@ impl PanelConfig for Inotify {
             .chain(InotifyStream::new(inotify, file))
             .map(move |f| self.draw(&cr, &f));
 
-        Ok(Box::pin(stream))
-    }
-
-    /// Configuration options:
-    ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `%file%`
-    ///   - formatting options: `%file%`
-    ///
-    /// - `path`: the file to monitor
-    ///   - type: String
-    ///   - default: none
-    ///
-    /// - See [`PanelCommon::parse`].
-    fn parse(
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = InotifyBuilder::default();
-        if let Some(path) = remove_string_from_config("path", table) {
-            builder.path(path);
-        }
-        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
-
-        Ok(builder.build()?)
+        Ok((Box::pin(stream), None))
     }
 }

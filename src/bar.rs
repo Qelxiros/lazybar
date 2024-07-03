@@ -2,6 +2,7 @@ use std::{fmt::Debug, ops::BitAnd, rc::Rc};
 
 use anyhow::Result;
 use csscolorparser::Color;
+use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamMap;
 use xcb::{x, Event};
 
@@ -120,16 +121,26 @@ pub struct Panel {
     pub x: f64,
     /// The current y-coordinate of the panel
     pub y: f64,
+    /// The name of the panel (taken from the name of the toml table that
+    /// defines it)
+    pub name: &'static str,
+    sender: Option<Sender<&'static str>>,
 }
 
 impl Panel {
     /// Create a new panel.
     #[must_use]
-    pub const fn new(draw_info: Option<PanelDrawInfo>) -> Self {
+    pub const fn new(
+        draw_info: Option<PanelDrawInfo>,
+        name: &'static str,
+        sender: Option<Sender<&'static str>>,
+    ) -> Self {
         Self {
             draw_info,
             x: 0.0,
             y: 0.0,
+            name,
+            sender,
         }
     }
 }

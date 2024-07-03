@@ -58,6 +58,7 @@ pub use csscolorparser::Color;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 pub use ramp::Ramp;
+use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
@@ -75,26 +76,31 @@ pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
 pub trait PanelConfig {
+    /// Parses an instance of this type from a subset of the global [`Config`].
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        global: &Config,
+    ) -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Returns the name of the panel. If the panel supports events, each
+    /// instance must return a unique name.
+    fn name(&self) -> &'static str;
+
     /// Performs any necessary setup, then returns a [`PanelStream`]
     /// representing the provided [`PanelConfig`].
     ///
     /// # Errors
     ///
     /// If the process of creating a [`PanelStream`] fails.
-    fn into_stream(
+    fn run(
         self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<PanelStream>;
-
-    /// Parses an instance of this type from a subset of the global [`Config`].
-    fn parse(
-        table: &mut HashMap<String, Value>,
-        global: &Config,
-    ) -> Result<Self>
-    where
-        Self: Sized;
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)>;
 }
 
 /// Describes where on the screen the bar should appear.
@@ -239,43 +245,40 @@ pub mod builders {
 
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
-                bar.left.push(Panel::new(None));
-                left_panels.insert(
-                    idx,
-                    panel.into_stream(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
-                    )?,
-                );
+                let name = panel.name();
+                let (stream, sender) = panel.run(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?;
+                bar.left.push(Panel::new(None, name, sender));
+                left_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Left, left_panels);
 
             let mut center_panels = StreamMap::with_capacity(self.center.len());
             for (idx, panel) in self.center.into_iter().enumerate() {
-                bar.center.push(Panel::new(None));
-                center_panels.insert(
-                    idx,
-                    panel.into_stream(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
-                    )?,
-                );
+                let name = panel.name();
+                let (stream, sender) = panel.run(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?;
+                bar.center.push(Panel::new(None, name, sender));
+                center_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Center, center_panels);
 
             let mut right_panels = StreamMap::with_capacity(self.right.len());
             for (idx, panel) in self.right.into_iter().enumerate() {
-                bar.right.push(Panel::new(None));
-                right_panels.insert(
-                    idx,
-                    panel.into_stream(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
-                    )?,
-                );
+                let name = panel.name();
+                let (stream, sender) = panel.run(
+                    bar.cr.clone(),
+                    self.attrs.clone(),
+                    i32::from(self.height),
+                )?;
+                bar.right.push(Panel::new(None, name, sender));
+                right_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Right, right_panels);
 

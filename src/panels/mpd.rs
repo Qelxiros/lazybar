@@ -16,10 +16,14 @@ use mpd::{Client, Idle, State, Subsystem};
 use pango::EllipsizeMode;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
+    sync::mpsc::{channel, Sender},
     task::{self, JoinHandle},
     time::{self, interval, Interval},
 };
-use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
+use tokio_stream::{
+    wrappers::{IntervalStream, ReceiverStream},
+    Stream, StreamExt, StreamMap,
+};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -40,6 +44,7 @@ enum EventType {
     Player,
     Scroll,
     Progress,
+    Action,
 }
 
 /// Displays information about music currently playing through
@@ -48,6 +53,7 @@ enum EventType {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Mpd {
+    name: &'static str,
     conn: Arc<Mutex<Client>>,
     noidle_conn: Arc<Mutex<Client>>,
     #[builder(setter(strip_option))]
@@ -241,57 +247,46 @@ impl Mpd {
             }),
         ))
     }
+
+    fn process_event(
+        event: &'static str,
+        conn: Arc<Mutex<Client>>,
+    ) -> Result<()> {
+        Ok(match event {
+            "next" => conn.lock().unwrap().next(),
+            "prev" => conn.lock().unwrap().prev(),
+            "play" => conn.lock().unwrap().play(),
+            "pause" => conn.lock().unwrap().pause(true),
+            "toggle" => conn.lock().unwrap().toggle_pause(),
+            "repeat" => {
+                let mut conn = conn.lock().unwrap();
+                let repeat = conn.status()?.repeat;
+                conn.repeat(!repeat)
+            }
+            "random" => {
+                let mut conn = conn.lock().unwrap();
+                let random = conn.status()?.random;
+                conn.random(!random)
+            }
+            "single" => {
+                let mut conn = conn.lock().unwrap();
+                let single = conn.status()?.single;
+                conn.single(!single)
+            }
+            "consume" => {
+                let mut conn = conn.lock().unwrap();
+                let consume = conn.status()?.consume;
+                conn.consume(!consume)
+            }
+            event => {
+                log::warn!("Unknown event {event}");
+                Ok(())
+            }
+        }?)
+    }
 }
 
 impl PanelConfig for Mpd {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        height: i32,
-    ) -> Result<PanelStream> {
-        let mut map = StreamMap::<
-            EventType,
-            Pin<Box<dyn Stream<Item = Result<()>>>>,
-        >::new();
-        map.insert(
-            EventType::Player,
-            Box::pin(tokio_stream::once(Ok(())).chain(MpdStream {
-                conn: self.conn.clone(),
-                handle: None,
-            })),
-        );
-        if self.progress_bar {
-            map.insert(
-                EventType::Progress,
-                Box::pin(HighlightStream {
-                    interval: time::interval(Duration::from_secs(10)),
-                    song_length: None,
-                    song_elapsed: None,
-                    max_width: self.max_width,
-                    conn: self.highlight_conn.clone().unwrap(),
-                    noidle_conn: self.noidle_conn.clone(),
-                    handle: None,
-                    stale: Arc::new(Mutex::new(true)),
-                    playing: true,
-                }),
-            );
-        }
-        if let Strategy::Scroll { interval: i } = self.strategy {
-            map.insert(
-                EventType::Scroll,
-                Box::pin(IntervalStream::new(interval(i)).map(|_| Ok(()))),
-            );
-        }
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-        Ok(Box::pin(map.map(move |(t, r)| {
-            r?;
-            self.draw(&cr, height, t)
-        })))
-    }
-
     /// Configuration options:
     ///
     /// - `address`: the address of the MPD server to which the panel will
@@ -329,10 +324,13 @@ impl PanelConfig for Mpd {
     ///   - default: end
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = MpdBuilder::default();
+
+        builder.name(name);
 
         let mut final_address = String::from("127.0.0.1:6600");
         if let Some(address) = remove_string_from_config("address", table) {
@@ -396,6 +394,76 @@ impl PanelConfig for Mpd {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        let mut map = StreamMap::<
+            EventType,
+            Pin<Box<dyn Stream<Item = Result<()>>>>,
+        >::new();
+
+        map.insert(
+            EventType::Player,
+            Box::pin(tokio_stream::once(Ok(())).chain(MpdStream {
+                conn: self.conn.clone(),
+                handle: None,
+            })),
+        );
+
+        if self.progress_bar {
+            map.insert(
+                EventType::Progress,
+                Box::pin(HighlightStream {
+                    interval: time::interval(Duration::from_secs(10)),
+                    song_length: None,
+                    song_elapsed: None,
+                    max_width: self.max_width,
+                    conn: self.highlight_conn.clone().unwrap(),
+                    noidle_conn: self.noidle_conn.clone(),
+                    handle: None,
+                    stale: Arc::new(Mutex::new(true)),
+                    playing: true,
+                }),
+            );
+        }
+
+        if let Strategy::Scroll { interval: i } = self.strategy {
+            map.insert(
+                EventType::Scroll,
+                Box::pin(IntervalStream::new(interval(i)).map(|_| Ok(()))),
+            );
+        }
+
+        let (send, recv) = channel(16);
+        let conn = self.noidle_conn.clone();
+        map.insert(
+            EventType::Action,
+            Box::pin(
+                ReceiverStream::new(recv)
+                    .map(move |s| Self::process_event(s, conn.clone())),
+            ),
+        );
+
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        Ok((
+            Box::pin(map.map(move |(t, r)| {
+                r?;
+                self.draw(&cr, height, t)
+            })),
+            Some(send),
+        ))
     }
 }
 
