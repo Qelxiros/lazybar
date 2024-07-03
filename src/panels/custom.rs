@@ -9,7 +9,10 @@ use std::{
 
 use anyhow::Result;
 use derive_builder::Builder;
-use tokio::time::{interval, Interval};
+use tokio::{
+    sync::mpsc::Sender,
+    time::{interval, Interval},
+};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
@@ -58,6 +61,7 @@ impl Stream for CustomStream {
 #[builder_impl_attr(allow(missing_docs))]
 #[builder(pattern = "owned")]
 pub struct Custom {
+    name: &'static str,
     #[builder(default = r#"Command::new("echo")"#)]
     command: Command,
     #[builder(setter(strip_option))]
@@ -87,22 +91,6 @@ impl Custom {
 }
 
 impl PanelConfig for Custom {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        Ok(Box::pin(
-            CustomStream::new(self.duration.map(|d| interval(d)))
-                .map(move |_| self.draw(&cr)),
-        ))
-    }
-
     /// Configuration options:
     ///
     /// - `format`: the format string
@@ -121,6 +109,7 @@ impl PanelConfig for Custom {
     ///
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, config::Value>,
         _global: &config::Config,
     ) -> Result<Self> {
@@ -146,8 +135,33 @@ impl PanelConfig for Custom {
             (None, None) => CustomBuilder::default(),
         };
 
+        let builder = builder.name(name);
+
         Ok(builder
             .common(PanelCommon::parse(table, &[""], &["%stdout%"], &[""])?)
             .build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        Ok((
+            Box::pin(
+                CustomStream::new(self.duration.map(|d| interval(d)))
+                    .map(move |_| self.draw(&cr)),
+            ),
+            None,
+        ))
     }
 }

@@ -10,9 +10,15 @@ use anyhow::{anyhow, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
-use tokio::task::{self, JoinHandle};
-use tokio_stream::{Stream, StreamExt};
-use xcb::{x, XidNew};
+use tokio::{
+    sync::mpsc::{channel, Sender},
+    task::{self, JoinHandle},
+};
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
+use xcb::{
+    x::{self, PropMode},
+    XidNew,
+};
 
 use crate::{
     bar::PanelDrawInfo, remove_string_from_config, remove_uint_from_config,
@@ -91,6 +97,7 @@ impl Stream for XStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct XWorkspaces {
+    name: &'static str,
     conn: Arc<xcb::Connection>,
     screen: i32,
     #[builder(default = "0")]
@@ -235,15 +242,87 @@ impl XWorkspaces {
             }),
         ))
     }
+
+    fn process_event(
+        event: &'static str,
+        conn: Arc<xcb::Connection>,
+        root: x::Window,
+        current_atom: x::Atom,
+    ) -> Result<()> {
+        Ok(if let Ok(workspace) = event.parse::<u32>() {
+            conn.check_request(conn.send_request_checked(&x::ChangeProperty {
+                mode: PropMode::Replace,
+                window: root,
+                property: current_atom,
+                r#type: x::ATOM_CARDINAL,
+                data: &[workspace],
+            }))
+        } else {
+            Ok(())
+        }?)
+    }
 }
 
 impl PanelConfig for XWorkspaces {
-    fn into_stream(
+    /// Configuration options:
+    ///
+    /// - `screen`: the name of the X screen to monitor
+    ///   - type: String
+    ///   - default: None (This will tell X to choose the default screen, which
+    ///     is probably what you want.)
+    ///
+    /// - `padding`: The space in pixels between two workspace names. The
+    ///   [`Attrs`] will change (if applicable) halfway between the two names.
+    ///   - type: u64
+    ///   - default: 0
+    ///
+    /// - `highlight`: The highlight that will appear on the active workspaces.
+    ///   See [`Highlight::parse`] for parsing options.
+    ///
+    /// - See [`PanelCommon::parse`]. No format strings are used for this panel.
+    ///   Three instances of [`Attrs`] are parsed using the prefixes `active_`,
+    ///   `nonempty_`, and `inactive_`
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = XWorkspacesBuilder::default();
+
+        builder.name(name);
+        let screen = remove_string_from_config("screen", table);
+        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
+        {
+            builder.conn(Arc::new(conn)).screen(screen);
+        } else {
+            log::error!("Failed to connect to X server");
+        }
+        if let Some(padding) = remove_uint_from_config("padding", table) {
+            builder.padding(padding as i32);
+        }
+
+        builder.common(PanelCommon::parse(
+            table,
+            &[],
+            &[],
+            &["active_", "nonempty_", "inactive_"],
+        )?);
+
+        builder.highlight(Highlight::parse(table));
+
+        Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<PanelStream> {
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
         let number_atom =
             intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
         let names_atom = intern_named_atom(&self.conn, b"_NET_DESKTOP_NAMES")?;
@@ -274,14 +353,34 @@ impl PanelConfig for XWorkspaces {
             attr.apply_to(&global_attrs);
         }
 
-        let stream = tokio_stream::once(())
-            .chain(XStream::new(
-                self.conn.clone(),
-                number_atom,
-                current_atom,
-                names_atom,
-            ))
-            .map(move |_| {
+        let mut map =
+            StreamMap::<usize, Pin<Box<dyn Stream<Item = Result<()>>>>>::new();
+
+        map.insert(
+            0,
+            Box::pin(
+                tokio_stream::once(())
+                    .chain(XStream::new(
+                        self.conn.clone(),
+                        number_atom,
+                        current_atom,
+                        names_atom,
+                    ))
+                    .map(|_| Ok(())),
+            ),
+        );
+
+        let (send, recv) = channel(16);
+        let conn = self.conn.clone();
+        map.insert(
+            1,
+            Box::pin(ReceiverStream::new(recv).map(move |s| {
+                Self::process_event(s, conn.clone(), root, current_atom)
+            })),
+        );
+
+        Ok((
+            Box::pin(map.map(move |_| {
                 self.draw(
                     &cr,
                     root,
@@ -295,54 +394,9 @@ impl PanelConfig for XWorkspaces {
                     normal_atom,
                     desktop_atom,
                 )
-            });
-        Ok(Box::pin(stream))
-    }
-
-    /// Configuration options:
-    ///
-    /// - `screen`: the name of the X screen to monitor
-    ///   - type: String
-    ///   - default: None (This will tell X to choose the default screen, which
-    ///     is probably what you want.)
-    ///
-    /// - `padding`: The space in pixels between two workspace names. The
-    ///   [`Attrs`] will change (if applicable) halfway between the two names.
-    ///   - type: u64
-    ///   - default: 0
-    ///
-    /// - `highlight`: The highlight that will appear on the active workspaces.
-    ///   See [`Highlight::parse`] for parsing options.
-    ///
-    /// - See [`PanelCommon::parse`]. No format strings are used for this panel.
-    ///   Three instances of [`Attrs`] are parsed using the prefixes `active_`,
-    ///   `nonempty_`, and `inactive_`
-    fn parse(
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = XWorkspacesBuilder::default();
-        let screen = remove_string_from_config("screen", table);
-        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
-        {
-            builder.conn(Arc::new(conn)).screen(screen);
-        } else {
-            log::error!("Failed to connect to X server");
-        }
-        if let Some(padding) = remove_uint_from_config("padding", table) {
-            builder.padding(padding as i32);
-        }
-
-        builder.common(PanelCommon::parse(
-            table,
-            &[],
-            &[],
-            &["active_", "nonempty_", "inactive_"],
-        )?);
-
-        builder.highlight(Highlight::parse(table));
-
-        Ok(builder.build()?)
+            })),
+            Some(send),
+        ))
     }
 }
 

@@ -5,7 +5,7 @@ use config::Config;
 use derive_builder::Builder;
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio::time::interval;
+use tokio::{sync::mpsc::Sender, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
@@ -24,6 +24,7 @@ lazy_static! {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Memory {
+    name: &'static str,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
     #[builder(default = r#"String::from("/proc/meminfo")"#)]
@@ -156,22 +157,6 @@ impl Memory {
 }
 
 impl PanelConfig for Memory {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr));
-
-        Ok(Box::pin(stream))
-    }
-
     /// Configuration options:
     ///
     /// - `format`: the format string
@@ -191,11 +176,13 @@ impl PanelConfig for Memory {
     ///     [`Inotify`][crate::panels::Inotify]
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, config::Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = MemoryBuilder::default();
 
+        builder.name(name);
         if let Some(interval) = remove_uint_from_config("interval", table) {
             builder.interval(Duration::from_secs(interval));
         }
@@ -210,5 +197,25 @@ impl PanelConfig for Memory {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let stream = IntervalStream::new(interval(self.interval))
+            .map(move |_| self.draw(&cr));
+
+        Ok((Box::pin(stream), None))
     }
 }

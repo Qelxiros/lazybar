@@ -14,7 +14,7 @@ use nix::{
     ifaddrs::getifaddrs,
     sys::socket::{self, AddressFamily, SockFlag, SockType},
 };
-use tokio::time::interval;
+use tokio::{sync::mpsc::Sender, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
@@ -116,6 +116,7 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Network {
+    name: &'static str,
     #[builder(default = r#"String::from("wlan0")"#)]
     if_name: String,
     #[builder(default = r#"Duration::from_secs(10)"#)]
@@ -156,21 +157,6 @@ impl Network {
 }
 
 impl PanelConfig for Network {
-    fn into_stream(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        _height: i32,
-    ) -> Result<PanelStream> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-        let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr));
-
-        Ok(Box::pin(stream))
-    }
-
     /// Configuration options:
     ///
     /// - `if_name`: the name of the given interface. These can be listed with
@@ -194,10 +180,13 @@ impl PanelConfig for Network {
     ///
     /// - See [`PanelCommon::parse`].
     fn parse(
+        name: &'static str,
         table: &mut HashMap<String, Value>,
         _global: &Config,
     ) -> Result<Self> {
         let mut builder = NetworkBuilder::default();
+
+        builder.name(name);
         if let Some(if_name) = remove_string_from_config("if_name", table) {
             builder.if_name(if_name);
         }
@@ -213,5 +202,24 @@ impl PanelConfig for Network {
         )?);
 
         Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        _height: i32,
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+        let stream = IntervalStream::new(interval(self.duration))
+            .map(move |_| self.draw(&cr));
+
+        Ok((Box::pin(stream), None))
     }
 }

@@ -110,6 +110,55 @@ impl PanelCommon {
 
         Ok(builder.build()?)
     }
+
+    /// Attempts to parse common panel configuration options from a subset of
+    /// the global [`Config`][config::Config]. The format defaults and attrs
+    /// prefixes are documented by each panel.
+    ///
+    /// Format strings should be specified as `formats = ["value", ...]`.
+    /// Dependence should be specified as `dependence = "value"`, where value is
+    /// a valid variant of [`Dependence`].
+    /// See [`Attrs::parse`] for more parsing details.
+    pub fn parse_variadic<S: std::hash::BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        format_default: &[&'static str],
+        attrs_prefixes: &[&'static str],
+    ) -> Result<Self> {
+        let mut builder = PanelCommonBuilder::default();
+
+        builder.formats(
+            remove_array_from_config("formats", table)
+                .map(|arr| {
+                    arr.into_iter()
+                        .filter_map(|v| v.into_string().ok())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(
+                    format_default.iter().map(|s| s.to_string()).collect(),
+                ),
+        );
+
+        builder.dependence(
+            match remove_string_from_config("dependence", table)
+                .map(|s| s.to_lowercase())
+                .as_deref()
+            {
+                Some("left") => Dependence::Left,
+                Some("right") => Dependence::Right,
+                Some("both") => Dependence::Both,
+                _ => Dependence::None,
+            },
+        );
+
+        builder.attrs(
+            attrs_prefixes
+                .iter()
+                .map(|p| Attrs::parse(table, p))
+                .collect(),
+        );
+
+        Ok(builder.build()?)
+    }
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
@@ -139,6 +188,23 @@ pub fn remove_string_from_config<S: std::hash::BuildHasher>(
         val.clone().into_string().map_or_else(
             |_| {
                 log::warn!("Ignoring non-string value {val:?}");
+                None
+            },
+            Some,
+        )
+    })
+}
+
+/// Removes a value from a given config table and returns an attempt at parsing
+/// it into an array
+pub fn remove_array_from_config<S: std::hash::BuildHasher>(
+    id: &str,
+    table: &mut HashMap<String, Value, S>,
+) -> Option<Vec<Value>> {
+    table.remove(id).and_then(|val| {
+        val.clone().into_array().map_or_else(
+            |_| {
+                log::warn!("Ignoring non-array value {val:?}");
                 None
             },
             Some,

@@ -9,7 +9,10 @@ use std::{
 use anyhow::{anyhow, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
-use tokio::task::{self, JoinHandle};
+use tokio::{
+    sync::mpsc::Sender,
+    task::{self, JoinHandle},
+};
 use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
@@ -83,6 +86,7 @@ impl Stream for XStream {
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct XWindow {
+    name: &'static str,
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
@@ -159,12 +163,50 @@ impl XWindow {
 }
 
 impl PanelConfig for XWindow {
-    fn into_stream(
+    /// Configuration options:
+    ///
+    /// - `screen`: the name of the X screen to monitor
+    ///   - type: String
+    ///   - default: None (This will tell X to choose the default screen, which
+    ///     is probably what you want.)
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%name%`
+    ///   - formatting options: `%name%`
+    ///
+    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = XWindowBuilder::default();
+
+        builder.name(name);
+        let screen = remove_string_from_config("screen", table);
+        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
+        {
+            builder.conn(Arc::new(conn)).screen(screen);
+        } else {
+            log::error!("Failed to connect to X server");
+        }
+
+        builder.windows(HashSet::new());
+        builder.common(PanelCommon::parse(table, &[""], &["%name%"], &[""])?);
+
+        Ok(builder.build()?)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<PanelStream> {
+    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
         let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
         let window_atom = intern_named_atom(&self.conn, b"_NET_ACTIVE_WINDOW")?;
         let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
@@ -191,37 +233,6 @@ impl PanelConfig for XWindow {
             .map(move |_| {
                 self.draw(&cr, name_atom, window_atom, root, utf8_atom)
             });
-        Ok(Box::pin(stream))
-    }
-
-    /// Configuration options:
-    ///
-    /// - `screen`: the name of the X screen to monitor
-    ///   - type: String
-    ///   - default: None (This will tell X to choose the default screen, which
-    ///     is probably what you want.)
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `%name%`
-    ///   - formatting options: `%name%`
-    ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
-    fn parse(
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = XWindowBuilder::default();
-        let screen = remove_string_from_config("screen", table);
-        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
-        {
-            builder.conn(Arc::new(conn)).screen(screen);
-        } else {
-            log::error!("Failed to connect to X server");
-        }
-
-        builder.windows(HashSet::new());
-        builder.common(PanelCommon::parse(table, &[""], &["%name%"], &[""])?);
-
-        Ok(builder.build()?)
+        Ok((Box::pin(stream), None))
     }
 }
