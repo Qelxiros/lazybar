@@ -20,8 +20,9 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::PanelDrawInfo, draw_common, remove_string_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, PanelDrawInfo},
+    draw_common, remove_string_from_config, Attrs, PanelCommon, PanelConfig,
+    PanelStream,
 };
 
 struct FanotifyStream {
@@ -140,7 +141,7 @@ impl PanelConfig for Fanotify {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
         // doesn't know that it's real
         let init_flags = InitFlags::from_bits_retain(0x00000200);

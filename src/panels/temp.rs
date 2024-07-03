@@ -6,8 +6,9 @@ use tokio::{sync::mpsc::Sender, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    bar::PanelDrawInfo, draw_common, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, PanelDrawInfo},
+    draw_common, remove_uint_from_config, Attrs, PanelCommon, PanelConfig,
+    PanelStream,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -96,7 +97,7 @@ impl PanelConfig for Temp {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

@@ -51,7 +51,7 @@ use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc};
 
 use anyhow::Result;
 pub use attrs::Attrs;
-use bar::{Bar, Panel, PanelDrawInfo};
+use bar::{Bar, Event, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
@@ -100,7 +100,7 @@ pub trait PanelConfig {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)>;
+    ) -> Result<(PanelStream, Option<Sender<Event>>)>;
 }
 
 /// Describes where on the screen the bar should appear.

@@ -20,8 +20,9 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::PanelDrawInfo, draw_common, remove_string_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, PanelDrawInfo},
+    draw_common, remove_string_from_config, Attrs, PanelCommon, PanelConfig,
+    PanelStream,
 };
 
 struct InotifyStream {
@@ -138,7 +139,7 @@ impl PanelConfig for Inotify {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         let init_flags = InitFlags::empty();
         let inotify = inotify::Inotify::init(init_flags)?;
 

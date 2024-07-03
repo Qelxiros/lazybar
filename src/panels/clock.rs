@@ -20,8 +20,8 @@ use tokio::{
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::PanelDrawInfo, draw_common, Attrs, PanelCommon, PanelConfig,
-    PanelStream,
+    bar::{Event, PanelDrawInfo},
+    draw_common, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Defines options for a [`Clock`]'s precision.
@@ -143,13 +143,13 @@ impl<P: Precision + Clone> Clock<P> {
         )
     }
 
-    fn process_event(idx: Rc<Mutex<(usize, usize)>>, event: &'static str) {
+    fn process_event(idx: Rc<Mutex<(usize, usize)>>, event: Event) {
         match event {
-            "cycle" => {
+            Event::Action("cycle") => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 + 1) % idx.1, idx.1);
             }
-            "cycle_back" => {
+            Event::Action("cycle_back") => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
             }
@@ -195,7 +195,7 @@ where
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

@@ -26,7 +26,7 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::{Dependence, PanelDrawInfo},
+    bar::{Dependence, Event, PanelDrawInfo},
     draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
     PanelCommon, PanelConfig, PanelStream, Ramp,
 };
@@ -114,13 +114,13 @@ impl Pulseaudio {
     }
 
     fn process_event(
-        event: &'static str,
+        event: Event,
         sink: &str,
         unit: u32,
         introspector: &mut Introspector,
     ) -> (Volume, bool) {
         match event {
-            "increment" => {
+            Event::Action("increment") => {
                 let (send, recv) = std::sync::mpsc::channel();
                 introspector.get_sink_info_by_name(sink, move |r| match r {
                     ListResult::Item(i) => {
@@ -134,7 +134,7 @@ impl Pulseaudio {
                     introspector.set_sink_volume_by_name(sink, &volume, None);
                 };
             }
-            "decrement" => {
+            Event::Action("decrement") => {
                 let (send, recv) = std::sync::mpsc::channel();
                 introspector.get_sink_info_by_name(sink, move |r| match r {
                     ListResult::Item(i) => {
@@ -148,7 +148,7 @@ impl Pulseaudio {
                     introspector.set_sink_volume_by_name(sink, &volume, None);
                 };
             }
-            "toggle" => {
+            Event::Action("toggle") => {
                 let (send, recv) = std::sync::mpsc::channel();
                 introspector.get_sink_info_by_name(sink, move |r| match r {
                     ListResult::Item(i) => {
@@ -255,8 +255,7 @@ impl PanelConfig for Pulseaudio {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<tokio::sync::mpsc::Sender<&'static str>>)>
-    {
+    ) -> Result<(PanelStream, Option<tokio::sync::mpsc::Sender<Event>>)> {
         let mut mainloop = threaded::Mainloop::new()
             .ok_or_else(|| anyhow!("Failed to create pulseaudio mainloop"))?;
         mainloop.start()?;
