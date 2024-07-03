@@ -27,7 +27,8 @@ use tokio_stream::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    bar::PanelDrawInfo, remove_bool_from_config, remove_color_from_config,
+    bar::{Event, PanelDrawInfo},
+    remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
     PanelConfig, PanelStream,
 };
@@ -248,40 +249,38 @@ impl Mpd {
         ))
     }
 
-    fn process_event(
-        event: &'static str,
-        conn: Arc<Mutex<Client>>,
-    ) -> Result<()> {
+    fn process_event(event: Event, conn: Arc<Mutex<Client>>) -> Result<()> {
         Ok(match event {
-            "next" => conn.lock().unwrap().next(),
-            "prev" => conn.lock().unwrap().prev(),
-            "play" => conn.lock().unwrap().play(),
-            "pause" => conn.lock().unwrap().pause(true),
-            "toggle" => conn.lock().unwrap().toggle_pause(),
-            "repeat" => {
+            Event::Action("next") => conn.lock().unwrap().next(),
+            Event::Action("prev") => conn.lock().unwrap().prev(),
+            Event::Action("play") => conn.lock().unwrap().play(),
+            Event::Action("pause") => conn.lock().unwrap().pause(true),
+            Event::Action("toggle") => conn.lock().unwrap().toggle_pause(),
+            Event::Action("repeat") => {
                 let mut conn = conn.lock().unwrap();
                 let repeat = conn.status()?.repeat;
                 conn.repeat(!repeat)
             }
-            "random" => {
+            Event::Action("random") => {
                 let mut conn = conn.lock().unwrap();
                 let random = conn.status()?.random;
                 conn.random(!random)
             }
-            "single" => {
+            Event::Action("single") => {
                 let mut conn = conn.lock().unwrap();
                 let single = conn.status()?.single;
                 conn.single(!single)
             }
-            "consume" => {
+            Event::Action("consume") => {
                 let mut conn = conn.lock().unwrap();
                 let consume = conn.status()?.consume;
                 conn.consume(!consume)
             }
-            event => {
+            Event::Action(event) => {
                 log::warn!("Unknown event {event}");
                 Ok(())
             }
+            Event::Mouse(button) => Ok(()),
         }?)
     }
 }
@@ -405,7 +404,7 @@ impl PanelConfig for Mpd {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         let mut map = StreamMap::<
             EventType,
             Pin<Box<dyn Stream<Item = Result<()>>>>,

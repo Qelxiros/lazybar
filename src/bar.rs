@@ -1,10 +1,10 @@
 use std::{fmt::Debug, ops::BitAnd, rc::Rc, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use csscolorparser::Color;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamMap;
-use xcb::{x, Event};
+use xcb::x;
 
 use crate::{
     create_surface, create_window, map_window, set_wm_properties, Alignment,
@@ -113,6 +113,55 @@ impl From<&Panel> for PanelStatus {
     }
 }
 
+/// A button that can be linked to an action for a panel
+///
+/// Note: scrolling direction may be incorrect depending on your configuration
+pub enum MouseButton {
+    /// The left mouse button
+    Left,
+    /// The middle mouse button
+    Middle,
+    /// The right mouse button
+    Right,
+    /// Scrolling up
+    ScrollUp,
+    /// Scrolling down
+    ScrollDown,
+}
+
+impl TryFrom<u8> for MouseButton {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            1 => Ok(Self::Left),
+            2 => Ok(Self::Middle),
+            3 => Ok(Self::Right),
+            4 => Ok(Self::ScrollUp),
+            5 => Ok(Self::ScrollDown),
+            _ => Err(anyhow!("X server provided invalid button")),
+        }
+    }
+}
+
+/// A mouse event that can be passed to a panel
+pub struct MouseEvent {
+    /// The button that was pressed (or scrolled)
+    pub button: MouseButton,
+    /// The x coordinate of the press, relative to the panel
+    pub x: i16,
+    /// The y coordinate of the press, relative to the bar
+    pub y: i16,
+}
+
+/// An event that can be passed to a panel
+pub enum Event {
+    /// A mouse event
+    Mouse(MouseEvent),
+    /// A message (typically from another process)
+    Action(&'static str),
+}
+
 /// A panel on the bar
 pub struct Panel {
     /// How to draw the panel.
@@ -124,7 +173,7 @@ pub struct Panel {
     /// The name of the panel (taken from the name of the toml table that
     /// defines it)
     pub name: &'static str,
-    sender: Option<Sender<&'static str>>,
+    sender: Option<Sender<Event>>,
 }
 
 impl Panel {
@@ -133,7 +182,7 @@ impl Panel {
     pub const fn new(
         draw_info: Option<PanelDrawInfo>,
         name: &'static str,
-        sender: Option<Sender<&'static str>>,
+        sender: Option<Sender<Event>>,
     ) -> Self {
         Self {
             draw_info,
@@ -244,9 +293,46 @@ impl Bar {
     }
 
     /// Handle an event from the X server.
-    pub fn process_event(&mut self, event: &Event) -> Result<()> {
+    pub fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
         match event {
-            Event::X(x::Event::Expose(_)) => self.redraw_bar(),
+            xcb::Event::X(x::Event::Expose(_)) => self.redraw_bar(),
+            xcb::Event::X(x::Event::ButtonPress(event)) => match event.detail()
+            {
+                button @ 1..=5 => {
+                    let (x, y) = if event.same_screen() {
+                        (event.event_x(), event.event_y())
+                    } else {
+                        // TODO: make sure this works/is relevant
+                        (event.root_x(), event.root_y())
+                    };
+                    let panel = self
+                        .left
+                        .iter()
+                        .chain(self.center.iter())
+                        .chain(self.right.iter())
+                        .filter(|p| p.draw_info.is_some())
+                        .find(|p| {
+                            p.x <= x as f64
+                                && p.x
+                                    + p.draw_info.as_ref().unwrap().width as f64
+                                    >= x as f64
+                        });
+                    panel.map(|p| {
+                        p.sender.as_ref().map(|s| {
+                            Ok::<_, anyhow::Error>(s.send(Event::Mouse(
+                                MouseEvent {
+                                    // this fails silently
+                                    button: MouseButton::try_from(button)?,
+                                    x: x - p.x as i16,
+                                    y,
+                                },
+                            )))
+                        })
+                    });
+                    Ok(())
+                }
+                _ => Ok(()),
+            },
             _ => Ok(()),
         }
     }

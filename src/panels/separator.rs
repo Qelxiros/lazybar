@@ -5,7 +5,9 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use tokio::sync::mpsc::Sender;
 
-use crate::{draw_common, Attrs, PanelCommon, PanelConfig, PanelStream};
+use crate::{
+    bar::Event, draw_common, Attrs, PanelCommon, PanelConfig, PanelStream,
+};
 
 /// Displays static text with [pango] markup.
 #[derive(Builder, Debug)]
@@ -49,7 +51,7 @@ impl PanelConfig for Separator {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

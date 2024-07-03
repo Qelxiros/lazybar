@@ -17,8 +17,10 @@ use tokio_stream::{Stream, StreamExt};
 use xcb::{x, XidNew};
 
 use crate::{
-    bar::PanelDrawInfo, draw_common, remove_string_from_config,
-    x::intern_named_atom, Attrs, PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, PanelDrawInfo},
+    draw_common, remove_string_from_config,
+    x::intern_named_atom,
+    Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct XStream {
@@ -206,7 +208,7 @@ impl PanelConfig for XWindow {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
         let window_atom = intern_named_atom(&self.conn, b"_NET_ACTIVE_WINDOW")?;
         let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;

@@ -21,9 +21,10 @@ use xcb::{
 };
 
 use crate::{
-    bar::PanelDrawInfo, remove_string_from_config, remove_uint_from_config,
-    x::intern_named_atom, Attrs, Highlight, PanelCommon, PanelConfig,
-    PanelStream,
+    bar::{Event, PanelDrawInfo},
+    remove_string_from_config, remove_uint_from_config,
+    x::intern_named_atom,
+    Attrs, Highlight, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct XStream {
@@ -244,22 +245,28 @@ impl XWorkspaces {
     }
 
     fn process_event(
-        event: &'static str,
+        event: Event,
         conn: Arc<xcb::Connection>,
         root: x::Window,
         current_atom: x::Atom,
     ) -> Result<()> {
-        Ok(if let Ok(workspace) = event.parse::<u32>() {
-            conn.check_request(conn.send_request_checked(&x::ChangeProperty {
-                mode: PropMode::Replace,
-                window: root,
-                property: current_atom,
-                r#type: x::ATOM_CARDINAL,
-                data: &[workspace],
-            }))
+        if let Event::Action(event) = event {
+            Ok(if let Ok(workspace) = event.parse::<u32>() {
+                conn.check_request(conn.send_request_checked(
+                    &x::ChangeProperty {
+                        mode: PropMode::Replace,
+                        window: root,
+                        property: current_atom,
+                        r#type: x::ATOM_CARDINAL,
+                        data: &[workspace],
+                    },
+                ))
+            } else {
+                Ok(())
+            }?)
         } else {
             Ok(())
-        }?)
+        }
     }
 }
 
@@ -322,7 +329,7 @@ impl PanelConfig for XWorkspaces {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<&'static str>>)> {
+    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
         let number_atom =
             intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
         let names_atom = intern_named_atom(&self.conn, b"_NET_DESKTOP_NAMES")?;
