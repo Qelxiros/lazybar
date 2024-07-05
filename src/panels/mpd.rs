@@ -8,12 +8,13 @@ use std::{
     time::Duration,
 };
 
+use aho_corasick::{AhoCorasick, Match};
 use anyhow::Result;
 use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
-use mpd::{Client, Idle, State, Subsystem};
-use pango::EllipsizeMode;
+use mpd::{Client, Idle, State, Status, Subsystem};
+use pango::Layout;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
     sync::mpsc::{channel, Sender},
@@ -27,15 +28,14 @@ use tokio_stream::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
-    PanelConfig, PanelStream,
+    remove_string_from_config, remove_uint_from_config, Actions, Attrs,
+    PanelCommon, PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
 enum Strategy {
-    Ellipsize(EllipsizeMode),
     Scroll { interval: Duration },
     Truncate,
 }
@@ -71,10 +71,11 @@ pub struct Mpd {
     progress_bg: Color,
     #[builder(default = "0.0", setter(skip))]
     last_progress_width: f64,
-    // in characters if strategy is truncate or scroll, in pixels if strategy
-    // is ellipsize
     #[builder(default = "0")]
     max_width: usize,
+    last_layout: Arc<Mutex<Option<(Layout, String)>>>,
+    index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
+    formatter: AhoCorasick,
     common: PanelCommon,
 }
 
@@ -87,40 +88,47 @@ impl Mpd {
     ) -> Result<PanelDrawInfo> {
         let conn = self.noidle_conn.clone();
         let status = conn.lock().unwrap().status()?;
-        let song = conn.lock().unwrap().currentsong()?;
-        let mut text = self.common.formats[0]
-            .replace(
-                "%title%",
-                match song {
-                    None => String::from("Unknown"),
-                    Some(ref s) => match &s.title {
-                        None => String::from("Unknown"),
-                        Some(t) => match self.strategy {
-                            Strategy::Scroll { interval: _ } => t.to_string(),
-                            _ => {
-                                glib::markup_escape_text(t.as_str()).to_string()
-                            }
-                        },
-                    },
-                }
-                .as_str(),
-            )
-            .replace(
-                "%artist%",
-                match song {
-                    None => String::from("Unknown"),
-                    Some(ref s) => match &s.artist {
-                        None => String::from("Unknown"),
-                        Some(t) => match self.strategy {
-                            Strategy::Scroll { interval: _ } => t.to_string(),
-                            _ => {
-                                glib::markup_escape_text(t.as_str()).to_string()
-                            }
-                        },
-                    },
-                }
-                .as_str(),
+        let format = self.common.formats[match status.state {
+            State::Play => 0,
+            State::Pause => 1,
+            State::Stop => 2,
+        }]
+        .as_str();
+
+        let mut main = String::new();
+        self.formatter.replace_all_with(
+            self.common.formats[3].as_str(),
+            &mut main,
+            |_, content, dst| self.replace(content, dst, status.clone()),
+        );
+        let mut text = String::new();
+        self.formatter.replace_all_with(
+            format,
+            &mut text,
+            |_, content, dst| self.replace(content, dst, status.clone()),
+        );
+
+        let mut index_cache = Vec::new();
+        if let Ok(haystack) = pango::parse_markup(format, '\0') {
+            let haystack = haystack.1.as_str();
+            let mut _ignored = String::new();
+            let mut offset = 0;
+            self.formatter.replace_all_with(
+                haystack,
+                &mut _ignored,
+                |mat, content, dst| {
+                    self.build_cache(
+                        mat,
+                        content,
+                        dst,
+                        main.as_str(),
+                        status.clone(),
+                        &mut index_cache,
+                        &mut offset,
+                    )
+                },
             );
+        }
 
         let layout = create_layout(cr);
 
@@ -128,70 +136,89 @@ impl Mpd {
             Strategy::Scroll { interval: _ } => {
                 if event == EventType::Scroll {
                     self.scroll_idx = (self.scroll_idx + 1)
-                        % (text.graphemes(true).count()
+                        % (main.graphemes(true).count()
                             + self.scroll_separator.len());
                 }
                 let scrolling = self.max_width > 0
-                    && text.graphemes(true).count() > self.max_width;
+                    && main.graphemes(true).count() > self.max_width;
                 if scrolling {
-                    text.push_str(self.scroll_separator.as_str());
+                    main.push_str(self.scroll_separator.as_str());
                 }
                 match (
                     scrolling,
                     self.scroll_idx
-                        > text.graphemes(true).count() - self.max_width,
+                        > main.graphemes(true).count() - self.max_width,
                 ) {
                     (false, _) => {
-                        layout.set_text(text.as_str());
+                        layout.set_markup(
+                            text.replace(
+                                "%main%",
+                                glib::markup_escape_text(main.as_str())
+                                    .as_str(),
+                            )
+                            .as_str(),
+                        );
                     }
                     (true, false) => {
-                        layout.set_text(
-                            text.as_str()
-                                .graphemes(true)
-                                .skip(self.scroll_idx)
-                                .take(self.max_width)
-                                .collect::<String>()
+                        layout.set_markup(
+                            text.replace(
+                                "%main%",
+                                glib::markup_escape_text(
+                                    main.as_str()
+                                        .graphemes(true)
+                                        .skip(self.scroll_idx)
+                                        .take(self.max_width)
+                                        .collect::<String>()
+                                        .as_str(),
+                                )
                                 .as_str(),
+                            )
+                            .as_str(),
                         );
                     }
                     (true, true) => {
-                        layout.set_text(
-                            format!(
-                                "{}{}",
-                                text.as_str()
-                                    .graphemes(true)
-                                    .skip(self.scroll_idx)
-                                    .collect::<String>(),
-                                text.as_str()
-                                    .graphemes(true)
-                                    .take(
-                                        self.max_width
-                                            - (text.graphemes(true).count()
-                                                - self.scroll_idx)
+                        layout.set_markup(
+                            text.replace(
+                                "%main%",
+                                glib::markup_escape_text(
+                                    format!(
+                                        "{}{}",
+                                        main.as_str()
+                                            .graphemes(true)
+                                            .skip(self.scroll_idx)
+                                            .collect::<String>(),
+                                        main.as_str()
+                                            .graphemes(true)
+                                            .take(
+                                                self.max_width
+                                                    - (main
+                                                        .graphemes(true)
+                                                        .count()
+                                                        - self.scroll_idx)
+                                            )
+                                            .collect::<String>()
                                     )
-                                    .collect::<String>()
+                                    .as_str(),
+                                )
+                                .as_str(),
                             )
                             .as_str(),
                         );
                     }
                 }
             }
-            Strategy::Ellipsize(mode) => {
-                if self.max_width > 0 {
-                    layout.set_width(self.max_width as i32 * pango::SCALE);
-                }
-                layout.set_markup(text.as_str());
-                layout.set_ellipsize(mode);
-            }
             Strategy::Truncate => {
                 layout.set_markup(
                     if self.max_width > 0 {
-                        text.as_str()
-                            .graphemes(true)
-                            .take(self.max_width)
-                            .collect::<String>()
+                        text.replace(
+                            "%main%",
+                            main.graphemes(true)
+                                .take(self.max_width)
+                                .collect::<String>()
+                                .as_str(),
+                        )
                     } else {
-                        text.clone()
+                        text.replace("%main%", main.as_str()).clone()
                     }
                     .as_str(),
                 );
@@ -199,20 +226,42 @@ impl Mpd {
         };
 
         self.common.attrs[0].apply_font(&layout);
+
         let size = layout.pixel_size();
+        let (bar_start_idx, bar_max_width_idx) = index_cache
+            .iter()
+            .find(|(name, _, _)| *name == "main")
+            .map(|(_, start, width)| (*start as i32, *width as i32))
+            .unwrap_or_else(|| (0, text.len() as i32));
+
+        let bar_start =
+            layout.index_to_pos(bar_start_idx).x() as f64 / pango::SCALE as f64;
+        let bar_max_width =
+            layout.index_to_pos(bar_start_idx + bar_max_width_idx).x() as f64
+                / pango::SCALE as f64
+                - bar_start;
+
+        *self.index_cache.lock().unwrap() = Some(
+            index_cache
+                .into_iter()
+                .map(|(name, start, width)| (name.to_string(), start, width))
+                .collect(),
+        );
+        *self.last_layout.lock().unwrap() =
+            Some((layout.clone(), layout.text().to_string()));
 
         if event == EventType::Progress {
             self.last_progress_width = status.elapsed.unwrap().as_secs_f64()
                 / status.duration.unwrap().as_secs_f64()
-                * size.0 as f64;
-            if let Strategy::Ellipsize(_) = self.strategy {
-            } else {
-                let char_width = size.0 as f64
-                    / text.graphemes(true).count().min(self.max_width) as f64;
-                self.last_progress_width =
-                    (self.last_progress_width / char_width).round()
-                        * char_width;
-            }
+                * bar_max_width;
+            let char_width = bar_max_width
+                / pango::parse_markup(main.as_str(), '\0')
+                    .map_or(main, |r| r.1.to_string())
+                    .graphemes(true)
+                    .count()
+                    .min(self.max_width) as f64;
+            self.last_progress_width =
+                (self.last_progress_width / char_width).round() * char_width;
         }
 
         let bar_width = self.last_progress_width;
@@ -230,8 +279,9 @@ impl Mpd {
                     progress_bg.b,
                     progress_bg.a,
                 );
+
                 cr.rectangle(
-                    0.0,
+                    bar_start,
                     0.0,
                     bar_width.min(size.0 as f64),
                     f64::from(height),
@@ -249,38 +299,425 @@ impl Mpd {
         ))
     }
 
-    fn process_event(event: Event, conn: Arc<Mutex<Client>>) -> Result<()> {
+    fn replace(&self, content: &str, dst: &mut String, status: Status) -> bool {
+        match content {
+            "%title%" => {
+                let title = glib::markup_escape_text(
+                    self.noidle_conn
+                        .lock()
+                        .unwrap()
+                        .currentsong()
+                        .map_or_else(
+                            |_| String::from("Unknown"),
+                            |s| {
+                                s.map_or_else(
+                                    || String::from("Unknown"),
+                                    |s| {
+                                        s.title.unwrap_or_else(|| {
+                                            String::from("Unknown")
+                                        })
+                                    },
+                                )
+                            },
+                        )
+                        .as_str(),
+                );
+                dst.push_str(title.as_str());
+                true
+            }
+            "%artist%" => {
+                let artist = glib::markup_escape_text(
+                    self.noidle_conn
+                        .lock()
+                        .unwrap()
+                        .currentsong()
+                        .map_or_else(
+                            |_| String::from("Unknown"),
+                            |s| {
+                                s.map_or_else(
+                                    || String::from("Unknown"),
+                                    |s| {
+                                        s.artist.unwrap_or_else(|| {
+                                            String::from("Unknown")
+                                        })
+                                    },
+                                )
+                            },
+                        )
+                        .as_str(),
+                );
+                dst.push_str(artist.as_str());
+                true
+            }
+            "%next%" => {
+                let next = self.common.formats[4].as_str();
+                dst.push_str(next);
+                true
+            }
+            "%prev%" => {
+                let prev = self.common.formats[5].as_str();
+                dst.push_str(prev);
+                true
+            }
+            "%play%" => {
+                let play = self.common.formats[6].as_str();
+                dst.push_str(play);
+                true
+            }
+            "%pause%" => {
+                let pause = self.common.formats[7].as_str();
+                dst.push_str(pause);
+                true
+            }
+            "%toggle%" => {
+                let toggle = match status.state {
+                    State::Play => self.common.formats[8].as_str(),
+                    State::Pause => self.common.formats[9].as_str(),
+                    State::Stop => self.common.formats[10].as_str(),
+                };
+                dst.push_str(toggle);
+                true
+            }
+            "%main%" => {
+                dst.push_str(content);
+                true
+            }
+            "%shuffle%" => {
+                let shuffle = self.common.formats[11].as_str();
+                dst.push_str(shuffle);
+                true
+            }
+            "%repeat%" => {
+                let repeat = self.common.formats[12].as_str();
+                dst.push_str(repeat);
+                true
+            }
+            "%random%" => {
+                let random = self.common.formats[13].as_str();
+                dst.push_str(random);
+                true
+            }
+            "%single%" => {
+                let single = self.common.formats[14].as_str();
+                dst.push_str(single);
+                true
+            }
+            "%consume%" => {
+                let consume = self.common.formats[15].as_str();
+                dst.push_str(consume);
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn build_cache(
+        &self,
+        mat: &Match,
+        content: &str,
+        dst: &mut String,
+        main: &str,
+        status: Status,
+        index_cache: &mut Vec<(&str, usize, usize)>,
+        offset: &mut isize,
+    ) -> bool {
+        match content {
+            "%title%" => {
+                let title =
+                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                        |_| String::from("Unknown"),
+                        |s| {
+                            s.map_or_else(
+                                || String::from("Unknown"),
+                                |s| {
+                                    s.title.unwrap_or_else(|| {
+                                        String::from("Unknown")
+                                    })
+                                },
+                            )
+                        },
+                    );
+                dst.push_str(title.as_str());
+                let length = pango::parse_markup(title.as_str(), '\0')
+                    .map_or_else(|_| title.len(), |l| l.1.len());
+                index_cache.push((
+                    "title",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%artist%" => {
+                let artist =
+                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                        |_| String::from("Unknown"),
+                        |s| {
+                            s.map_or_else(
+                                || String::from("Unknown"),
+                                |s| {
+                                    s.artist.unwrap_or_else(|| {
+                                        String::from("Unknown")
+                                    })
+                                },
+                            )
+                        },
+                    );
+                dst.push_str(artist.as_str());
+                let length = pango::parse_markup(artist.as_str(), '\0')
+                    .map_or_else(|_| artist.len(), |l| l.1.len());
+                index_cache.push((
+                    "artist",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%next%" => {
+                let next = self.common.formats[4].as_str();
+                dst.push_str(next);
+                let length = pango::parse_markup(next, '\0')
+                    .map_or_else(|_| next.len(), |l| l.1.len());
+                index_cache.push((
+                    "next",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%prev%" => {
+                let prev = self.common.formats[5].as_str();
+                dst.push_str(prev);
+                let length = pango::parse_markup(prev, '\0')
+                    .map_or_else(|_| prev.len(), |l| l.1.len());
+                index_cache.push((
+                    "prev",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%play%" => {
+                let play = self.common.formats[6].as_str();
+                dst.push_str(play);
+                let length = pango::parse_markup(play, '\0')
+                    .map_or_else(|_| play.len(), |l| l.1.len());
+                index_cache.push((
+                    "play",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%pause%" => {
+                let pause = self.common.formats[7].as_str();
+                dst.push_str(pause);
+                let length = pango::parse_markup(pause, '\0')
+                    .map_or_else(|_| pause.len(), |l| l.1.len());
+                index_cache.push((
+                    "pause",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%toggle%" => {
+                let toggle = match status.state {
+                    State::Play => self.common.formats[8].as_str(),
+                    State::Pause => self.common.formats[9].as_str(),
+                    State::Stop => self.common.formats[10].as_str(),
+                };
+                dst.push_str(toggle);
+                let length = pango::parse_markup(toggle, '\0')
+                    .map_or_else(|_| toggle.len(), |l| l.1.len());
+                index_cache.push((
+                    "toggle",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%main%" => {
+                dst.push_str(content);
+                let length = pango::parse_markup(main, '\0')
+                    .map_or_else(|_| content.len(), |l| l.1.len())
+                    .min(self.max_width);
+                index_cache.push((
+                    "main",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%shuffle%" => {
+                let shuffle = self.common.formats[11].as_str();
+                dst.push_str(shuffle);
+                let length = pango::parse_markup(shuffle, '\0')
+                    .map_or_else(|_| shuffle.len(), |l| l.1.len());
+                index_cache.push((
+                    "shuffle",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%repeat%" => {
+                let repeat = self.common.formats[12].as_str();
+                dst.push_str(repeat);
+                let length = pango::parse_markup(repeat, '\0')
+                    .map_or_else(|_| repeat.len(), |l| l.1.len());
+                index_cache.push((
+                    "repeat",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%random%" => {
+                let random = self.common.formats[13].as_str();
+                dst.push_str(random);
+                let length = pango::parse_markup(random, '\0')
+                    .map_or_else(|_| random.len(), |l| l.1.len());
+                index_cache.push((
+                    "random",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%single%" => {
+                let single = self.common.formats[14].as_str();
+                dst.push_str(single);
+                let length = pango::parse_markup(single, '\0')
+                    .map_or_else(|_| single.len(), |l| l.1.len());
+                index_cache.push((
+                    "single",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            "%consume%" => {
+                let consume = self.common.formats[15].as_str();
+                dst.push_str(consume);
+                let length = pango::parse_markup(consume, '\0')
+                    .map_or_else(|_| consume.len(), |l| l.1.len());
+                index_cache.push((
+                    "consume",
+                    (mat.start() as isize + *offset) as usize,
+                    length,
+                ));
+                *offset += (length - content.len()) as isize;
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn process_event(
+        event: Event,
+        conn: Arc<Mutex<Client>>,
+        actions: Actions,
+        last_layout: Arc<Mutex<Option<(Layout, String)>>>,
+        index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
+    ) -> Result<()> {
         Ok(match event {
-            Event::Action("next") => conn.lock().unwrap().next(),
-            Event::Action("prev") => conn.lock().unwrap().prev(),
-            Event::Action("play") => conn.lock().unwrap().play(),
-            Event::Action("pause") => conn.lock().unwrap().pause(true),
-            Event::Action("toggle") => conn.lock().unwrap().toggle_pause(),
-            Event::Action("repeat") => {
+            Event::Action(ref value) if value == "next" => {
+                conn.lock().unwrap().next()
+            }
+            Event::Action(ref value) if value == "prev" => {
+                conn.lock().unwrap().prev()
+            }
+            Event::Action(ref value) if value == "play" => {
+                conn.lock().unwrap().play()
+            }
+            Event::Action(ref value) if value == "pause" => {
+                conn.lock().unwrap().pause(true)
+            }
+            Event::Action(ref value) if value == "toggle" => {
+                conn.lock().unwrap().toggle_pause()
+            }
+            Event::Action(ref value) if value == "shuffle" => {
+                conn.lock().unwrap().shuffle(..)
+            }
+            Event::Action(ref value) if value == "repeat" => {
                 let mut conn = conn.lock().unwrap();
                 let repeat = conn.status()?.repeat;
                 conn.repeat(!repeat)
             }
-            Event::Action("random") => {
+            Event::Action(ref value) if value == "random" => {
                 let mut conn = conn.lock().unwrap();
                 let random = conn.status()?.random;
                 conn.random(!random)
             }
-            Event::Action("single") => {
+            Event::Action(ref value) if value == "single" => {
                 let mut conn = conn.lock().unwrap();
                 let single = conn.status()?.single;
                 conn.single(!single)
             }
-            Event::Action("consume") => {
+            Event::Action(ref value) if value == "consume" => {
                 let mut conn = conn.lock().unwrap();
                 let consume = conn.status()?.consume;
                 conn.consume(!consume)
             }
+            Event::Action(ref value) if value == "main" => Ok(()),
             Event::Action(event) => {
                 log::warn!("Unknown event {event}");
                 Ok(())
             }
-            Event::Mouse(button) => Ok(()),
+            Event::Mouse(event) => {
+                match event.button {
+                    MouseButton::Left
+                    | MouseButton::Right
+                    | MouseButton::Middle => {
+                        if let Some(ref layout) =
+                            *last_layout.clone().lock().unwrap()
+                        {
+                            if let Some(ref cache) =
+                                *index_cache.clone().lock().unwrap()
+                            {
+                                let idx = layout
+                                    .0
+                                    .xy_to_index(
+                                        event.x as i32 * pango::SCALE,
+                                        event.y as i32 * pango::SCALE,
+                                    )
+                                    .1
+                                    as usize;
+                                cache
+                                    .iter()
+                                    .find(|(_, start, width)| {
+                                        *start <= idx && idx <= start + width
+                                    })
+                                    .map(|(event, _, _)| {
+                                        Ok::<_, anyhow::Error>(
+                                            Self::process_event(
+                                                Event::Action(event.to_owned()),
+                                                conn,
+                                                actions,
+                                                last_layout,
+                                                index_cache,
+                                            )?,
+                                        )
+                                    });
+                            };
+                        }
+                    }
+                    _ => {}
+                }
+                Ok(())
+            }
         }?)
     }
 }
@@ -292,23 +729,83 @@ impl PanelConfig for Mpd {
     ///   connect
     ///   - type: String
     ///   - default: `127.0.0.1:6600`
-    /// - `format`: the format string to display on the panel
+    /// - `format_playing`: the format string to display on the panel when music
+    ///   is playing
     ///   - type: String
-    ///   - formatting options: `%title%`, `%artist%`
-    ///     - markup is disabled when `strategy == scroll`
+    ///   - formatting options: `%title%`, `%artist%`, `%next%`, `%prev%`,
+    ///     `%play%`, `%pause%`, `%toggle%`, `%main%`, `%shuffle%`, `%repeat%`,
+    ///     `%random%`, `%single%`, `%consume%`
     ///   - default: `%title% - %artist%`
+    /// - `format_paused`: the format string to display on the panel when music
+    ///   is paused
+    ///   - type: String
+    ///   - formatting options: `%title%`, `%artist%`, `%next%`, `%prev%`,
+    ///     `%play%`, `%pause%`, `%toggle%`, `%main%`, `%shuffle%`, `%repeat%`,
+    ///     `%random%`, `%single%`, `%consume%`
+    ///   - default: `%title% - %artist%`
+    /// - `format_stopped`: the format string to display on the panel when no
+    ///   music is playing
+    ///   - type: String
+    ///   - formatting options: `%title%`, `%artist%`, `%next%`, `%prev%`,
+    ///     `%play%`, `%pause%`, `%toggle%`, `%main%`, `%shuffle%`, `%repeat%`,
+    ///     `%random%`, `%single%`, `%consume%`
+    ///   - default: `not playing`
+    /// - `format_main`: the format of the main panel region. Only this section
+    ///   will scroll, and the progress bar will be limited to this region.
+    ///   - type: String
+    ///   - formatting options: `%title%`, `%artist%` (the others from above
+    ///     will work, but they won't function as buttons)
+    ///   - default: empty
+    /// - `format_next`: the format of the button to skip forward one song
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_prev`: the format of the button to skip back one song
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_play`: the format of the play button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_pause`: the format of the play button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_toggle_playing`: the format of the play/pause button when
+    ///   music is playing
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_toggle_paused`: the format of the play/pause button when music
+    ///   is paused
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_toggle_stopped`: the format of the play/pause button when no
+    ///   music is playing
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_shuffle`: the format of the shuffle button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_repeat`: the format of the repeat button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_random`: the format of the random button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_single`: the format of the single button
+    ///   - type: String
+    ///   - default: empty
+    /// - `format_consume`: the format of the consume button
+    ///   - type: String
+    ///   - default: empty
     /// - `progress_bar`: whether to show a progress bar behind the text
     ///   - type: bool
     ///   - default: `false`
     /// - `progress_bg`: the background color of the progress bar (ignored if
     ///   `!progress_bar`)
-    /// - `max_width`: the maximum width of the panel, in pixels when `strategy
-    ///   == ellipsize` and in characters otherwise (regardless, 0 means no
+    /// - `max_width`: the maximum width in characters of the panel (0 means no
     ///   maximum)
     ///   - type: u64
     ///   - default: 0
     /// - `strategy`: how to handle overflow of `max_width`
-    ///   - type: String - one of `scroll`, `ellipsize`, or `truncate`
+    ///   - type: String - `scroll` or `truncate`
     ///   - default: truncate
     /// - `scroll_interval`: how often in milliseconds to scroll the text
     ///   - type: u64
@@ -317,11 +814,8 @@ impl PanelConfig for Mpd {
     ///   beginning when it scrolls (ignored if `strategy != scroll`)
     ///   - type: String
     ///   - default: `  ` (two spaces)
-    /// - `ellipsize_mode`: how to ellipsize the text (see
-    ///   [`pango::EllipsizeMode`] for details)
-    ///   - type: String - one of `start`, `middle`, `end`, or `none`
-    ///   - default: end
-    /// - See [`PanelCommon::parse`].
+    /// - See [`PanelCommon::parse`]. `click_*` and `scroll_*` are currently
+    ///   ignored.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -359,16 +853,6 @@ impl PanelConfig for Mpd {
                             .unwrap_or(1000),
                     ),
                 },
-                "ellipsize" => Strategy::Ellipsize(
-                    match remove_string_from_config("ellipsize_mode", table)
-                        .as_deref()
-                    {
-                        Some("start") => EllipsizeMode::Start,
-                        Some("middle") => EllipsizeMode::Middle,
-                        Some("none") => EllipsizeMode::None,
-                        _ => EllipsizeMode::End,
-                    },
-                ),
                 _ => Strategy::Truncate,
             });
         }
@@ -385,10 +869,60 @@ impl PanelConfig for Mpd {
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as usize);
         }
+        builder.last_layout(Arc::new(Mutex::new(None)));
+        builder.index_cache(Arc::new(Mutex::new(None)));
+        builder.formatter(AhoCorasick::new(&[
+            "%title%",
+            "%artist%",
+            "%next%",
+            "%prev%",
+            "%play%",
+            "%pause%",
+            "%toggle%",
+            "%main%",
+            "%shuffle%",
+            "%repeat%",
+            "%random%",
+            "%single%",
+            "%consume%",
+        ])?);
         builder.common(PanelCommon::parse(
             table,
-            &[""],
-            &["%title% - %artist%"],
+            &[
+                "_playing",
+                "_paused",
+                "_stopped",
+                "_main",
+                "_next",
+                "_prev",
+                "_play",
+                "_pause",
+                "_toggle_playing",
+                "_toggle_paused",
+                "_toggle_stopped",
+                "_shuffle",
+                "_repeat",
+                "_random",
+                "_single",
+                "_consume",
+            ],
+            &[
+                "%title% - %artist%",
+                "%title% - %artist%",
+                "not playing",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ],
             &[""],
         )?);
 
@@ -444,12 +978,20 @@ impl PanelConfig for Mpd {
 
         let (send, recv) = channel(16);
         let conn = self.noidle_conn.clone();
+        let actions = self.common.actions.clone();
+        let last_layout = self.last_layout.clone();
+        let index_cache = self.index_cache.clone();
         map.insert(
             EventType::Action,
-            Box::pin(
-                ReceiverStream::new(recv)
-                    .map(move |s| Self::process_event(s, conn.clone())),
-            ),
+            Box::pin(ReceiverStream::new(recv).map(move |s| {
+                Self::process_event(
+                    s,
+                    conn.clone(),
+                    actions.clone(),
+                    last_layout.clone(),
+                    index_cache.clone(),
+                )
+            })),
         );
 
         for attr in &mut self.common.attrs {

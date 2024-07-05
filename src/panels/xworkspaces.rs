@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     pin::Pin,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -15,13 +15,10 @@ use tokio::{
     task::{self, JoinHandle},
 };
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
-use xcb::{
-    x::{self, PropMode},
-    XidNew,
-};
+use xcb::{x, XidNew};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     remove_string_from_config, remove_uint_from_config,
     x::intern_named_atom,
     Attrs, Highlight, PanelCommon, PanelConfig, PanelStream,
@@ -114,6 +111,7 @@ impl XWorkspaces {
         cr: &Rc<cairo::Context>,
         root: x::Window,
         height: i32,
+        width_cache: Arc<Mutex<Vec<i32>>>,
         number_atom: x::Atom,
         names_atom: x::Atom,
         utf8_atom: x::Atom,
@@ -164,11 +162,16 @@ impl XWorkspaces {
             })
             .collect();
 
+        let mut width_cache = width_cache.lock().unwrap();
+        width_cache.clear();
         let width = layouts
             .iter()
-            .map(|l| l.1.pixel_size().0 + self.padding)
-            .sum::<i32>()
-            - self.padding;
+            .map(|l| {
+                let width = l.1.pixel_size().0;
+                width_cache.push(width);
+                width + self.padding
+            })
+            .sum::<i32>();
 
         let padding = self.padding;
         let active = self.common.attrs[0].clone();
@@ -248,24 +251,116 @@ impl XWorkspaces {
         event: Event,
         conn: Arc<xcb::Connection>,
         root: x::Window,
+        width_cache: Arc<Mutex<Vec<i32>>>,
+        padding: i32,
+        names: &[String],
         current_atom: x::Atom,
+        number_atom: x::Atom,
+        names_atom: x::Atom,
+        utf8_atom: x::Atom,
     ) -> Result<()> {
-        if let Event::Action(event) = event {
-            Ok(if let Ok(workspace) = event.parse::<u32>() {
-                conn.check_request(conn.send_request_checked(
-                    &x::ChangeProperty {
-                        mode: PropMode::Replace,
-                        window: root,
-                        property: current_atom,
-                        r#type: x::ATOM_CARDINAL,
-                        data: &[workspace],
-                    },
-                ))
-            } else {
-                Ok(())
-            }?)
-        } else {
-            Ok(())
+        match event {
+            Event::Action(event) => {
+                if let Some(idx) = names.iter().position(|s| *s == event) {
+                    conn.check_request(conn.send_request_checked(
+                        &x::SendEvent {
+                            propagate: false,
+                            destination: x::SendEventDest::Window(root),
+                            // probably a spec violation, but this guarantees
+                            // that the root window
+                            // gets the message and changes the workspace
+                            event_mask: x::EventMask::all(),
+                            event: &x::ClientMessageEvent::new(
+                                root,
+                                current_atom,
+                                x::ClientMessageData::Data32([
+                                    idx as u32,
+                                    chrono::Local::now().timestamp() as u32,
+                                    0,
+                                    0,
+                                    0,
+                                ]),
+                            ),
+                        },
+                    ))?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("No workspace found with name {event}"))
+                }
+            }
+            Event::Mouse(event) => match event.button {
+                MouseButton::Left
+                | MouseButton::Right
+                | MouseButton::Middle => {
+                    let mut idx = 0;
+                    let cache = width_cache.lock().unwrap();
+                    if cache.is_empty() {
+                        return Ok(());
+                    }
+                    let mut x = cache[0];
+                    let len = cache.len();
+                    while x + padding < event.x as i32 && idx < len {
+                        idx += 1;
+                        x += cache[idx] + padding;
+                    }
+                    drop(cache);
+
+                    if idx < len {
+                        Self::process_event(
+                            Event::Action(names[idx].clone()),
+                            conn,
+                            root,
+                            width_cache,
+                            padding,
+                            names,
+                            current_atom,
+                            number_atom,
+                            names_atom,
+                            utf8_atom,
+                        )?;
+                    }
+                    Ok(())
+                }
+                MouseButton::ScrollUp => {
+                    let current = get_current(&conn, root, current_atom)?;
+                    let new_idx = (current + 1) as usize % names.len();
+
+                    Self::process_event(
+                        Event::Action(names[new_idx].clone()),
+                        conn,
+                        root,
+                        width_cache,
+                        padding,
+                        names,
+                        current_atom,
+                        number_atom,
+                        names_atom,
+                        utf8_atom,
+                    )?;
+
+                    Ok(())
+                }
+                MouseButton::ScrollDown => {
+                    let current = get_current(&conn, root, current_atom)?;
+                    let len = names.len();
+                    let new_idx = (current as usize + len - 1) % len;
+
+                    Self::process_event(
+                        Event::Action(names[new_idx].clone()),
+                        conn,
+                        root,
+                        width_cache,
+                        padding,
+                        names,
+                        current_atom,
+                        number_atom,
+                        names_atom,
+                        utf8_atom,
+                    )?;
+
+                    Ok(())
+                }
+            },
         }
     }
 }
@@ -379,10 +474,32 @@ impl PanelConfig for XWorkspaces {
 
         let (send, recv) = channel(16);
         let conn = self.conn.clone();
+        let width_cache = Arc::new(Mutex::new(Vec::new()));
+        let cache = width_cache.clone();
+        let padding = self.padding;
+        let names = get_workspaces(
+            conn.as_ref(),
+            root,
+            number_atom,
+            names_atom,
+            utf8_atom,
+        )?;
+
         map.insert(
             1,
             Box::pin(ReceiverStream::new(recv).map(move |s| {
-                Self::process_event(s, conn.clone(), root, current_atom)
+                Self::process_event(
+                    s,
+                    conn.clone(),
+                    root,
+                    cache.clone(),
+                    padding,
+                    names.as_slice(),
+                    current_atom,
+                    number_atom,
+                    names_atom,
+                    utf8_atom,
+                )
             })),
         );
 
@@ -392,6 +509,7 @@ impl PanelConfig for XWorkspaces {
                     &cr,
                     root,
                     height,
+                    width_cache.clone(),
                     number_atom,
                     names_atom,
                     utf8_atom,
@@ -437,6 +555,7 @@ fn get_workspaces(
 
     let mut names: Vec<String> = bytes
         .split(|&b| b == 0)
+        .filter(|s| s.len() > 0)
         .map(|s| unsafe { String::from_utf8_unchecked(s.to_vec()) })
         .collect();
 

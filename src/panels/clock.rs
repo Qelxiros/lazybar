@@ -20,8 +20,8 @@ use tokio::{
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, Attrs, PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, MouseButton, PanelDrawInfo},
+    draw_common, Actions, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Defines options for a [`Clock`]'s precision.
@@ -117,6 +117,9 @@ impl Stream for ClockStream {
 /// Displays the current time, updating at a given precision.
 ///
 /// Uses an [`Interval`] to update as close to the unit boundaries as possible.
+///
+/// Available actions: `cycle` and `cycle_back` to change the format that is
+/// used
 #[derive(Builder, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
@@ -143,16 +146,47 @@ impl<P: Precision + Clone> Clock<P> {
         )
     }
 
-    fn process_event(idx: Rc<Mutex<(usize, usize)>>, event: Event) {
+    fn process_event(
+        event: Event,
+        idx: Rc<Mutex<(usize, usize)>>,
+        actions: Actions,
+    ) {
         match event {
-            Event::Action("cycle") => {
+            Event::Action(ref value) if value == "cycle" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 + 1) % idx.1, idx.1);
             }
-            Event::Action("cycle_back") => {
+            Event::Action(ref value) if value == "cycle_back" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
             }
+            Event::Mouse(event) => match event.button {
+                MouseButton::Left => Self::process_event(
+                    Event::Action(actions.left.clone()),
+                    idx,
+                    actions,
+                ),
+                MouseButton::Right => Self::process_event(
+                    Event::Action(actions.right.clone()),
+                    idx,
+                    actions,
+                ),
+                MouseButton::Middle => Self::process_event(
+                    Event::Action(actions.middle.clone()),
+                    idx,
+                    actions,
+                ),
+                MouseButton::ScrollUp => Self::process_event(
+                    Event::Action(actions.up.clone()),
+                    idx,
+                    actions,
+                ),
+                MouseButton::ScrollDown => Self::process_event(
+                    Event::Action(actions.down.clone()),
+                    idx,
+                    actions,
+                ),
+            },
             _ => {}
         }
     }
@@ -201,15 +235,15 @@ where
         }
 
         let idx = self.format_idx.clone();
+        let actions = self.common.actions.clone();
         let (send, recv) = channel(16);
         let mut map =
             StreamMap::<usize, Pin<Box<dyn Stream<Item = ()>>>>::new();
         map.insert(
             0,
-            Box::pin(
-                ReceiverStream::new(recv)
-                    .map(move |s| Self::process_event(idx.clone(), s)),
-            ),
+            Box::pin(ReceiverStream::new(recv).map(move |s| {
+                Self::process_event(s, idx.clone(), actions.clone())
+            })),
         );
         map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| ())));
 

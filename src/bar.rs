@@ -159,7 +159,7 @@ pub enum Event {
     /// A mouse event
     Mouse(MouseEvent),
     /// A message (typically from another process)
-    Action(&'static str),
+    Action(String),
 }
 
 /// A panel on the bar
@@ -293,7 +293,7 @@ impl Bar {
     }
 
     /// Handle an event from the X server.
-    pub fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
+    pub async fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
         match event {
             xcb::Event::X(x::Event::Expose(_)) => self.redraw_bar(),
             xcb::Event::X(x::Event::ButtonPress(event)) => match event.detail()
@@ -317,18 +317,16 @@ impl Bar {
                                     + p.draw_info.as_ref().unwrap().width as f64
                                     >= x as f64
                         });
-                    panel.map(|p| {
-                        p.sender.as_ref().map(|s| {
-                            Ok::<_, anyhow::Error>(s.send(Event::Mouse(
-                                MouseEvent {
-                                    // this fails silently
-                                    button: MouseButton::try_from(button)?,
-                                    x: x - p.x as i16,
-                                    y,
-                                },
-                            )))
-                        })
-                    });
+                    if let Some(p) = panel {
+                        if let Some(s) = &p.sender {
+                            s.send(Event::Mouse(MouseEvent {
+                                button: MouseButton::try_from(button).unwrap(),
+                                x: x - p.x as i16,
+                                y,
+                            }))
+                            .await?;
+                        }
+                    }
                     Ok(())
                 }
                 _ => Ok(()),
@@ -346,19 +344,21 @@ impl Bar {
             Region::Left => self.cr.rectangle(
                 0.0,
                 0.0,
-                self.extents.left,
+                self.extents.left + self.margins.internal,
                 f64::from(self.height),
             ),
             Region::CenterRight => self.cr.rectangle(
-                self.extents.center.0,
+                self.extents.center.0 - self.margins.internal,
                 0.0,
-                f64::from(self.width) - self.extents.center.0,
+                f64::from(self.width)
+                    - (self.extents.center.0 - self.margins.internal),
                 f64::from(self.height),
             ),
             Region::Right => self.cr.rectangle(
-                self.extents.right,
+                self.extents.right - self.margins.internal,
                 0.0,
-                f64::from(self.width) - self.extents.right,
+                f64::from(self.width)
+                    - (self.extents.right - self.margins.internal),
                 f64::from(self.height),
             ),
             Region::All => {
