@@ -111,7 +111,7 @@ impl XWorkspaces {
         cr: &Rc<cairo::Context>,
         root: x::Window,
         height: i32,
-        width_cache: Arc<Mutex<Vec<i32>>>,
+        width_cache: &Arc<Mutex<Vec<i32>>>,
         number_atom: x::Atom,
         names_atom: x::Atom,
         utf8_atom: x::Atom,
@@ -172,6 +172,7 @@ impl XWorkspaces {
                 width + self.padding
             })
             .sum::<i32>();
+        drop(width_cache);
 
         let padding = self.padding;
         let active = self.common.attrs[0].clone();
@@ -255,9 +256,6 @@ impl XWorkspaces {
         padding: i32,
         names: &[String],
         current_atom: x::Atom,
-        number_atom: x::Atom,
-        names_atom: x::Atom,
-        utf8_atom: x::Atom,
     ) -> Result<()> {
         match event {
             Event::Action(event) => {
@@ -314,9 +312,6 @@ impl XWorkspaces {
                             padding,
                             names,
                             current_atom,
-                            number_atom,
-                            names_atom,
-                            utf8_atom,
                         )?;
                     }
                     Ok(())
@@ -333,9 +328,6 @@ impl XWorkspaces {
                         padding,
                         names,
                         current_atom,
-                        number_atom,
-                        names_atom,
-                        utf8_atom,
                     )?;
 
                     Ok(())
@@ -353,9 +345,6 @@ impl XWorkspaces {
                         padding,
                         names,
                         current_atom,
-                        number_atom,
-                        names_atom,
-                        utf8_atom,
                     )?;
 
                     Ok(())
@@ -496,9 +485,6 @@ impl PanelConfig for XWorkspaces {
                     padding,
                     names.as_slice(),
                     current_atom,
-                    number_atom,
-                    names_atom,
-                    utf8_atom,
                 )
             })),
         );
@@ -509,7 +495,7 @@ impl PanelConfig for XWorkspaces {
                     &cr,
                     root,
                     height,
-                    width_cache.clone(),
+                    &width_cache,
                     number_atom,
                     names_atom,
                     utf8_atom,

@@ -30,8 +30,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     bar::{Event, MouseButton, PanelDrawInfo},
     remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Actions, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
+    PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
@@ -99,30 +99,30 @@ impl Mpd {
         self.formatter.replace_all_with(
             self.common.formats[3].as_str(),
             &mut main,
-            |_, content, dst| self.replace(content, dst, status.clone()),
+            |_, content, dst| self.replace(content, dst, &status),
         );
         let mut text = String::new();
         self.formatter.replace_all_with(
             format,
             &mut text,
-            |_, content, dst| self.replace(content, dst, status.clone()),
+            |_, content, dst| self.replace(content, dst, &status),
         );
 
         let mut index_cache = Vec::new();
         if let Ok(haystack) = pango::parse_markup(format, '\0') {
             let haystack = haystack.1.as_str();
-            let mut _ignored = String::new();
+            let mut ignored = String::new();
             let mut offset = 0;
             self.formatter.replace_all_with(
                 haystack,
-                &mut _ignored,
+                &mut ignored,
                 |mat, content, dst| {
                     self.build_cache(
                         mat,
                         content,
                         dst,
                         main.as_str(),
-                        status.clone(),
+                        &status,
                         &mut index_cache,
                         &mut offset,
                     )
@@ -218,7 +218,7 @@ impl Mpd {
                                 .as_str(),
                         )
                     } else {
-                        text.replace("%main%", main.as_str()).clone()
+                        text.replace("%main%", main.as_str())
                     }
                     .as_str(),
                 );
@@ -231,8 +231,10 @@ impl Mpd {
         let (bar_start_idx, bar_max_width_idx) = index_cache
             .iter()
             .find(|(name, _, _)| *name == "main")
-            .map(|(_, start, width)| (*start as i32, *width as i32))
-            .unwrap_or_else(|| (0, text.len() as i32));
+            .map_or_else(
+                || (0, text.len() as i32),
+                |(_, start, width)| (*start as i32, *width as i32),
+            );
 
         let bar_start =
             layout.index_to_pos(bar_start_idx).x() as f64 / pango::SCALE as f64;
@@ -299,7 +301,12 @@ impl Mpd {
         ))
     }
 
-    fn replace(&self, content: &str, dst: &mut String, status: Status) -> bool {
+    fn replace(
+        &self,
+        content: &str,
+        dst: &mut String,
+        status: &Status,
+    ) -> bool {
         match content {
             "%title%" => {
                 let title = glib::markup_escape_text(
@@ -417,7 +424,7 @@ impl Mpd {
         content: &str,
         dst: &mut String,
         main: &str,
-        status: Status,
+        status: &Status,
         index_cache: &mut Vec<(&str, usize, usize)>,
         offset: &mut isize,
     ) -> bool {
@@ -628,7 +635,6 @@ impl Mpd {
     fn process_event(
         event: Event,
         conn: Arc<Mutex<Client>>,
-        actions: Actions,
         last_layout: Arc<Mutex<Option<(Layout, String)>>>,
         index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
     ) -> Result<()> {
@@ -701,14 +707,11 @@ impl Mpd {
                                         *start <= idx && idx <= start + width
                                     })
                                     .map(|(event, _, _)| {
-                                        Ok::<_, anyhow::Error>(
-                                            Self::process_event(
-                                                Event::Action(event.to_owned()),
-                                                conn,
-                                                actions,
-                                                last_layout,
-                                                index_cache,
-                                            )?,
+                                        Self::process_event(
+                                            Event::Action(event.to_owned()),
+                                            conn,
+                                            last_layout,
+                                            index_cache,
                                         )
                                     });
                             };
@@ -871,7 +874,7 @@ impl PanelConfig for Mpd {
         }
         builder.last_layout(Arc::new(Mutex::new(None)));
         builder.index_cache(Arc::new(Mutex::new(None)));
-        builder.formatter(AhoCorasick::new(&[
+        builder.formatter(AhoCorasick::new([
             "%title%",
             "%artist%",
             "%next%",
@@ -978,7 +981,6 @@ impl PanelConfig for Mpd {
 
         let (send, recv) = channel(16);
         let conn = self.noidle_conn.clone();
-        let actions = self.common.actions.clone();
         let last_layout = self.last_layout.clone();
         let index_cache = self.index_cache.clone();
         map.insert(
@@ -987,7 +989,6 @@ impl PanelConfig for Mpd {
                 Self::process_event(
                     s,
                     conn.clone(),
-                    actions.clone(),
                     last_layout.clone(),
                     index_cache.clone(),
                 )

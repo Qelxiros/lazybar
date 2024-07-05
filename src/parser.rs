@@ -53,7 +53,10 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
         .unwrap_or_else(|| {
             let mut keys = bars_table.keys().collect::<Vec<_>>();
             keys.sort();
-            keys.first().expect("No bars specified in config file")
+            keys.first().unwrap_or_else(|| {
+                log::error!("No bars specified in config file");
+                std::process::exit(101);
+            })
         })
         .to_owned();
 
@@ -167,22 +170,22 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
         }
     }
 
-    let mut panels_table = CONFIG
+    let panels_table = CONFIG
         .get_table("panels")
         .context("`panels` doesn't exist or isn't a table")?;
 
     // leak panel names so that we can use &'static str instead of String
     left_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &mut panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Left));
     center_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &mut panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Center));
     right_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &mut panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table))
         .for_each(|p| bar.add_panel(p, Alignment::Right));
 
     Ok(bar)

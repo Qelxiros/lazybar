@@ -296,7 +296,7 @@ pub mod builders {
                                 // circumstances?
                                 std::process::exit(0);
                             } else {
-                                log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}")
+                                log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
                             }
                         }
                     },

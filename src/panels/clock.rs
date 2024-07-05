@@ -242,7 +242,7 @@ where
         map.insert(
             0,
             Box::pin(ReceiverStream::new(recv).map(move |s| {
-                Self::process_event(s, idx.clone(), actions.clone())
+                Self::process_event(s, idx.clone(), actions.clone());
             })),
         );
         map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| ())));

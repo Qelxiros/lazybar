@@ -198,9 +198,12 @@ impl PanelCommon {
                         .filter_map(|v| v.into_string().ok())
                         .collect::<Vec<_>>()
                 })
-                .unwrap_or(
-                    format_default.iter().map(|s| s.to_string()).collect(),
-                ),
+                .unwrap_or_else(|| {
+                    format_default
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                }),
         );
 
         builder.dependence(

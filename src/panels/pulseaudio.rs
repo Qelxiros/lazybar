@@ -93,7 +93,7 @@ impl Pulseaudio {
     fn draw(
         cr: &Rc<cairo::Context>,
         data: Option<(Volume, bool)>,
-        last_data: Arc<Mutex<(Volume, bool)>>,
+        last_data: &Arc<Mutex<(Volume, bool)>>,
         ramp: Option<&Ramp>,
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
@@ -131,11 +131,10 @@ impl Pulseaudio {
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
                     sink,
-                    move |r| match r {
-                        ListResult::Item(i) => {
+                    move |r| {
+                        if let ListResult::Item(i) = r {
                             let _ = send.send(i.volume);
                         }
-                        _ => {}
                     },
                 );
                 mainloop.borrow_mut().unlock();
@@ -180,8 +179,7 @@ impl Pulseaudio {
                 let volume = recv.recv();
                 if let Ok(mut volume) = volume {
                     volume.get_mut().iter_mut().for_each(|v| {
-                        v.0 = (v.0.checked_sub(unit * Volume::NORMAL.0 / 100))
-                            .unwrap_or(0);
+                        v.0 = v.0.saturating_sub(unit * Volume::NORMAL.0 / 100);
                     });
                     mainloop.borrow_mut().lock();
                     let o = {
@@ -210,11 +208,10 @@ impl Pulseaudio {
                 mainloop.deref().borrow_mut().lock();
                 introspector.deref().borrow_mut().get_sink_info_by_name(
                     sink,
-                    move |r| match r {
-                        ListResult::Item(i) => {
+                    move |r| {
+                        if let ListResult::Item(i) = r {
                             let _ = send.send(i.mute);
                         }
-                        _ => {}
                     },
                 );
                 mainloop.deref().borrow_mut().unlock();
@@ -472,7 +469,7 @@ impl PanelConfig for Pulseaudio {
                 Self::draw(
                     &cr,
                     data,
-                    last_data.clone(),
+                    &last_data,
                     ramp.as_ref(),
                     muted_ramp.as_ref(),
                     &attrs,
