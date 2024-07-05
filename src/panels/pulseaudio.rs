@@ -1,15 +1,17 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
+    ops::Deref,
     pin::Pin,
     rc::Rc,
     sync::{
         mpsc::{channel, Receiver, Sender},
         Arc, Mutex,
     },
-    task::{Context, Poll},
+    task::Poll,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
@@ -20,15 +22,16 @@ use libpulse_binding::{
         State,
     },
     mainloop::threaded,
+    operation,
     volume::Volume,
 };
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::{Dependence, Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream, Ramp,
+    bar::{Dependence, Event, MouseButton, PanelDrawInfo},
+    draw_common, remove_string_from_config, remove_uint_from_config, Actions,
+    Attrs, PanelCommon, PanelConfig, PanelStream, Ramp,
 };
 
 /// Displays the current volume and mute status of a given sink.
@@ -59,7 +62,7 @@ impl Stream for Pulseaudio {
 
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &mut self.handle {
             if handle.is_finished() {
@@ -97,6 +100,7 @@ impl Pulseaudio {
         dependence: Dependence,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = data.unwrap_or_else(|| *last_data.lock().unwrap());
+        *last_data.lock().unwrap() = (volume, mute);
         let ramp = match (mute, muted_ramp) {
             (false, _) | (true, None) => ramp,
             (true, Some(_)) => muted_ramp,
@@ -115,50 +119,157 @@ impl Pulseaudio {
 
     fn process_event(
         event: Event,
+        actions: Actions,
         sink: &str,
         unit: u32,
-        introspector: &mut Introspector,
+        introspector: Rc<RefCell<Introspector>>,
+        mainloop: Rc<RefCell<threaded::Mainloop>>,
     ) -> (Volume, bool) {
         match event {
-            Event::Action("increment") => {
+            Event::Action(ref value) if value == "increment" => {
                 let (send, recv) = std::sync::mpsc::channel();
-                introspector.get_sink_info_by_name(sink, move |r| match r {
-                    ListResult::Item(i) => {
-                        let _ = send.send(i.volume);
-                    }
-                    _ => {}
-                });
+                mainloop.borrow_mut().lock();
+                introspector.borrow_mut().get_sink_info_by_name(
+                    sink,
+                    move |r| match r {
+                        ListResult::Item(i) => {
+                            let _ = send.send(i.volume);
+                        }
+                        _ => {}
+                    },
+                );
+                mainloop.borrow_mut().unlock();
                 let volume = recv.recv();
                 if let Ok(mut volume) = volume {
-                    volume.get_mut().iter_mut().for_each(|v| v.0 += unit);
-                    introspector.set_sink_volume_by_name(sink, &volume, None);
+                    volume.get_mut().iter_mut().for_each(|v| {
+                        v.0 = (v.0 + unit * Volume::NORMAL.0 / 100)
+                            .min(Volume::NORMAL.0);
+                    });
+                    mainloop.borrow_mut().lock();
+                    let o = {
+                        let ml_ref = Rc::clone(&mainloop);
+                        introspector.borrow_mut().set_sink_volume_by_name(
+                            sink,
+                            &volume,
+                            Some(Box::new(move |_success| unsafe {
+                                (*ml_ref.as_ptr()).signal(false);
+                            })),
+                        )
+                    };
+
+                    while o.get_state() != operation::State::Done {
+                        mainloop.borrow_mut().wait();
+                    }
+
+                    mainloop.borrow_mut().unlock();
                 };
             }
-            Event::Action("decrement") => {
+            Event::Action(ref value) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
-                introspector.get_sink_info_by_name(sink, move |r| match r {
-                    ListResult::Item(i) => {
-                        let _ = send.send(i.volume);
-                    }
-                    _ => {}
-                });
+                mainloop.borrow_mut().lock();
+                introspector.deref().borrow_mut().get_sink_info_by_name(
+                    sink,
+                    move |r| match r {
+                        ListResult::Item(i) => {
+                            let _ = send.send(i.volume);
+                        }
+                        _ => {}
+                    },
+                );
+                mainloop.borrow_mut().unlock();
                 let volume = recv.recv();
                 if let Ok(mut volume) = volume {
-                    volume.get_mut().iter_mut().for_each(|v| v.0 -= unit);
-                    introspector.set_sink_volume_by_name(sink, &volume, None);
+                    volume.get_mut().iter_mut().for_each(|v| {
+                        v.0 = (v.0.checked_sub(unit * Volume::NORMAL.0 / 100))
+                            .unwrap_or(0);
+                    });
+                    mainloop.borrow_mut().lock();
+                    let o = {
+                        let ml_ref = Rc::clone(&mainloop);
+                        introspector
+                            .deref()
+                            .borrow_mut()
+                            .set_sink_volume_by_name(
+                                sink,
+                                &volume,
+                                Some(Box::new(move |_success| unsafe {
+                                    (*ml_ref.as_ptr()).signal(false);
+                                })),
+                            )
+                    };
+
+                    while o.get_state() != operation::State::Done {
+                        mainloop.borrow_mut().wait();
+                    }
+
+                    mainloop.borrow_mut().unlock();
                 };
             }
-            Event::Action("toggle") => {
+            Event::Action(ref value) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
-                introspector.get_sink_info_by_name(sink, move |r| match r {
-                    ListResult::Item(i) => {
-                        let _ = send.send(i.mute);
-                    }
-                    _ => {}
-                });
+                mainloop.deref().borrow_mut().lock();
+                introspector.deref().borrow_mut().get_sink_info_by_name(
+                    sink,
+                    move |r| match r {
+                        ListResult::Item(i) => {
+                            let _ = send.send(i.mute);
+                        }
+                        _ => {}
+                    },
+                );
+                mainloop.deref().borrow_mut().unlock();
                 let mute = recv.recv();
                 if let Ok(mute) = mute {
-                    introspector.set_sink_mute_by_name(sink, !mute, None);
+                    mainloop.deref().borrow_mut().lock();
+                    introspector
+                        .deref()
+                        .borrow_mut()
+                        .set_sink_mute_by_name(sink, !mute, None);
+                    mainloop.deref().borrow_mut().unlock();
+                };
+            }
+            Event::Mouse(event) => {
+                match event.button {
+                    MouseButton::Left => Self::process_event(
+                        Event::Action(actions.left.clone()),
+                        actions,
+                        sink,
+                        unit,
+                        introspector,
+                        mainloop,
+                    ),
+                    MouseButton::Right => Self::process_event(
+                        Event::Action(actions.right.clone()),
+                        actions,
+                        sink,
+                        unit,
+                        introspector,
+                        mainloop,
+                    ),
+                    MouseButton::Middle => Self::process_event(
+                        Event::Action(actions.middle.clone()),
+                        actions,
+                        sink,
+                        unit,
+                        introspector,
+                        mainloop,
+                    ),
+                    MouseButton::ScrollUp => Self::process_event(
+                        Event::Action(actions.up.clone()),
+                        actions,
+                        sink,
+                        unit,
+                        introspector,
+                        mainloop,
+                    ),
+                    MouseButton::ScrollDown => Self::process_event(
+                        Event::Action(actions.down.clone()),
+                        actions,
+                        sink,
+                        unit,
+                        introspector,
+                        mainloop,
+                    ),
                 };
             }
             _ => {}
@@ -199,7 +310,8 @@ impl PanelConfig for Pulseaudio {
     ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
     ///   is muted.
     ///
-    /// - See [`PanelCommon::parse`].
+    /// - See [`PanelCommon::parse`]. Valid events are `increment`, `decrement`,
+    ///   and `toggle`.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -257,28 +369,37 @@ impl PanelConfig for Pulseaudio {
         _height: i32,
     ) -> Result<(PanelStream, Option<tokio::sync::mpsc::Sender<Event>>)> {
         let mut mainloop = threaded::Mainloop::new()
-            .ok_or_else(|| anyhow!("Failed to create pulseaudio mainloop"))?;
+            .context("Failed to create pulseaudio mainloop")?;
         mainloop.start()?;
         let mut context = context::Context::new(&mainloop, "omnibars")
             .ok_or_else(|| anyhow!("Failed to create pulseaudio context"))?;
         context.connect(self.server.as_deref(), FlagSet::NOFAIL, None)?;
         while context.get_state() != State::Ready {}
         let introspector = context.introspect();
+        let mainloop = Rc::new(RefCell::new(mainloop));
 
         let (sink_send, sink_recv) = channel();
         self.send = sink_send.clone();
         let sink = self.sink.clone();
 
-        mainloop.lock();
+        mainloop.borrow_mut().lock();
 
         let initial = sink_send.clone();
-        introspector.get_sink_info_by_name(sink.as_str(), move |r| {
+        let ml_ref = Rc::clone(&mainloop);
+        let o = introspector.get_sink_info_by_name(sink.as_str(), move |r| {
             if let ListResult::Item(s) = r {
                 let volume = s.volume.get()[0];
                 let mute = s.mute;
                 initial.send((volume, mute)).unwrap();
+                unsafe {
+                    (*ml_ref.as_ptr()).signal(false);
+                }
             }
         });
+
+        while o.get_state() != operation::State::Done {
+            mainloop.borrow_mut().wait();
+        }
 
         context.subscribe(InterestMaskSet::SINK, |_| {});
 
@@ -289,20 +410,19 @@ impl PanelConfig for Pulseaudio {
                     if let ListResult::Item(s) = r {
                         let volume = s.volume.get()[0];
                         let mute = s.mute;
-                        send.send((volume, mute)).unwrap();
+                        let _ = send.send((volume, mute));
                     }
                 });
             }));
 
         context.set_subscribe_callback(cb);
 
-        mainloop.unlock();
+        mainloop.borrow_mut().unlock();
 
-        let mut introspector = context.introspect();
+        let introspector = Rc::new(RefCell::new(context.introspect()));
 
         // prevent these structures from going out of scope
         Box::leak(Box::new(context));
-        Box::leak(Box::new(mainloop));
 
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
@@ -321,6 +441,7 @@ impl PanelConfig for Pulseaudio {
         self.recv = Arc::new(Mutex::new(sink_recv));
         let sink = self.sink.clone();
         let unit = self.unit;
+        let actions = self.common.actions.clone();
         map.insert(
             0,
             Box::pin(
@@ -332,7 +453,14 @@ impl PanelConfig for Pulseaudio {
         map.insert(
             1,
             Box::pin(ReceiverStream::new(action_recv).map(move |s| {
-                Self::process_event(s, sink.as_str(), unit, &mut introspector);
+                Self::process_event(
+                    s,
+                    actions.clone(),
+                    sink.as_str(),
+                    unit,
+                    introspector.clone(),
+                    mainloop.clone(),
+                );
                 None
             })),
         );

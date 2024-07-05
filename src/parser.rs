@@ -36,7 +36,10 @@ lazy_static! {
                 .required(true),
             )
             .build()
-            .unwrap()
+            .unwrap_or_else(|e| {
+                log::error!("Error parsing config file: {e}");
+                std::process::exit(101);
+            })
     };
 }
 

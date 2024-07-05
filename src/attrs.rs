@@ -33,15 +33,15 @@ impl Attrs {
     ///
     /// Configuration options:
     ///
-    /// `fg: String`: Specify the foreground (usually text) color. All parsing
-    /// methods from [csscolorparser] are available.
+    /// - `fg: String`: Specify the foreground (usually text) color. All parsing
+    ///   methods from [csscolorparser] are available.
     ///
-    /// `bg: String`: Specify the background color. All parsing methods from
-    /// [csscolorparser] are available.
+    /// - `bg: String`: Specify the background color. All parsing methods from
+    ///   [csscolorparser] are available.
     ///
-    /// `font: String`: Specify the font to be used. This will be turned into a
-    /// [`pango::FontDescription`], so it's very configurable. Font family,
-    /// weight, size, and more can be specified.
+    /// - `font: String`: Specify the font to be used. This will be turned into
+    ///   a [`pango::FontDescription`], so it's very configurable. Font family,
+    ///   weight, size, and more can be specified.
     pub fn parse<S: std::hash::BuildHasher>(
         table: &mut HashMap<String, config::Value, S>,
         prefix: &str,

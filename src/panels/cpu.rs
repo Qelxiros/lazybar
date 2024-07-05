@@ -37,7 +37,6 @@ impl Cpu {
         let load = read_current_load(self.path.as_str())?;
 
         let diff = load.total - self.last_load.total;
-        self.last_load = load;
 
         let percentage = (diff - (load.idle - self.last_load.idle)) as f64
             / diff as f64
@@ -45,6 +44,8 @@ impl Cpu {
 
         let text = self.common.formats[0]
             .replace("%percentage%", format!("{percentage:.0}").as_str());
+
+        self.last_load = load;
 
         draw_common(
             cr,
