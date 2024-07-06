@@ -44,6 +44,18 @@ lazy_static! {
 }
 
 /// Parses a bar with a given name from the global [`Config`]
+///
+/// Configuration options:
+/// - `position`: `top` or `bottom`
+/// - `height`: the height in pixels of the bar
+/// - `transparent`: `true` or `false`. If `bg` isn't transparent, the bar won't
+///   be either.
+/// - `bg`: the background color. See [`csscolorparser::parse`].
+/// - `margins`: See [`Margins::parse`].
+/// - `reverse_scroll`: `true` or `false`. Whether to reverse scrolling.
+/// - `ipc`: `true` or `false`. Whether to enable inter-process communication.
+///
+/// See [`Attrs::parse`] for more parsing details.
 pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
     let mut bars_table = CONFIG
         .get_table("bars")
@@ -119,6 +131,13 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
                 .into_float()
                 .unwrap_or_default(),
         ))
+        .reverse_scroll(
+            bar_table
+                .remove("reverse_scroll")
+                .unwrap_or_default()
+                .into_bool()
+                .unwrap_or_default(),
+        )
         .ipc(
             bar_table
                 .remove("ipc")

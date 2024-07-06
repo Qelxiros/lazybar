@@ -182,6 +182,8 @@ pub mod builders {
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
     /// A set of options for a bar.
+    ///
+    /// See [`parser::parse`][crate::parser::parse] for configuration details.
     #[derive(Builder)]
     #[builder_struct_attr(allow(missing_docs))]
     #[builder_impl_attr(allow(missing_docs))]
@@ -209,6 +211,8 @@ pub mod builders {
         /// The default attributes of panels on the bar. See [`Attrs`] for
         /// details.
         pub attrs: Attrs,
+        /// Whether to reverse the scrolling direction for panel events.
+        pub reverse_scroll: bool,
         /// Whether inter-process communication (via Unix socket) is enabled.
         /// See [`crate::ipc`] for details.
         pub ipc: bool,
@@ -251,6 +255,7 @@ pub mod builders {
                 self.transparent,
                 self.bg,
                 self.margins,
+                self.reverse_scroll,
                 self.ipc,
             )?;
 

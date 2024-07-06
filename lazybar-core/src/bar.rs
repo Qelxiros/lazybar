@@ -129,16 +129,26 @@ pub enum MouseButton {
     ScrollDown,
 }
 
-impl TryFrom<u8> for MouseButton {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self> {
+impl MouseButton {
+    fn try_parse(value: u8, reverse: bool) -> Result<Self> {
         match value {
             1 => Ok(Self::Left),
             2 => Ok(Self::Middle),
             3 => Ok(Self::Right),
-            4 => Ok(Self::ScrollUp),
-            5 => Ok(Self::ScrollDown),
+            4 => {
+                if reverse {
+                    Ok(Self::ScrollUp)
+                } else {
+                    Ok(Self::ScrollDown)
+                }
+            }
+            5 => {
+                if reverse {
+                    Ok(Self::ScrollDown)
+                } else {
+                    Ok(Self::ScrollUp)
+                }
+            }
             _ => Err(anyhow!("X server provided invalid button")),
         }
     }
@@ -196,6 +206,8 @@ impl Panel {
 
 #[allow(dead_code)]
 /// The bar itself.
+///
+/// See [`parser::parse`][crate::parser::parse] for configuration details.
 pub struct Bar {
     pub(crate) name: String,
     position: Position,
@@ -209,6 +221,7 @@ pub struct Bar {
     bg: Color,
     margins: Margins,
     extents: Extents,
+    reverse_scroll: bool,
     pub(crate) left: Vec<Panel>,
     pub(crate) center: Vec<Panel>,
     pub(crate) right: Vec<Panel>,
@@ -227,6 +240,7 @@ impl Bar {
         transparent: bool,
         bg: Color,
         margins: Margins,
+        reverse_scroll: bool,
         ipc: bool,
     ) -> Result<Self> {
         let (conn, screen, window, width, visual) =
@@ -262,6 +276,7 @@ impl Bar {
                 center: ((width / 2).into(), (width / 2).into()),
                 right: width.into(),
             },
+            reverse_scroll,
             left: Vec::new(),
             center: Vec::new(),
             right: Vec::new(),
@@ -323,7 +338,11 @@ impl Bar {
                     if let Some(p) = panel {
                         if let Some(s) = &p.sender {
                             s.send(Event::Mouse(MouseEvent {
-                                button: MouseButton::try_from(button).unwrap(),
+                                button: MouseButton::try_parse(
+                                    button,
+                                    self.reverse_scroll,
+                                )
+                                .unwrap(),
                                 x: x - p.x as i16,
                                 y,
                             }))
