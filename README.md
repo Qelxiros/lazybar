@@ -20,8 +20,8 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] conditional rendering
 - [ ] storage usage?
 - [ ] systray
-- [ ] clickable panels
-- [ ] ipc for messaging
+- [x] clickable panels
+- [x] ipc for messaging
 
 If you want to see something that isn't on this list, open an issue, or even better, a PR!
 

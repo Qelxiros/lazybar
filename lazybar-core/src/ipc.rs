@@ -4,6 +4,7 @@ use anyhow::Result;
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
 
+/// Initialize IPC for a given bar
 pub fn init(bar_name: &str) -> Result<UnixListenerStream> {
     DirBuilder::new()
         .recursive(true)

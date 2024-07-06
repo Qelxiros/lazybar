@@ -33,7 +33,7 @@
 //!
 //! # Example Config
 //! ```toml
-#![doc = include_str!("../../lazybar/examples/config.toml")]
+#![doc = include_str!("../examples/config.toml")]
 //! ```
 #![deny(missing_docs)]
 
@@ -41,7 +41,9 @@ mod attrs;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
 mod highlight;
-mod ipc;
+/// Support for inter-process communication, like that provided by the
+/// `lazybar-msg` crate.
+pub mod ipc;
 /// The parser for the `config.toml` file.
 pub mod parser;
 mod ramp;
@@ -163,7 +165,7 @@ impl Margins {
 }
 
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
-/// [`panels::builders`][crate::panels::builders] for panel builders.
+/// [`panels::builders`] for panel builders.
 pub mod builders {
     use std::{fs::remove_file, pin::Pin, thread};
 
@@ -250,8 +252,7 @@ pub mod builders {
                 self.bg,
                 self.margins,
                 self.ipc,
-            )
-            .await?;
+            )?;
 
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {

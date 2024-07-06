@@ -9,7 +9,6 @@ use std::{
 use anyhow::{anyhow, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
-use nix::NixPath;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
     sync::mpsc::{channel, Sender},

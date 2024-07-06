@@ -1,7 +1,14 @@
 [package]
 name = "lazybar-msg"
 version = "0.1.0"
+authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
+rust-version = "1.74.0"
+description = "IPC for lazybar using UNIX sockets"
+readme = "../README.md"
+repository = "https://github.com/Qelxiros/lazybar"
+license = "MIT"
+keywords = ["X11","WM","Linux","status-bar","i3"]
 
 [dependencies]
 anyhow = "1.0.86"

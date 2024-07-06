@@ -1,11 +1,11 @@
 [package]
 name = "lazybar-core"
-version = "0.2.2"
+version = "0.3.2"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
 rust-version = "1.79.0"
 description = "A lightweight, event-driven X11 status bar"
-readme = "README.md"
+readme = "../README.md"
 repository = "https://github.com/Qelxiros/lazybar"
 license = "MIT"
 keywords = ["X11","WM","Linux","status-bar","i3"]

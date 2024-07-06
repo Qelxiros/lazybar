@@ -41,7 +41,8 @@ type = "battery"
 [panels.clock]
 type = "clock"
 precision = "seconds"
-format = "<span foreground='#0ff'>%Y-%m-%d %T</span>"
+formats = ["<span foreground='#0ff'>%Y-%m-%d %T</span>", "<span foreground='#f00'>%Y-%m-%d %T</span>"]
+click-left = "cycle"
 
 [panels.separator]
 type = "separator"
