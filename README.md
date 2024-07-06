@@ -35,7 +35,7 @@ Everyone is welcome to contribute. Submit a PR with a feature you want to see, a
 ```lazybar <bar_name>```
 
 ## Configuration
-Create `~/.config/lazybar/config.toml`. See https://docs.rs/lazybar for documentation and configuration options.
+Create `~/.config/lazybar/config.toml`. See https://docs.rs/lazybar-core for documentation and configuration options.
 
 Documentation for pango markup is available [here](https://docs.gtk.org/Pango/pango_markup.html).
 

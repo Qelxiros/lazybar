@@ -691,7 +691,7 @@ name = "lazybar"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "lazybar-core 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazybar-core",
  "log",
  "signal-hook",
  "simple_logger",
@@ -700,38 +700,6 @@ dependencies = [
 [[package]]
 name = "lazybar-core"
 version = "0.3.2"
-dependencies = [
- "aho-corasick",
- "anyhow",
- "cairo-rs",
- "chrono",
- "config",
- "csscolorparser",
- "derive_builder",
- "fastping-rs",
- "futures",
- "glib",
- "lazy_static",
- "libpulse-binding",
- "log",
- "mpd",
- "nix",
- "pango",
- "pangocairo",
- "regex",
- "signal-hook",
- "simple_logger",
- "tokio",
- "tokio-stream",
- "unicode-segmentation",
- "xcb",
-]
-
-[[package]]
-name = "lazybar-core"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade1991471dab17640ab4bcc73a5008e64793684a9610ebdb005fed710549084"
 dependencies = [
  "aho-corasick",
  "anyhow",
