@@ -134,10 +134,16 @@ impl Mpd {
 
         match self.strategy {
             Strategy::Scroll { interval: _ } => {
-                if event == EventType::Scroll {
-                    self.scroll_idx = (self.scroll_idx + 1)
-                        % (main.graphemes(true).count()
-                            + self.scroll_separator.len());
+                match event {
+                    EventType::Scroll => {
+                        if status.state == State::Play {
+                            self.scroll_idx = (self.scroll_idx + 1)
+                                % (main.graphemes(true).count()
+                                    + self.scroll_separator.len());
+                        }
+                    }
+                    EventType::Player => self.scroll_idx = 0,
+                    _ => {}
                 }
                 let scrolling = self.max_width > 0
                     && main.graphemes(true).count() > self.max_width;
@@ -151,27 +157,19 @@ impl Mpd {
                 ) {
                     (false, _) => {
                         layout.set_markup(
-                            text.replace(
-                                "%main%",
-                                glib::markup_escape_text(main.as_str())
-                                    .as_str(),
-                            )
-                            .as_str(),
+                            text.replace("%main%", main.as_str()).as_str(),
                         );
                     }
                     (true, false) => {
                         layout.set_markup(
                             text.replace(
                                 "%main%",
-                                glib::markup_escape_text(
-                                    main.as_str()
-                                        .graphemes(true)
-                                        .skip(self.scroll_idx)
-                                        .take(self.max_width)
-                                        .collect::<String>()
-                                        .as_str(),
-                                )
-                                .as_str(),
+                                main.as_str()
+                                    .graphemes(true)
+                                    .skip(self.scroll_idx)
+                                    .take(self.max_width)
+                                    .collect::<String>()
+                                    .as_str(),
                             )
                             .as_str(),
                         );
@@ -180,25 +178,22 @@ impl Mpd {
                         layout.set_markup(
                             text.replace(
                                 "%main%",
-                                glib::markup_escape_text(
-                                    format!(
-                                        "{}{}",
-                                        main.as_str()
-                                            .graphemes(true)
-                                            .skip(self.scroll_idx)
-                                            .collect::<String>(),
-                                        main.as_str()
-                                            .graphemes(true)
-                                            .take(
-                                                self.max_width
-                                                    - (main
-                                                        .graphemes(true)
-                                                        .count()
-                                                        - self.scroll_idx)
-                                            )
-                                            .collect::<String>()
-                                    )
-                                    .as_str(),
+                                format!(
+                                    "{}{}",
+                                    main.as_str()
+                                        .graphemes(true)
+                                        .skip(self.scroll_idx)
+                                        .collect::<String>(),
+                                    main.as_str()
+                                        .graphemes(true)
+                                        .take(
+                                            self.max_width
+                                                - (main
+                                                    .graphemes(true)
+                                                    .count()
+                                                    - self.scroll_idx)
+                                        )
+                                        .collect::<String>()
                                 )
                                 .as_str(),
                             )
@@ -309,50 +304,38 @@ impl Mpd {
     ) -> bool {
         match content {
             "%title%" => {
-                let title = glib::markup_escape_text(
-                    self.noidle_conn
-                        .lock()
-                        .unwrap()
-                        .currentsong()
-                        .map_or_else(
-                            |_| String::from("Unknown"),
-                            |s| {
-                                s.map_or_else(
-                                    || String::from("Unknown"),
-                                    |s| {
-                                        s.title.unwrap_or_else(|| {
-                                            String::from("Unknown")
-                                        })
-                                    },
-                                )
-                            },
-                        )
-                        .as_str(),
-                );
+                let title =
+                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                        |_| String::from("Unknown"),
+                        |s| {
+                            s.map_or_else(
+                                || String::from("Unknown"),
+                                |s| {
+                                    s.title.unwrap_or_else(|| {
+                                        String::from("Unknown")
+                                    })
+                                },
+                            )
+                        },
+                    );
                 dst.push_str(title.as_str());
                 true
             }
             "%artist%" => {
-                let artist = glib::markup_escape_text(
-                    self.noidle_conn
-                        .lock()
-                        .unwrap()
-                        .currentsong()
-                        .map_or_else(
-                            |_| String::from("Unknown"),
-                            |s| {
-                                s.map_or_else(
-                                    || String::from("Unknown"),
-                                    |s| {
-                                        s.artist.unwrap_or_else(|| {
-                                            String::from("Unknown")
-                                        })
-                                    },
-                                )
-                            },
-                        )
-                        .as_str(),
-                );
+                let artist =
+                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                        |_| String::from("Unknown"),
+                        |s| {
+                            s.map_or_else(
+                                || String::from("Unknown"),
+                                |s| {
+                                    s.artist.unwrap_or_else(|| {
+                                        String::from("Unknown")
+                                    })
+                                },
+                            )
+                        },
+                    );
                 dst.push_str(artist.as_str());
                 true
             }
