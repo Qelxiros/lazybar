@@ -33,7 +33,7 @@
 //!
 //! # Example Config
 //! ```toml
-#![doc = include_str!("../examples/config.toml")]
+#![doc = include_str!("../../lazybar/examples/config.toml")]
 //! ```
 #![deny(missing_docs)]
 
@@ -41,6 +41,7 @@ mod attrs;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
 mod highlight;
+mod ipc;
 /// The parser for the `config.toml` file.
 pub mod parser;
 mod ramp;
@@ -164,14 +165,17 @@ impl Margins {
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`][crate::panels::builders] for panel builders.
 pub mod builders {
+    use std::{fs::remove_file, pin::Pin, thread};
+
     use anyhow::Result;
     use derive_builder::Builder;
-    use tokio::{runtime::Runtime, task};
-    use tokio_stream::{StreamExt, StreamMap};
+    use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
+    use tokio::{net::UnixStream, runtime::Runtime, sync::mpsc::channel, task};
+    use tokio_stream::{Stream, StreamExt, StreamMap};
 
     use crate::{
-        x::XStream, Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig,
-        Position,
+        ipc, x::XStream, Alignment, Attrs, Bar, Color, Margins, Panel,
+        PanelConfig, Position, UnixStreamWrapper,
     };
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
@@ -203,6 +207,9 @@ pub mod builders {
         /// The default attributes of panels on the bar. See [`Attrs`] for
         /// details.
         pub attrs: Attrs,
+        /// Whether inter-process communication (via Unix socket) is enabled.
+        /// See [`crate::ipc`] for details.
+        pub ipc: bool,
     }
 
     impl BarConfig {
@@ -242,7 +249,9 @@ pub mod builders {
                 self.transparent,
                 self.bg,
                 self.margins,
-            )?;
+                self.ipc,
+            )
+            .await?;
 
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
@@ -285,6 +294,30 @@ pub mod builders {
 
             let mut x_stream = XStream::new(bar.conn.clone());
 
+            let mut signals = Signals::new(TERM_SIGNALS)?;
+            let name = bar.name.clone();
+            thread::spawn(move || {
+                signals.wait();
+                let _ = remove_file(format!("/tmp/lazybar-ipc/{name}"));
+                std::process::exit(0);
+            });
+
+            let result = ipc::init(bar.name.as_str());
+            let mut ipc_stream: Pin<
+                Box<
+                    dyn Stream<
+                        Item = std::result::Result<UnixStream, std::io::Error>,
+                    >,
+                >,
+            > = if let Ok(stream) = result {
+                Box::pin(stream)
+            } else {
+                Box::pin(tokio_stream::pending())
+            };
+
+            let mut unix_stream_handles = Vec::new();
+            let (ipc_send, mut ipc_recv) = channel(16);
+
             task::spawn_local(async move { loop {
                 tokio::select! {
                     Some(Ok(event)) = x_stream.next() => {
@@ -309,6 +342,16 @@ pub mod builders {
                                 log::warn!("Error produced by {alignment} panel at index {idx:?}: {e}"),
                         }
                     },
+                    Some(Ok(stream)) = ipc_stream.next(), if bar.ipc => {
+                        let wrapper = UnixStreamWrapper::new(stream, ipc_send.clone());
+                        let handle = task::spawn(wrapper.run());
+                        unix_stream_handles.push(handle);
+                    }
+                    Some(message) = ipc_recv.recv() => {
+                        if let Err(e) = bar.send_message(message).await {
+                            log::warn!("Sending a message generated an error: {e}");
+                        }
+                    }
                 }
             }}).await?;
 

@@ -5,11 +5,41 @@ use config::{Map, Value};
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
+use tokio::{net::UnixStream, sync::mpsc::Sender};
 
 use crate::{
     bar::{Dependence, PanelDrawInfo},
     Attrs,
 };
+
+/// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
+/// results through a channel.
+pub struct UnixStreamWrapper {
+    inner: UnixStream,
+    sender: Sender<String>,
+}
+
+impl UnixStreamWrapper {
+    /// Creates a new wrapper from a stream and a sender
+    pub const fn new(inner: UnixStream, sender: Sender<String>) -> Self {
+        Self { inner, sender }
+    }
+
+    /// Reads from the inner [`UnixStream`] until an error is encountered or the
+    /// program terminates.
+    pub async fn run(self) -> Result<()> {
+        let mut data = [0; 1024];
+        loop {
+            self.inner.readable().await?;
+            let len = self.inner.try_read(&mut data)?;
+            let message = String::from_utf8_lossy(&data[0..len]);
+            if message.len() == 0 {
+                return Ok(());
+            }
+            self.sender.send(message.to_string()).await?;
+        }
+    }
+}
 
 /// The end of a typical draw function. Takes a cairo context, a string to
 /// display, and attributes to use, and returns a closure that will do the

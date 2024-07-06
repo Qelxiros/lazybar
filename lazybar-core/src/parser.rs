@@ -119,6 +119,13 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
                 .into_float()
                 .unwrap_or_default(),
         ))
+        .ipc(
+            bar_table
+                .remove("ipc")
+                .unwrap_or_default()
+                .into_bool()
+                .unwrap_or_default(),
+        )
         .attrs(Attrs::parse_global(&mut bar_table, "default_"))
         .left(Vec::new())
         .center(Vec::new())

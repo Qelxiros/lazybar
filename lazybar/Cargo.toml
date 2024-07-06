@@ -1,0 +1,11 @@
+[package]
+name = "lazybar"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+lazybar-core = { version = "0.2.2", path = "../lazybar-core" }
+log = "0.4.22"
+signal-hook = { version = "0.3.17", features = ["iterator"] }
+simple_logger = "5.0.0"

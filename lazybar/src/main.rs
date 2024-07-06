@@ -1,5 +1,5 @@
 use anyhow::Result;
-use lazybar::parser;
+use lazybar_core::parser;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 

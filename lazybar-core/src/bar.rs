@@ -1,6 +1,6 @@
-use std::{fmt::Debug, ops::BitAnd, rc::Rc, sync::Arc};
+use std::{ops::BitAnd, rc::Rc, sync::Arc};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamMap;
@@ -197,7 +197,7 @@ impl Panel {
 #[allow(dead_code)]
 /// The bar itself.
 pub struct Bar {
-    name: String,
+    pub(crate) name: String,
     position: Position,
     pub(crate) conn: Arc<xcb::Connection>,
     screen: i32,
@@ -213,6 +213,7 @@ pub struct Bar {
     pub(crate) center: Vec<Panel>,
     pub(crate) right: Vec<Panel>,
     pub(crate) streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
+    pub(crate) ipc: bool,
     center_state: CenterState,
 }
 
@@ -226,6 +227,7 @@ impl Bar {
         transparent: bool,
         bg: Color,
         margins: Margins,
+        ipc: bool,
     ) -> Result<Self> {
         let (conn, screen, window, width, visual) =
             create_window(position, height, transparent, &bg, name.as_str())?;
@@ -264,6 +266,7 @@ impl Bar {
             center: Vec::new(),
             right: Vec::new(),
             streams: StreamMap::new(),
+            ipc,
             center_state: CenterState::Center,
         })
     }
@@ -332,6 +335,36 @@ impl Bar {
                 _ => Ok(()),
             },
             _ => Ok(()),
+        }
+    }
+
+    /// Send a message to a panel.
+    ///
+    /// `message` should be of the form `<panel_name>.<message>`.
+    pub async fn send_message(&self, message: String) -> Result<()> {
+        let (panel, message) = message
+            .split_once(".")
+            .context("Message did not contain a `.` delimiter")?;
+
+        let mut panels = self
+            .left
+            .iter()
+            .chain(self.center.iter())
+            .chain(self.right.iter())
+            .filter(|p| p.name == panel);
+
+        let target = panels.next();
+        if target.is_none() {
+            Err(anyhow!("No panel with name {panel} was found"))
+        } else if panels.next().is_some() {
+            Err(anyhow!(
+                "This panel has multiple instances and cannot be messaged"
+            ))
+        } else if let Some(sender) = &target.unwrap().sender {
+            sender.send(Event::Action(message.to_string())).await?;
+            Ok(())
+        } else {
+            Err(anyhow!("The target panel has no associated sender"))
         }
     }
 

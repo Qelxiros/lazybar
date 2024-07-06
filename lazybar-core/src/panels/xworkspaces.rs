@@ -9,6 +9,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use config::{Config, Value};
 use derive_builder::Builder;
+use nix::NixPath;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
     sync::mpsc::{channel, Sender},
@@ -541,7 +542,7 @@ fn get_workspaces(
 
     let mut names: Vec<String> = bytes
         .split(|&b| b == 0)
-        .filter(|s| s.len() > 0)
+        .filter(|s| !s.is_empty())
         .map(|s| unsafe { String::from_utf8_unchecked(s.to_vec()) })
         .collect();
 

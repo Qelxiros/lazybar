@@ -1,36 +1,3 @@
-[package]
-name = "lazybar"
-version = "0.2.2"
-authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
-edition = "2021"
-rust-version = "1.79.0"
-description = "A lightweight, event-driven X11 status bar"
-readme = "README.md"
-repository = "https://github.com/Qelxiros/lazybar"
-license = "MIT"
-keywords = ["X11","WM","Linux","status-bar","i3"]
-
-[dependencies]
-aho-corasick = "1.1.3"
-anyhow = "1.0.86"
-cairo-rs = { version = "0.19.4", features = ["xcb"] }
-chrono = { version = "0.4.38", default-features = false, features = ["alloc", "clock"] }
-config = { version = "0.14.0", default-features = false, features = ["toml"] }
-csscolorparser = "0.6.2"
-derive_builder = "0.20.0"
-fastping-rs = "0.2.4"
-futures = "0.3.30"
-glib = "0.19.8"
-lazy_static = "1.4.0"
-libpulse-binding = "2.28.1"
-log = "0.4.21"
-mpd = "0.1.0"
-nix = { version = "0.29.0", features = ["net", "ioctl", "fanotify", "inotify"] }
-pango = { version = "0.19.8", features = ["v1_46"] }
-pangocairo = "0.19.8"
-regex = "1.10.5"
-simple_logger = "5.0.0"
-tokio = { version = "1.38.0", features = ["rt", "net", "time", "macros", "rt-multi-thread"] }
-tokio-stream = "0.1.15"
-unicode-segmentation = "1.11.0"
-xcb = { version = "1.4.0" }
+[workspace]
+members = ["lazybar-core","lazybar","lazybar-msg"]
+resolver = "2"
