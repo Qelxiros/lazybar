@@ -1,4 +1,4 @@
-use std::{ops::BitAnd, rc::Rc, sync::Arc};
+use std::{fs::remove_file, ops::BitAnd, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
@@ -342,6 +342,11 @@ impl Bar {
     ///
     /// `message` should be of the form `<panel_name>.<message>`.
     pub async fn send_message(&self, message: String) -> Result<()> {
+        if message == "quit" {
+            let _ = remove_file(format!("/tmp/lazybar-ipc/{}", self.name));
+            std::process::exit(0);
+        }
+
         let (panel, message) = message
             .split_once(".")
             .context("Message did not contain a `.` delimiter")?;
