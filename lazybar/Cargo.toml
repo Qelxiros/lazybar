@@ -9,6 +9,7 @@ readme = "../README.md"
 repository = "https://github.com/Qelxiros/lazybar"
 license = "MIT"
 keywords = ["X11","WM","Linux","status-bar","i3"]
+categories = ["os::linux-apis","os::unix-apis","gui","command-line-utilities","asynchronous"]
 
 [dependencies]
 anyhow = "1.0.86"
