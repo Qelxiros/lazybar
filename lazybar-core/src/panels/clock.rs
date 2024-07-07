@@ -165,11 +165,13 @@ impl<P: Precision + Clone> Clock<P> {
             Event::Action(ref value) if value == "cycle" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 + 1) % idx.1, idx.1);
+                drop(idx);
                 send.send(EventResponse::Ok)?;
             }
             Event::Action(ref value) if value == "cycle_back" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
+                drop(idx);
                 send.send(EventResponse::Ok)?;
             }
             Event::Mouse(event) => match event.button {
@@ -205,7 +207,7 @@ impl<P: Precision + Clone> Clock<P> {
                 ),
             }?,
             Event::Action(e) => {
-                send.send(EventResponse::Err(format!("Unknown event {e}")))?
+                send.send(EventResponse::Err(format!("Unknown event {e}")))?;
             }
         }
 
@@ -269,12 +271,7 @@ where
                 let idx = idx.clone();
                 let actions = actions.clone();
                 let send = response_send.clone();
-                Ok(Self::process_event(
-                    s,
-                    idx.clone(),
-                    actions.clone(),
-                    send.clone(),
-                )?)
+                Self::process_event(s, idx, actions, send)
             })),
         );
         map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| Ok(()))));

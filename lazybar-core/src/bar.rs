@@ -400,7 +400,7 @@ impl Bar {
         }
 
         let (panel, message) = message
-            .split_once(".")
+            .split_once('.')
             .context("Message did not contain a `.` delimiter")?;
 
         let mut panels = self
