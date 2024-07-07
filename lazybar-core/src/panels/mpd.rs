@@ -158,19 +158,27 @@ impl Mpd {
                 ) {
                     (false, _) => {
                         layout.set_markup(
-                            text.replace("%main%", main.as_str()).as_str(),
+                            text.replace(
+                                "%main%",
+                                glib::markup_escape_text(main.as_str())
+                                    .as_str(),
+                            )
+                            .as_str(),
                         );
                     }
                     (true, false) => {
                         layout.set_markup(
                             text.replace(
                                 "%main%",
-                                main.as_str()
-                                    .graphemes(true)
-                                    .skip(self.scroll_idx)
-                                    .take(self.max_width)
-                                    .collect::<String>()
-                                    .as_str(),
+                                glib::markup_escape_text(
+                                    main.as_str()
+                                        .graphemes(true)
+                                        .skip(self.scroll_idx)
+                                        .take(self.max_width)
+                                        .collect::<String>()
+                                        .as_str(),
+                                )
+                                .as_str(),
                             )
                             .as_str(),
                         );
@@ -181,20 +189,28 @@ impl Mpd {
                                 "%main%",
                                 format!(
                                     "{}{}",
-                                    main.as_str()
-                                        .graphemes(true)
-                                        .skip(self.scroll_idx)
-                                        .collect::<String>(),
-                                    main.as_str()
-                                        .graphemes(true)
-                                        .take(
-                                            self.max_width
-                                                - (main
-                                                    .graphemes(true)
-                                                    .count()
-                                                    - self.scroll_idx)
-                                        )
-                                        .collect::<String>()
+                                    glib::markup_escape_text(
+                                        main.as_str()
+                                            .graphemes(true)
+                                            .skip(self.scroll_idx)
+                                            .collect::<String>()
+                                            .as_str()
+                                    )
+                                    .as_str(),
+                                    glib::markup_escape_text(
+                                        main.as_str()
+                                            .graphemes(true)
+                                            .take(
+                                                self.max_width
+                                                    - (main
+                                                        .graphemes(true)
+                                                        .count()
+                                                        - self.scroll_idx)
+                                            )
+                                            .collect::<String>()
+                                            .as_str()
+                                    )
+                                    .as_str(),
                                 )
                                 .as_str(),
                             )
@@ -208,10 +224,13 @@ impl Mpd {
                     if self.max_width > 0 {
                         text.replace(
                             "%main%",
-                            main.graphemes(true)
-                                .take(self.max_width)
-                                .collect::<String>()
-                                .as_str(),
+                            glib::markup_escape_text(
+                                main.graphemes(true)
+                                    .take(self.max_width)
+                                    .collect::<String>()
+                                    .as_str(),
+                            )
+                            .as_str(),
                         )
                     } else {
                         text.replace("%main%", main.as_str())
