@@ -1,21 +1,69 @@
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{
+    crate_name, crate_version, value_parser, Arg, ArgAction, Command, ValueHint,
+};
+use clap_complete::{generate, Generator, Shell};
 use lazybar_core::parser;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-struct Args {
-    bar: String,
-    #[arg(short, long)]
-    config: Option<PathBuf>,
+fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
+    generate(gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let mut cmd = Command::new(crate_name!())
+        .version(crate_version!())
+        .arg(
+            Arg::new("generate")
+                .short('g')
+                .long("generate")
+                .visible_aliases(["shell", "completion"])
+                .help("generate shell completions")
+                .long_help("generates completions for a given shell")
+                .value_name("SHELL")
+                .value_hint(ValueHint::Other)
+                .value_parser(value_parser!(Shell))
+                .action(ArgAction::Set)
+                .exclusive(true),
+        )
+        .arg(
+            Arg::new("config")
+                .short('c')
+                .long("config")
+                .help("set the config path")
+                .long_help(
+                    "set the config path\nIf unset, tries to find \
+                     $XDG_CONFIG_HOME/lazybar/config.toml, \
+                     $HOME/.config/lazybar/config.toml, and \
+                     /etc/lazybar/config.toml",
+                )
+                .value_name("FILE")
+                .value_hint(ValueHint::FilePath)
+                .value_parser(value_parser!(PathBuf))
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new("bar")
+                .short('b')
+                .long("bar")
+                .help(
+                    "specify the name of the bar to read from the config file",
+                )
+                .value_name("BAR")
+                .value_hint(ValueHint::Other)
+                .action(ArgAction::Set)
+                .required(true),
+        );
+    let args = cmd.clone().get_matches();
+
+    if let Some(&shell) = args.get_one::<Shell>("generate") {
+        eprintln!("Generating completions for {shell:?}");
+        print_completions(shell, &mut cmd);
+        std::process::exit(0);
+    }
 
     SimpleLogger::new()
         .with_level(LevelFilter::Warn)
@@ -28,21 +76,22 @@ fn main() -> Result<()> {
     // $XDG_CONFIG_HOME/lazybar/config.toml, failing that
     // $HOME/.config/lazybar/config.toml, failing that
     // /etc/lazybar/config.toml
-    let path = args.config.unwrap_or_else(|| {
-        std::env::var("XDG_CONFIG_HOME")
-            .map_or_else(
-                |_| {
-                    std::env::var("HOME").map_or_else(
-                        |_| String::from("/etc/lazybar/lazybar.toml"),
-                        |h| format!("{h}/.config/lazybar/config.toml"),
-                    )
-                },
-                |x| format!("{x}/lazybar/config.toml"),
-            )
-            .into()
-    });
+    let path = if let Some(&ref config) = args.get_one::<PathBuf>("config") {
+        config
+    } else if let Ok(lazybar) = std::env::var("LAZYBAR_CONFIG_PATH") {
+        &PathBuf::from(lazybar)
+    } else if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        &PathBuf::from(format!("{xdg}/lazybar/config.toml"))
+    } else if let Ok(home) = std::env::var("HOME") {
+        &PathBuf::from(format!("{home}/.config/lazybar/config.toml"))
+    } else {
+        &PathBuf::from("/etc/lazybar/config.toml")
+    };
 
-    let config = parser::parse(args.bar.as_str(), &path.as_path())?;
+    let config = parser::parse(
+        args.get_one::<String>("bar").unwrap().as_str(),
+        path.as_path(),
+    )?;
 
     config.run()?;
 
