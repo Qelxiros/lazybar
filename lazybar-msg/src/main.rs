@@ -17,6 +17,11 @@ use tokio::{io::AsyncWriteExt, net::UnixStream};
 struct Args {
     #[command(subcommand)]
     mode: Mode,
+    /// Sets the logging level, can be specified multiple times
+    ///
+    /// 0 = info, 1 = debug, 2+ = trace
+    #[arg(short)]
+    verbose: bool,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -35,7 +40,8 @@ fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mode = Args::parse().mode;
+    let args = Args::parse();
+    let mode = args.mode;
 
     if let Mode::Generate { shell } = mode {
         eprintln!("Generating completions for {shell:?}");
@@ -44,7 +50,11 @@ async fn main() -> Result<()> {
     }
 
     SimpleLogger::new()
-        .with_level(LevelFilter::Info)
+        .with_level(if args.verbose {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        })
         .env()
         .with_utc_timestamps()
         .init()
