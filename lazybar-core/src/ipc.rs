@@ -1,25 +1,35 @@
-use std::fs::{remove_file, DirBuilder};
+use std::{fs::DirBuilder, path::Path, pin::Pin};
 
 use anyhow::Result;
 use tokio::{
-    net::UnixListener,
+    net::{UnixListener, UnixStream},
     sync::mpsc::{Receiver, Sender},
 };
-use tokio_stream::wrappers::UnixListenerStream;
+use tokio_stream::{wrappers::UnixListenerStream, Stream};
 
 /// Initialize IPC for a given bar
-pub fn init(bar_name: &str) -> Result<UnixListenerStream> {
-    DirBuilder::new()
-        .recursive(true)
-        .create("/tmp/lazybar-ipc/")?;
+pub fn init(
+    enabled: bool,
+    bar_name: &str,
+) -> Result<Pin<Box<dyn Stream<Item = Result<UnixStream, std::io::Error>>>>> {
+    Ok(if enabled {
+        DirBuilder::new()
+            .recursive(true)
+            .create("/tmp/lazybar-ipc/")?;
 
-    let path = format!("/tmp/lazybar-ipc/{bar_name}");
-    let _ = remove_file(path.as_str());
+        let path = format!("/tmp/lazybar-ipc/{bar_name}");
+        if Path::new(path.as_str()).exists() {
+            log::warn!("Socket path exists, starting without IPC");
+            return Ok(Box::pin(tokio_stream::pending()));
+        }
 
-    let listener = UnixListener::bind(path)?;
-    let stream = UnixListenerStream::new(listener);
+        let listener = UnixListener::bind(path)?;
+        let stream = UnixListenerStream::new(listener);
 
-    Ok(stream)
+        Box::pin(stream)
+    } else {
+        Box::pin(tokio_stream::pending())
+    })
 }
 
 /// A sender and a receiver bundled together for two-way communication

@@ -324,7 +324,7 @@ pub mod builders {
                 std::process::exit(0);
             });
 
-            let result = ipc::init(bar.name.as_str());
+            let result = ipc::init(bar.ipc, bar.name.as_str());
             let mut ipc_stream: Pin<
                 Box<
                     dyn Stream<
@@ -332,7 +332,7 @@ pub mod builders {
                     >,
                 >,
             > = if let Ok(stream) = result {
-                Box::pin(stream)
+                stream
             } else {
                 Box::pin(tokio_stream::pending())
             };
@@ -346,8 +346,7 @@ pub mod builders {
                             if let Some(e) = e.downcast_ref::<xcb::Error>() {
                                 log::warn!("X event caused an error: {e}");
                                 // close when X server does
-                                // this could cause problems, maybe only exit under certain
-                                // circumstances?
+                                // this could cause problems, maybe only exit under certain circumstances?
                                 std::process::exit(0);
                             } else {
                                 log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
@@ -388,6 +387,8 @@ pub mod builders {
                             }
                         }
                     }
+                    // maybe not strictly necessary, but ensures that the ipc futures get polled
+                    Some(_) = ipc_set.join_next() => {}
                 }
             } }).await?;
 
