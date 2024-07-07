@@ -25,8 +25,13 @@ use libpulse_binding::{
     operation,
     volume::Volume,
 };
-use tokio::task::{self, JoinHandle};
-use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
+use tokio::{
+    sync::mpsc::{unbounded_channel, UnboundedSender},
+    task::{self, JoinHandle},
+};
+use tokio_stream::{
+    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+};
 
 use crate::{
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
@@ -130,7 +135,7 @@ impl Pulseaudio {
         unit: u32,
         introspector: Rc<RefCell<Introspector>>,
         mainloop: Rc<RefCell<threaded::Mainloop>>,
-        response_send: tokio::sync::mpsc::Sender<EventResponse>,
+        response_send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
             Event::Action(ref value) if value == "increment" => {
@@ -170,9 +175,7 @@ impl Pulseaudio {
                     mainloop.borrow_mut().unlock();
                 };
 
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Ok(response_send.blocking_send(EventResponse::Ok)?)
-                }))?
+                Ok(response_send.send(EventResponse::Ok)?)
             }
             Event::Action(ref value) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -214,9 +217,7 @@ impl Pulseaudio {
                     mainloop.borrow_mut().unlock();
                 };
 
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Ok(response_send.blocking_send(EventResponse::Ok)?)
-                }))?
+                Ok(response_send.send(EventResponse::Ok)?)
             }
             Event::Action(ref value) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -240,17 +241,14 @@ impl Pulseaudio {
                     mainloop.deref().borrow_mut().unlock();
                 };
 
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Ok(response_send.blocking_send(EventResponse::Ok)?)
-                }))?
+                Ok(response_send.send(EventResponse::Ok)?)
             }
             Event::Action(ref value) => {
                 let value = value.to_owned();
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Ok(response_send.blocking_send(EventResponse::Err(
-                        format!("Unknown event {}", value),
-                    ))?)
-                }))?
+                Ok(response_send.send(EventResponse::Err(format!(
+                    "Unknown event {}",
+                    value
+                )))?)
             }
             Event::Mouse(event) => Ok(match event.button {
                 MouseButton::Left => Self::process_event(
@@ -475,11 +473,11 @@ impl PanelConfig for Pulseaudio {
             ),
         );
 
-        let (event_send, event_recv) = tokio::sync::mpsc::channel(16);
-        let (response_send, response_recv) = tokio::sync::mpsc::channel(16);
+        let (event_send, event_recv) = unbounded_channel();
+        let (response_send, response_recv) = unbounded_channel();
         map.insert(
             1,
-            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+            Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
                     s,
                     actions.clone(),

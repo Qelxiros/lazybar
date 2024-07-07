@@ -45,21 +45,24 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             log::error!("Error parsing config file: {e}");
             cleanup::exit(None, 101)
         });
+    log::info!("Read config file");
 
     let mut bars_table = config
         .get_table("bars")
         .context("`bars` doesn't exist or isn't a table")?;
+    log::trace!("got bars table from config");
 
     let mut bar_table = bars_table
         .remove(bar_name)
         .with_context(|| format!("`{bar_name}` doesn't exist"))?
         .into_table()
         .with_context(|| format!("`{bar_name}` isn't a table"))?;
+    log::trace!("got bar table {bar_name} from config");
 
     let mut bar = BarConfigBuilder::default()
         .name(bar_name.to_owned())
-        .position(
-            match bar_table
+        .position({
+            let val = match bar_table
                 .remove("position")
                 .unwrap_or_default()
                 .into_string()
@@ -69,61 +72,83 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
                 "top" => Position::Top,
                 "bottom" => Position::Bottom,
                 _ => Position::Top,
-            },
-        )
-        .height(
-            bar_table
+            };
+            log::trace!("got bar position: {val:?}");
+            val
+        })
+        .height({
+            let val = bar_table
                 .remove("height")
                 .unwrap_or_default()
                 .into_uint()
-                .unwrap_or(24) as u16,
-        )
-        .transparent(
-            bar_table
+                .unwrap_or(24) as u16;
+            log::trace!("got bar height: {val}");
+            val
+        })
+        .transparent({
+            let val = bar_table
                 .remove("transparent")
                 .unwrap_or_default()
                 .into_bool()
-                .unwrap_or_default(),
-        )
-        .bg(bar_table
-            .remove("bg")
-            .unwrap_or_default()
-            .into_string()
-            .unwrap_or_default()
-            .parse()
-            .unwrap_or_default())
-        .margins(Margins::new(
-            bar_table
-                .remove("margin_left")
+                .unwrap_or_default();
+            log::trace!("got bar transparency: {val}");
+            val
+        })
+        .bg({
+            let val = bar_table
+                .remove("bg")
                 .unwrap_or_default()
-                .into_float()
-                .unwrap_or_default(),
-            bar_table
-                .remove("margin_internal")
+                .into_string()
                 .unwrap_or_default()
-                .into_float()
-                .unwrap_or_default(),
-            bar_table
-                .remove("margin_right")
-                .unwrap_or_default()
-                .into_float()
-                .unwrap_or_default(),
-        ))
-        .reverse_scroll(
-            bar_table
+                .parse()
+                .unwrap_or_default();
+            log::trace!("got bar background: {val}");
+            val
+        })
+        .margins({
+            let val = Margins::new(
+                bar_table
+                    .remove("margin_left")
+                    .unwrap_or_default()
+                    .into_float()
+                    .unwrap_or_default(),
+                bar_table
+                    .remove("margin_internal")
+                    .unwrap_or_default()
+                    .into_float()
+                    .unwrap_or_default(),
+                bar_table
+                    .remove("margin_right")
+                    .unwrap_or_default()
+                    .into_float()
+                    .unwrap_or_default(),
+            );
+            log::trace!("got bar margins: {val:?}");
+            val
+        })
+        .reverse_scroll({
+            let val = bar_table
                 .remove("reverse_scroll")
                 .unwrap_or_default()
                 .into_bool()
-                .unwrap_or_default(),
-        )
-        .ipc(
-            bar_table
+                .unwrap_or_default();
+            log::trace!("got bar reverse scroll: {val}");
+            val
+        })
+        .ipc({
+            let val = bar_table
                 .remove("ipc")
                 .unwrap_or_default()
                 .into_bool()
-                .unwrap_or_default(),
-        )
-        .attrs(Attrs::parse_global(&mut bar_table, "default_"))
+                .unwrap_or_default();
+            log::trace!("got bar ipc: {val}");
+            val
+        })
+        .attrs({
+            let val = Attrs::parse_global(&mut bar_table, "default_");
+            log::trace!("got bar attrs: {val:?}");
+            val
+        })
         .left(Vec::new())
         .center(Vec::new())
         .right(Vec::new())
@@ -139,6 +164,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             pl.into_array().context("`panels_left` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
+                log::debug!("Adding left panel {name}");
                 left_final.push(name);
             } else {
                 log::warn!("Ignoring non-string value {p:?} in `panels_left`");
@@ -152,6 +178,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             pc.into_array().context("`panels_center` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
+                log::debug!("Adding center panel {name}");
                 center_final.push(name);
             } else {
                 log::warn!(
@@ -167,6 +194,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             pr.into_array().context("`panels_right` isn't an array")?;
         for p in panel_list {
             if let Ok(name) = p.clone().into_string() {
+                log::debug!("Adding right panel {name}");
                 right_final.push(name);
             } else {
                 log::warn!("Ignoring non-string value {p:?} in `panels_right`");
@@ -177,20 +205,24 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
     let panels_table = config
         .get_table("panels")
         .context("`panels` doesn't exist or isn't a table")?;
+    log::trace!("got panels table");
 
     // leak panel names so that we can use &'static str instead of String
     left_final
         .into_iter()
         .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Left));
+    log::debug!("left panels added");
     center_final
         .into_iter()
         .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Center));
+    log::debug!("center panels added");
     right_final
         .into_iter()
         .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Right));
+    log::debug!("right panels added");
 
     Ok(bar)
 }
@@ -202,6 +234,7 @@ fn parse_panel(
 ) -> Option<Box<dyn PanelConfig>> {
     if let Some(mut table) = get_table_from_config(p, panels_table) {
         if let Some(s) = remove_string_from_config("type", &mut table) {
+            log::debug!("parsing {s} panel");
             return match s.as_str() {
                 "battery" => {
                     Battery::parse(p, &mut table, config)

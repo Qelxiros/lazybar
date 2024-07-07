@@ -39,7 +39,7 @@ impl UnixStreamWrapper {
         if message.len() == 0 {
             return Ok(());
         }
-        self.endpoint.send.send(message.to_string()).await?;
+        self.endpoint.send.send(message.to_string())?;
         let response =
             self.endpoint.recv.recv().await.unwrap_or(EventResponse::Ok);
 

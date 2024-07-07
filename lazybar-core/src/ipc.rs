@@ -3,7 +3,7 @@ use std::{fs::DirBuilder, path::Path, pin::Pin};
 use anyhow::Result;
 use tokio::{
     net::{UnixListener, UnixStream},
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 use tokio_stream::{wrappers::UnixListenerStream, Stream};
 
@@ -36,15 +36,18 @@ pub fn init(
 #[derive(Debug)]
 pub struct ChannelEndpoint<T, U> {
     /// The sender
-    pub send: Sender<T>,
+    pub send: UnboundedSender<T>,
     /// The receiver
-    pub recv: Receiver<U>,
+    pub recv: UnboundedReceiver<U>,
 }
 
 impl<T, U> ChannelEndpoint<T, U> {
     /// create a new endpoint from a sender and a receiver
     #[must_use]
-    pub const fn new(send: Sender<T>, recv: Receiver<U>) -> Self {
+    pub const fn new(
+        send: UnboundedSender<T>,
+        recv: UnboundedReceiver<U>,
+    ) -> Self {
         Self { send, recv }
     }
 }

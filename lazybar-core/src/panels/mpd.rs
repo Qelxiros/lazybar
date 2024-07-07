@@ -17,12 +17,12 @@ use mpd::{Client, Idle, State, Status, Subsystem};
 use pango::Layout;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{unbounded_channel, UnboundedSender},
     task::{self, JoinHandle},
     time::{self, interval, Interval},
 };
 use tokio_stream::{
-    wrappers::{IntervalStream, ReceiverStream},
+    wrappers::{IntervalStream, UnboundedReceiverStream},
     Stream, StreamExt, StreamMap,
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -640,7 +640,7 @@ impl Mpd {
         conn: Arc<Mutex<Client>>,
         last_layout: Rc<Mutex<Option<(Layout, String)>>>,
         index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
-        send: Sender<EventResponse>,
+        send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let ev = event.clone();
         let result = match event {
@@ -737,9 +737,7 @@ impl Mpd {
             },
             |_| EventResponse::Ok,
         );
-        futures::executor::block_on(task::spawn_blocking(move || {
-            Ok(send.blocking_send(result)?)
-        }))?
+        Ok(send.send(result)?)
     }
 }
 
@@ -998,14 +996,14 @@ impl PanelConfig for Mpd {
             );
         }
 
-        let (event_send, event_recv) = channel(16);
-        let (response_send, response_recv) = channel(16);
+        let (event_send, event_recv) = unbounded_channel();
+        let (response_send, response_recv) = unbounded_channel();
         let conn = self.noidle_conn.clone();
         let last_layout = self.last_layout.clone();
         let index_cache = self.index_cache.clone();
         map.insert(
             EventType::Action,
-            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+            Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
                     s,
                     conn.clone(),

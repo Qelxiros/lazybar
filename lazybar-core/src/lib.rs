@@ -52,7 +52,13 @@ mod ramp;
 mod utils;
 mod x;
 
-use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    pin::Pin,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 pub use attrs::Attrs;
@@ -60,7 +66,6 @@ use bar::{Bar, Event, EventResponse, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
-use futures::lock::Mutex;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 use ipc::ChannelEndpoint;
@@ -184,7 +189,7 @@ pub mod builders {
     use tokio::{
         net::UnixStream,
         runtime::Runtime,
-        sync::mpsc::channel,
+        sync::mpsc::unbounded_channel,
         task::{self, JoinSet},
     };
     use tokio_stream::{Stream, StreamExt, StreamMap};
@@ -258,6 +263,7 @@ pub mod builders {
         ///
         /// In the case of unrecoverable runtime errors.
         pub fn run(self) -> Result<()> {
+            log::info!("Starting bar {}", self.name);
             let rt = Runtime::new()?;
             let local = task::LocalSet::new();
             local.block_on(&rt, self.run_inner())?;
@@ -276,6 +282,7 @@ pub mod builders {
                 self.reverse_scroll,
                 self.ipc,
             )?;
+            log::debug!("bar created");
 
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
@@ -289,6 +296,7 @@ pub mod builders {
                 left_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Left, left_panels);
+            log::debug!("left panels running");
 
             let mut center_panels = StreamMap::with_capacity(self.center.len());
             for (idx, panel) in self.center.into_iter().enumerate() {
@@ -302,6 +310,7 @@ pub mod builders {
                 center_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Center, center_panels);
+            log::debug!("center panels running");
 
             let mut right_panels = StreamMap::with_capacity(self.right.len());
             for (idx, panel) in self.right.into_iter().enumerate() {
@@ -315,27 +324,37 @@ pub mod builders {
                 right_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Right, right_panels);
+            log::debug!("right panels running");
 
             let mut x_stream = XStream::new(bar.conn.clone());
 
             let mut signals = Signals::new(TERM_SIGNALS)?;
             let name = bar.name.clone();
-            thread::spawn(move || {
-                signals.wait();
-                cleanup::exit(Some(name.as_str()), 0);
+            thread::spawn(move || loop {
+                if let Some(signal) = signals.wait().next() {
+                    log::info!("Received signal {signal} - shutting down");
+                    cleanup::exit(Some(name.as_str()), 0);
+                }
             });
+            log::debug!("Set up signal listener");
 
             let result = ipc::init(bar.ipc, bar.name.as_str());
+
             let mut ipc_stream: Pin<
                 Box<
                     dyn Stream<
                         Item = std::result::Result<UnixStream, std::io::Error>,
                     >,
                 >,
-            > = if let Ok(stream) = result {
-                stream
-            } else {
-                Box::pin(tokio_stream::pending())
+            > = match result {
+                Ok(stream) => {
+                    log::info!("IPC initialized");
+                    stream
+                }
+                Err(e) => {
+                    log::info!("IPC disabled due to an error: {e}");
+                    Box::pin(tokio_stream::pending())
+                }
             };
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
@@ -343,6 +362,7 @@ pub mod builders {
             task::spawn_local(async move { loop {
                 tokio::select! {
                     Some(Ok(event)) = x_stream.next() => {
+                        log::trace!("X event: {event:?}");
                         if let Err(e) = bar.process_event(&event).await {
                             if let Some(e) = e.downcast_ref::<xcb::Error>() {
                                 log::warn!("X event caused an error: {e}");
@@ -355,6 +375,7 @@ pub mod builders {
                         }
                     },
                     Some((alignment, result)) = bar.streams.next() => {
+                        log::debug!("Received event from {alignment} panel at index {}", result.0);
                         match result {
                             (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info) {
                                 log::warn!("Error updating {alignment} panel at index {idx}: {e}");
@@ -364,32 +385,44 @@ pub mod builders {
                         }
                     },
                     Some(Ok(stream)) = ipc_stream.next(), if bar.ipc => {
-                        let (local_send, mut local_recv) = channel(16);
-                        let (ipc_send, ipc_recv) = channel(16);
+                        log::debug!("Received new ipc connection");
+
+                        let (local_send, mut local_recv) = unbounded_channel();
+                        let (ipc_send, ipc_recv) = unbounded_channel();
 
                         let wrapper = UnixStreamWrapper::new(stream, ChannelEndpoint::new(local_send, ipc_recv));
 
                         let _handle = task::spawn(wrapper.run());
+                        log::trace!("wrapper running");
 
                         let message = local_recv.recv().await;
+                        log::trace!("message received");
 
                         if let Some(message) = message {
-                            if let Ok((endpoint, message)) = bar.get_endpoint(message.as_str()){
-                                ipc_set.spawn(async move {
-                                    let send = endpoint.lock().await.send.clone();
-                                    send.send(Event::Action(message)).await?;
-                                    let response =
-                                        endpoint.lock().await.recv.recv().await.unwrap_or(EventResponse::Ok);
+                            if let Ok((endpoint, message)) = bar.get_endpoint(message.as_str()) {
+                                ipc_set.spawn_blocking(move || {
+                                    let send = endpoint.lock().unwrap().send.clone();
+                                    let response = if let Err(e) = send.send(Event::Action(message)) {
+                                        EventResponse::Err(e.to_string())
+                                    } else {
+                                        endpoint.lock().unwrap().recv.blocking_recv().unwrap_or(EventResponse::Ok)
+                                    };
+                                    log::trace!("response received");
 
-                                    ipc_send.send(response).await?;
+                                    ipc_send.send(response)?;
+                                    log::trace!("response sent");
 
                                     Ok(())
                                 });
+
+                                log::trace!("task spawned");
                             }
                         }
                     }
                     // maybe not strictly necessary, but ensures that the ipc futures get polled
-                    Some(_) = ipc_set.join_next() => {}
+                    Some(_) = ipc_set.join_next() => {
+                        log::debug!("ipc future completed");
+                    }
                 }
             } }).await?;
 

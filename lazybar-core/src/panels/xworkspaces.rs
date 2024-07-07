@@ -11,10 +11,12 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{unbounded_channel, UnboundedSender},
     task::{self, JoinHandle},
 };
-use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
+use tokio_stream::{
+    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+};
 use xcb::{x, XidNew};
 
 use crate::{
@@ -257,7 +259,7 @@ impl XWorkspaces {
         padding: i32,
         names: &[String],
         current_atom: x::Atom,
-        send: Sender<EventResponse>,
+        send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
             Event::Action(event) => {
@@ -283,9 +285,9 @@ impl XWorkspaces {
                             ),
                         },
                     ))?;
-                    send.blocking_send(EventResponse::Ok)?;
+                    send.send(EventResponse::Ok)?;
                 } else {
-                    send.blocking_send(EventResponse::Err(format!(
+                    send.send(EventResponse::Err(format!(
                         "No workspace found with name {event}"
                     )))?;
                 }
@@ -466,8 +468,8 @@ impl PanelConfig for XWorkspaces {
             ),
         );
 
-        let (event_send, event_recv) = channel(16);
-        let (response_send, response_recv) = channel(16);
+        let (event_send, event_recv) = unbounded_channel();
+        let (response_send, response_recv) = unbounded_channel();
         let conn = self.conn.clone();
         let width_cache = Arc::new(Mutex::new(Vec::new()));
         let cache = width_cache.clone();
@@ -482,23 +484,21 @@ impl PanelConfig for XWorkspaces {
 
         map.insert(
             1,
-            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+            Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 let conn = conn.clone();
                 let cache = cache.clone();
                 let names = names.clone();
                 let send = response_send.clone();
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Self::process_event(
-                        s,
-                        conn.clone(),
-                        root,
-                        cache.clone(),
-                        padding,
-                        names.as_slice(),
-                        current_atom,
-                        send.clone(),
-                    )
-                }))?
+                Ok(Self::process_event(
+                    s,
+                    conn.clone(),
+                    root,
+                    cache.clone(),
+                    padding,
+                    names.as_slice(),
+                    current_atom,
+                    send.clone(),
+                )?)
             })),
         );
 

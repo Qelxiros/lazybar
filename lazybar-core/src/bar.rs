@@ -1,8 +1,12 @@
-use std::{fmt::Display, ops::BitAnd, rc::Rc, sync::Arc};
+use std::{
+    fmt::Display,
+    ops::BitAnd,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
-use futures::lock::Mutex;
 use tokio_stream::StreamMap;
 use xcb::x;
 
@@ -336,7 +340,12 @@ impl Bar {
     /// Handle an event from the X server.
     pub async fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
         match event {
-            xcb::Event::X(x::Event::Expose(_)) => self.redraw_bar(),
+            xcb::Event::X(x::Event::Expose(_)) => {
+                log::info!(
+                    "Received expose event from X server; redrawing entire bar"
+                );
+                self.redraw_bar()
+            }
             xcb::Event::X(x::Event::ButtonPress(event)) => match event.detail()
             {
                 button @ 1..=5 => {
@@ -360,18 +369,17 @@ impl Bar {
                         });
                     if let Some(p) = panel {
                         if let Some(e) = &p.endpoint {
-                            let e = e.lock().await;
-                            e.send
-                                .send(Event::Mouse(MouseEvent {
-                                    button: MouseButton::try_parse(
-                                        button,
-                                        self.reverse_scroll,
-                                    )
-                                    .unwrap(),
-                                    x: x - p.x as i16,
-                                    y,
-                                }))
-                                .await?;
+                            let e = e.lock().unwrap();
+                            e.send.send(Event::Mouse(MouseEvent {
+                                button: MouseButton::try_parse(
+                                    button,
+                                    self.reverse_scroll,
+                                )
+                                // this can never fail due to match arm
+                                .unwrap(),
+                                x: x - p.x as i16,
+                                y,
+                            }))?;
                         }
                     }
                     Ok(())
@@ -666,6 +674,8 @@ impl Bar {
     /// other cases in which we can redraw only the left or right side. See
     /// [`Bar::update_panel`] for specifics.
     pub fn redraw_bar(&mut self) -> Result<()> {
+        log::info!("Redrawing entire bar");
+
         self.redraw_background(&Region::All)?;
 
         self.redraw_left()?;
@@ -675,6 +685,8 @@ impl Bar {
     }
 
     fn redraw_left(&mut self) -> Result<()> {
+        log::info!("Redrawing left");
+
         self.redraw_background(&Region::Left)?;
 
         self.extents.left = self.margins.left;
@@ -711,6 +723,7 @@ impl Bar {
     }
 
     fn redraw_center_right(&mut self, standalone: bool) -> Result<()> {
+        log::info!("Redrawing center panels");
         if standalone {
             self.redraw_background(&Region::CenterRight)?;
         }
@@ -815,6 +828,8 @@ impl Bar {
         standalone: bool,
         statuses: Option<Vec<PanelStatus>>,
     ) -> Result<()> {
+        log::info!("Redrawing right panels");
+
         if standalone {
             self.redraw_background(&Region::Right)?;
         }

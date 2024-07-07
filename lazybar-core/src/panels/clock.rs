@@ -14,11 +14,12 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use precision::*;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    task,
+    sync::mpsc::{unbounded_channel, UnboundedSender},
     time::{interval, Instant, Interval},
 };
-use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
+use tokio_stream::{
+    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+};
 
 use crate::{
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
@@ -158,18 +159,18 @@ impl<P: Precision + Clone> Clock<P> {
         event: Event,
         idx: Arc<Mutex<(usize, usize)>>,
         actions: Actions,
-        send: Sender<EventResponse>,
+        send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
             Event::Action(ref value) if value == "cycle" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 + 1) % idx.1, idx.1);
-                send.blocking_send(EventResponse::Ok)?;
+                send.send(EventResponse::Ok)?;
             }
             Event::Action(ref value) if value == "cycle_back" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
-                send.blocking_send(EventResponse::Ok)?;
+                send.send(EventResponse::Ok)?;
             }
             Event::Mouse(event) => match event.button {
                 MouseButton::Left => Self::process_event(
@@ -203,9 +204,9 @@ impl<P: Precision + Clone> Clock<P> {
                     send,
                 ),
             }?,
-            Event::Action(e) => send.blocking_send(EventResponse::Err(
-                format!("Unknown event {e}"),
-            ))?,
+            Event::Action(e) => {
+                send.send(EventResponse::Err(format!("Unknown event {e}")))?
+            }
         }
 
         Ok(())
@@ -218,7 +219,8 @@ where
 {
     /// Configuration options:
     ///
-    /// - See [`PanelCommon::parse_variadic`].
+    /// - See [`PanelCommon::parse_variadic`]. For formats, see
+    ///   [`chrono::format::strftime`] for clock-specific formatting details.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -257,24 +259,22 @@ where
 
         let idx = self.format_idx.clone();
         let actions = self.common.actions.clone();
-        let (event_send, event_recv) = channel(16);
-        let (response_send, response_recv) = channel(16);
+        let (event_send, event_recv) = unbounded_channel();
+        let (response_send, response_recv) = unbounded_channel();
         let mut map =
             StreamMap::<usize, Pin<Box<dyn Stream<Item = Result<()>>>>>::new();
         map.insert(
             0,
-            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+            Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 let idx = idx.clone();
                 let actions = actions.clone();
                 let send = response_send.clone();
-                futures::executor::block_on(task::spawn_blocking(move || {
-                    Self::process_event(
-                        s,
-                        idx.clone(),
-                        actions.clone(),
-                        send.clone(),
-                    )
-                }))?
+                Ok(Self::process_event(
+                    s,
+                    idx.clone(),
+                    actions.clone(),
+                    send.clone(),
+                )?)
             })),
         );
         map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| Ok(()))));
