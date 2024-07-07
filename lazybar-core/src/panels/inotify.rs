@@ -13,16 +13,14 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
-use tokio::{
-    sync::mpsc::Sender,
-    task::{self, JoinHandle},
-};
+use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, Attrs, PanelCommon, PanelConfig,
-    PanelStream,
+    bar::{Event, EventResponse, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct InotifyStream {
@@ -139,7 +137,8 @@ impl PanelConfig for Inotify {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         let init_flags = InitFlags::empty();
         let inotify = inotify::Inotify::init(init_flags)?;
 

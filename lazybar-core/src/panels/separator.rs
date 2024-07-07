@@ -3,10 +3,12 @@ use std::{collections::HashMap, rc::Rc};
 use anyhow::Result;
 use config::{Config, Value};
 use derive_builder::Builder;
-use tokio::sync::mpsc::Sender;
 
 use crate::{
-    bar::Event, draw_common, Attrs, PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, EventResponse},
+    draw_common,
+    ipc::ChannelEndpoint,
+    Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Displays static text with [pango] markup.
@@ -51,7 +53,8 @@ impl PanelConfig for Separator {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

@@ -18,7 +18,8 @@ use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 use xcb::{x, XidNew};
 
 use crate::{
-    bar::{Event, MouseButton, PanelDrawInfo},
+    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::intern_named_atom,
     Attrs, Highlight, PanelCommon, PanelConfig, PanelStream,
@@ -256,6 +257,7 @@ impl XWorkspaces {
         padding: i32,
         names: &[String],
         current_atom: x::Atom,
+        send: Sender<EventResponse>,
     ) -> Result<()> {
         match event {
             Event::Action(event) => {
@@ -281,9 +283,11 @@ impl XWorkspaces {
                             ),
                         },
                     ))?;
-                    Ok(())
+                    send.blocking_send(EventResponse::Ok)?;
                 } else {
-                    Err(anyhow!("No workspace found with name {event}"))
+                    send.blocking_send(EventResponse::Err(format!(
+                        "No workspace found with name {event}"
+                    )))?;
                 }
             }
             Event::Mouse(event) => match event.button {
@@ -312,9 +316,9 @@ impl XWorkspaces {
                             padding,
                             names,
                             current_atom,
+                            send,
                         )?;
                     }
-                    Ok(())
                 }
                 MouseButton::ScrollUp => {
                     let current = get_current(&conn, root, current_atom)?;
@@ -328,9 +332,8 @@ impl XWorkspaces {
                         padding,
                         names,
                         current_atom,
+                        send,
                     )?;
-
-                    Ok(())
                 }
                 MouseButton::ScrollDown => {
                     let current = get_current(&conn, root, current_atom)?;
@@ -345,12 +348,13 @@ impl XWorkspaces {
                         padding,
                         names,
                         current_atom,
+                        send,
                     )?;
-
-                    Ok(())
                 }
             },
-        }
+        };
+
+        Ok(())
     }
 }
 
@@ -413,7 +417,8 @@ impl PanelConfig for XWorkspaces {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         let number_atom =
             intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
         let names_atom = intern_named_atom(&self.conn, b"_NET_DESKTOP_NAMES")?;
@@ -461,7 +466,8 @@ impl PanelConfig for XWorkspaces {
             ),
         );
 
-        let (send, recv) = channel(16);
+        let (event_send, event_recv) = channel(16);
+        let (response_send, response_recv) = channel(16);
         let conn = self.conn.clone();
         let width_cache = Arc::new(Mutex::new(Vec::new()));
         let cache = width_cache.clone();
@@ -476,16 +482,23 @@ impl PanelConfig for XWorkspaces {
 
         map.insert(
             1,
-            Box::pin(ReceiverStream::new(recv).map(move |s| {
-                Self::process_event(
-                    s,
-                    conn.clone(),
-                    root,
-                    cache.clone(),
-                    padding,
-                    names.as_slice(),
-                    current_atom,
-                )
+            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+                let conn = conn.clone();
+                let cache = cache.clone();
+                let names = names.clone();
+                let send = response_send.clone();
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Self::process_event(
+                        s,
+                        conn.clone(),
+                        root,
+                        cache.clone(),
+                        padding,
+                        names.as_slice(),
+                        current_atom,
+                        send.clone(),
+                    )
+                }))?
             })),
         );
 
@@ -506,7 +519,7 @@ impl PanelConfig for XWorkspaces {
                     desktop_atom,
                 )
             })),
-            Some(send),
+            Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
     }
 }

@@ -40,6 +40,13 @@ async fn main() -> Result<()> {
         stream.writable().await?;
         stream.try_write(args.message.as_bytes())?;
 
+        stream.readable().await?;
+
+        let mut response = [0; 1024];
+        stream.try_read(&mut response)?;
+
+        println!("{}", String::from_utf8_lossy(&response));
+
         stream.shutdown().await?;
     }
 

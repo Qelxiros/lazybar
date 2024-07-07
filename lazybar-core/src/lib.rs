@@ -9,7 +9,8 @@
 //! functionality included herein, but its intentended use case is as a binary.
 //! It reads a configuration file located at
 //! `$XDG_CONFIG_HOME/lazybar/config.toml`, and this documentation will focus on
-//! accepted syntax for that file.
+//! accepted syntax for that file. See [`panels`] for panel-specific
+//! information.
 //!
 //! The general structure of the file is as follows:
 //!
@@ -50,18 +51,19 @@ mod ramp;
 mod utils;
 mod x;
 
-use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc};
+use std::{collections::HashMap, fmt::Display, pin::Pin, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 pub use attrs::Attrs;
-use bar::{Bar, Event, Panel, PanelDrawInfo};
+use bar::{Bar, Event, EventResponse, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
+use futures::lock::Mutex;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
+use ipc::ChannelEndpoint;
 pub use ramp::Ramp;
-use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
@@ -75,6 +77,9 @@ pub type PanelDrawFn = Box<dyn Fn(&cairo::Context) -> Result<()>>;
 /// A stream that produces panel changes when the underlying data source
 /// changes.
 pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
+
+/// The channel endpoint associated with a panel
+pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
 
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
@@ -103,7 +108,10 @@ pub trait PanelConfig {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)>;
+    ) -> Result<(
+        PanelStream,
+        Option<ipc::ChannelEndpoint<Event, EventResponse>>,
+    )>;
 }
 
 /// Describes where on the screen the bar should appear.
@@ -172,12 +180,20 @@ pub mod builders {
     use anyhow::Result;
     use derive_builder::Builder;
     use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
-    use tokio::{net::UnixStream, runtime::Runtime, sync::mpsc::channel, task};
+    use tokio::{
+        net::UnixStream,
+        runtime::Runtime,
+        sync::mpsc::channel,
+        task::{self, JoinSet},
+    };
     use tokio_stream::{Stream, StreamExt, StreamMap};
 
     use crate::{
-        ipc, x::XStream, Alignment, Attrs, Bar, Color, Margins, Panel,
-        PanelConfig, Position, UnixStreamWrapper,
+        bar::{Event, EventResponse},
+        ipc::{self, ChannelEndpoint},
+        x::XStream,
+        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        UnixStreamWrapper,
     };
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
@@ -321,8 +337,7 @@ pub mod builders {
                 Box::pin(tokio_stream::pending())
             };
 
-            let mut unix_stream_handles = Vec::new();
-            let (ipc_send, mut ipc_recv) = channel(16);
+            let mut ipc_set = JoinSet::<Result<()>>::new();
 
             task::spawn_local(async move { loop {
                 tokio::select! {
@@ -349,17 +364,32 @@ pub mod builders {
                         }
                     },
                     Some(Ok(stream)) = ipc_stream.next(), if bar.ipc => {
-                        let wrapper = UnixStreamWrapper::new(stream, ipc_send.clone());
-                        let handle = task::spawn(wrapper.run());
-                        unix_stream_handles.push(handle);
-                    }
-                    Some(message) = ipc_recv.recv() => {
-                        if let Err(e) = bar.send_message(message).await {
-                            log::warn!("Sending a message generated an error: {e}");
+                        let (local_send, mut local_recv) = channel(16);
+                        let (ipc_send, ipc_recv) = channel(16);
+
+                        let wrapper = UnixStreamWrapper::new(stream, ChannelEndpoint::new(local_send, ipc_recv));
+
+                        let _handle = task::spawn(wrapper.run());
+
+                        let message = local_recv.recv().await;
+
+                        if let Some(message) = message {
+                            if let Ok((endpoint, message)) = bar.get_endpoint(message.as_str()){
+                                ipc_set.spawn(async move {
+                                    let send = endpoint.lock().await.send.clone();
+                                    send.send(Event::Action(message)).await?;
+                                    let response =
+                                        endpoint.lock().await.recv.recv().await.unwrap_or(EventResponse::Ok);
+
+                                    ipc_send.send(response).await?;
+
+                                    Ok(())
+                                });
+                            }
                         }
                     }
                 }
-            }}).await?;
+            } }).await?;
 
             Ok(())
         }

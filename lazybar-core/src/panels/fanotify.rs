@@ -13,16 +13,14 @@ use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
 use nix::sys::fanotify::{self, EventFFlags, InitFlags, MarkFlags, MaskFlags};
-use tokio::{
-    sync::mpsc::Sender,
-    task::{self, JoinHandle},
-};
+use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, Attrs, PanelCommon, PanelConfig,
-    PanelStream,
+    bar::{Event, EventResponse, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 struct FanotifyStream {
@@ -141,7 +139,8 @@ impl PanelConfig for Fanotify {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
         // doesn't know that it's real
         let init_flags = InitFlags::from_bits_retain(0x00000200);

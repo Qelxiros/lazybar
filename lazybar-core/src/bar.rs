@@ -1,14 +1,15 @@
-use std::{fs::remove_file, ops::BitAnd, rc::Rc, sync::Arc};
+use std::{fmt::Display, fs::remove_file, ops::BitAnd, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
-use tokio::sync::mpsc::Sender;
+use futures::lock::Mutex;
 use tokio_stream::StreamMap;
 use xcb::x;
 
 use crate::{
-    create_surface, create_window, map_window, set_wm_properties, Alignment,
-    Margins, PanelDrawFn, PanelStream, Position,
+    create_surface, create_window, ipc::ChannelEndpoint, map_window,
+    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelEndpoint,
+    PanelStream, Position,
 };
 
 #[derive(PartialEq, Eq, Debug)]
@@ -116,6 +117,7 @@ impl From<&Panel> for PanelStatus {
 /// A button that can be linked to an action for a panel
 ///
 /// Note: scrolling direction may be incorrect depending on your configuration
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MouseButton {
     /// The left mouse button
     Left,
@@ -155,6 +157,7 @@ impl MouseButton {
 }
 
 /// A mouse event that can be passed to a panel
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct MouseEvent {
     /// The button that was pressed (or scrolled)
     pub button: MouseButton,
@@ -165,11 +168,31 @@ pub struct MouseEvent {
 }
 
 /// An event that can be passed to a panel
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Event {
     /// A mouse event
     Mouse(MouseEvent),
     /// A message (typically from another process)
     Action(String),
+}
+
+/// A response to an event
+pub enum EventResponse {
+    /// The event executed normally
+    Ok,
+    /// An error occurred
+    Err(String),
+}
+
+impl Display for EventResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ok => write!(f, r#"{{"success":"true"}}"#),
+            Self::Err(e) => {
+                write!(f, r#"{{"success":"false","reason":"{e}"}}"#)
+            }
+        }
+    }
 }
 
 /// A panel on the bar
@@ -183,23 +206,23 @@ pub struct Panel {
     /// The name of the panel (taken from the name of the toml table that
     /// defines it)
     pub name: &'static str,
-    sender: Option<Sender<Event>>,
+    endpoint: Option<Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>>,
 }
 
 impl Panel {
     /// Create a new panel.
     #[must_use]
-    pub const fn new(
+    pub fn new(
         draw_info: Option<PanelDrawInfo>,
         name: &'static str,
-        sender: Option<Sender<Event>>,
+        endpoint: Option<ChannelEndpoint<Event, EventResponse>>,
     ) -> Self {
         Self {
             draw_info,
             x: 0.0,
             y: 0.0,
             name,
-            sender,
+            endpoint: endpoint.map(|e| Arc::new(Mutex::new(e))),
         }
     }
 }
@@ -336,17 +359,19 @@ impl Bar {
                                     >= x as f64
                         });
                     if let Some(p) = panel {
-                        if let Some(s) = &p.sender {
-                            s.send(Event::Mouse(MouseEvent {
-                                button: MouseButton::try_parse(
-                                    button,
-                                    self.reverse_scroll,
-                                )
-                                .unwrap(),
-                                x: x - p.x as i16,
-                                y,
-                            }))
-                            .await?;
+                        if let Some(e) = &p.endpoint {
+                            let e = e.lock().await;
+                            e.send
+                                .send(Event::Mouse(MouseEvent {
+                                    button: MouseButton::try_parse(
+                                        button,
+                                        self.reverse_scroll,
+                                    )
+                                    .unwrap(),
+                                    x: x - p.x as i16,
+                                    y,
+                                }))
+                                .await?;
                         }
                     }
                     Ok(())
@@ -357,10 +382,11 @@ impl Bar {
         }
     }
 
-    /// Send a message to a panel.
-    ///
-    /// `message` should be of the form `<panel_name>.<message>`.
-    pub async fn send_message(&self, message: String) -> Result<()> {
+    /// Given a message, find the endpoint of the panel it's addressed to.
+    pub fn get_endpoint(
+        &self,
+        message: &str,
+    ) -> Result<(PanelEndpoint, String)> {
         if message == "quit" {
             let _ = remove_file(format!("/tmp/lazybar-ipc/{}", self.name));
             std::process::exit(0);
@@ -384,11 +410,13 @@ impl Bar {
             Err(anyhow!(
                 "This panel has multiple instances and cannot be messaged"
             ))
-        } else if let Some(sender) = &target.unwrap().sender {
-            sender.send(Event::Action(message.to_string())).await?;
-            Ok(())
+        } else if let Some(ref endpoint) = target.unwrap().endpoint {
+            Ok((endpoint.clone(), message.to_string()))
         } else {
-            Err(anyhow!("The target panel has no associated sender"))
+            Err(anyhow!(
+                "The target panel has no associated sender and cannot be \
+                 messaged"
+            ))
         }
     }
 

@@ -13,16 +13,17 @@ use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
 use futures::FutureExt;
 use tokio::{
-    sync::mpsc::Sender,
     task::{self, JoinHandle},
     time::{interval, Interval},
 };
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream, Ramp,
+    bar::{Event, EventResponse, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
+    PanelConfig, PanelStream, Ramp,
 };
 
 /// Displays the ping to a given address
@@ -159,7 +160,8 @@ impl PanelConfig for Ping {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

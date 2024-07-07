@@ -28,7 +28,8 @@ use tokio_stream::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    bar::{Event, MouseButton, PanelDrawInfo},
+    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
     PanelConfig, PanelStream,
@@ -73,7 +74,7 @@ pub struct Mpd {
     last_progress_width: f64,
     #[builder(default = "0")]
     max_width: usize,
-    last_layout: Arc<Mutex<Option<(Layout, String)>>>,
+    last_layout: Rc<Mutex<Option<(Layout, String)>>>,
     index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
     formatter: AhoCorasick,
     common: PanelCommon,
@@ -618,10 +619,12 @@ impl Mpd {
     fn process_event(
         event: Event,
         conn: Arc<Mutex<Client>>,
-        last_layout: Arc<Mutex<Option<(Layout, String)>>>,
+        last_layout: Rc<Mutex<Option<(Layout, String)>>>,
         index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
+        send: Sender<EventResponse>,
     ) -> Result<()> {
-        Ok(match event {
+        let ev = event.clone();
+        let result = match event {
             Event::Action(ref value) if value == "next" => {
                 conn.lock().unwrap().next()
             }
@@ -695,6 +698,7 @@ impl Mpd {
                                             conn,
                                             last_layout,
                                             index_cache,
+                                            send.clone(),
                                         )
                                     });
                             };
@@ -704,7 +708,19 @@ impl Mpd {
                 }
                 Ok(())
             }
-        }?)
+        }
+        .map_or_else(
+            |e| {
+                EventResponse::Err(format!(
+                    "Event {:?} produced an error: {e}",
+                    ev
+                ))
+            },
+            |_| EventResponse::Ok,
+        );
+        futures::executor::block_on(task::spawn_blocking(move || {
+            Ok(send.blocking_send(result)?)
+        }))?
     }
 }
 
@@ -855,7 +871,7 @@ impl PanelConfig for Mpd {
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as usize);
         }
-        builder.last_layout(Arc::new(Mutex::new(None)));
+        builder.last_layout(Rc::new(Mutex::new(None)));
         builder.index_cache(Arc::new(Mutex::new(None)));
         builder.formatter(AhoCorasick::new([
             "%title%",
@@ -924,7 +940,8 @@ impl PanelConfig for Mpd {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         let mut map = StreamMap::<
             EventType,
             Pin<Box<dyn Stream<Item = Result<()>>>>,
@@ -962,18 +979,20 @@ impl PanelConfig for Mpd {
             );
         }
 
-        let (send, recv) = channel(16);
+        let (event_send, event_recv) = channel(16);
+        let (response_send, response_recv) = channel(16);
         let conn = self.noidle_conn.clone();
         let last_layout = self.last_layout.clone();
         let index_cache = self.index_cache.clone();
         map.insert(
             EventType::Action,
-            Box::pin(ReceiverStream::new(recv).map(move |s| {
+            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
                     s,
                     conn.clone(),
                     last_layout.clone(),
                     index_cache.clone(),
+                    response_send.clone(),
                 )
             })),
         );
@@ -987,7 +1006,7 @@ impl PanelConfig for Mpd {
                 r?;
                 self.draw(&cr, height, t)
             })),
-            Some(send),
+            Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
     }
 }

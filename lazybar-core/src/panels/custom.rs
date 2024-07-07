@@ -9,16 +9,15 @@ use std::{
 
 use anyhow::Result;
 use derive_builder::Builder;
-use tokio::{
-    sync::mpsc::Sender,
-    time::{interval, Interval},
-};
+use tokio::time::{interval, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, EventResponse, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
+    PanelConfig, PanelStream,
 };
 
 struct CustomStream {
@@ -152,7 +151,8 @@ impl PanelConfig for Custom {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

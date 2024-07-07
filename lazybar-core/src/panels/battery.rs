@@ -3,13 +3,15 @@ use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 use anyhow::Result;
 use config::Config;
 use derive_builder::Builder;
-use tokio::{sync::mpsc::Sender, time::interval};
+use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
-    bar::{Event, PanelDrawInfo},
-    draw_common, remove_string_from_config, remove_uint_from_config, Attrs,
-    PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, EventResponse, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
+    PanelConfig, PanelStream,
 };
 
 /// Shows the current battery level.
@@ -159,7 +161,8 @@ impl PanelConfig for Battery {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }

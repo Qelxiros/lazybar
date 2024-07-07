@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
     pin::Pin,
     rc::Rc,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
 };
@@ -15,13 +15,16 @@ use derive_builder::Builder;
 use precision::*;
 use tokio::{
     sync::mpsc::{channel, Sender},
+    task,
     time::{interval, Instant, Interval},
 };
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::{Event, MouseButton, PanelDrawInfo},
-    draw_common, Actions, Attrs, PanelCommon, PanelConfig, PanelStream,
+    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    Actions, Attrs, PanelCommon, PanelConfig, PanelStream,
 };
 
 /// Defines options for a [`Clock`]'s precision.
@@ -126,13 +129,18 @@ impl Stream for ClockStream {
 pub struct Clock<P: Clone + Precision> {
     name: &'static str,
     common: PanelCommon,
-    format_idx: Rc<Mutex<(usize, usize)>>,
+    format_idx: Arc<Mutex<(usize, usize)>>,
     #[builder(default)]
     phantom: PhantomData<P>,
 }
 
 impl<P: Precision + Clone> Clock<P> {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        data: Result<()>,
+    ) -> Result<PanelDrawInfo> {
+        data?;
         let now = chrono::Local::now();
         let text = now
             .format(&self.common.formats[self.format_idx.lock().unwrap().0])
@@ -148,47 +156,59 @@ impl<P: Precision + Clone> Clock<P> {
 
     fn process_event(
         event: Event,
-        idx: Rc<Mutex<(usize, usize)>>,
+        idx: Arc<Mutex<(usize, usize)>>,
         actions: Actions,
-    ) {
+        send: Sender<EventResponse>,
+    ) -> Result<()> {
         match event {
             Event::Action(ref value) if value == "cycle" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 + 1) % idx.1, idx.1);
+                send.blocking_send(EventResponse::Ok)?;
             }
             Event::Action(ref value) if value == "cycle_back" => {
                 let mut idx = idx.lock().unwrap();
                 *idx = ((idx.0 - 1 + idx.1) % idx.1, idx.1);
+                send.blocking_send(EventResponse::Ok)?;
             }
             Event::Mouse(event) => match event.button {
                 MouseButton::Left => Self::process_event(
                     Event::Action(actions.left.clone()),
                     idx,
                     actions,
+                    send,
                 ),
                 MouseButton::Right => Self::process_event(
                     Event::Action(actions.right.clone()),
                     idx,
                     actions,
+                    send,
                 ),
                 MouseButton::Middle => Self::process_event(
                     Event::Action(actions.middle.clone()),
                     idx,
                     actions,
+                    send,
                 ),
                 MouseButton::ScrollUp => Self::process_event(
                     Event::Action(actions.up.clone()),
                     idx,
                     actions,
+                    send,
                 ),
                 MouseButton::ScrollDown => Self::process_event(
                     Event::Action(actions.down.clone()),
                     idx,
                     actions,
+                    send,
                 ),
-            },
-            _ => {}
+            }?,
+            Event::Action(e) => send.blocking_send(EventResponse::Err(
+                format!("Unknown event {e}"),
+            ))?,
         }
+
+        Ok(())
     }
 }
 
@@ -212,7 +232,7 @@ where
             &["%Y-%m-%d %T"],
             &[""],
         )?);
-        builder.format_idx(Rc::new(Mutex::new((
+        builder.format_idx(Arc::new(Mutex::new((
             0,
             builder.common.as_ref().unwrap().formats.len(),
         ))));
@@ -229,24 +249,39 @@ where
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }
 
         let idx = self.format_idx.clone();
         let actions = self.common.actions.clone();
-        let (send, recv) = channel(16);
+        let (event_send, event_recv) = channel(16);
+        let (response_send, response_recv) = channel(16);
         let mut map =
-            StreamMap::<usize, Pin<Box<dyn Stream<Item = ()>>>>::new();
+            StreamMap::<usize, Pin<Box<dyn Stream<Item = Result<()>>>>>::new();
         map.insert(
             0,
-            Box::pin(ReceiverStream::new(recv).map(move |s| {
-                Self::process_event(s, idx.clone(), actions.clone());
+            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
+                let idx = idx.clone();
+                let actions = actions.clone();
+                let send = response_send.clone();
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Self::process_event(
+                        s,
+                        idx.clone(),
+                        actions.clone(),
+                        send.clone(),
+                    )
+                }))?
             })),
         );
-        map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| ())));
+        map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| Ok(()))));
 
-        Ok((Box::pin(map.map(move |_| self.draw(&cr))), Some(send)))
+        Ok((
+            Box::pin(map.map(move |(_, data)| self.draw(&cr, data))),
+            Some(ChannelEndpoint::new(event_send, response_recv)),
+        ))
     }
 }

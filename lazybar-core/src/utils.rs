@@ -5,10 +5,11 @@ use config::{Map, Value};
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
-use tokio::{net::UnixStream, sync::mpsc::Sender};
+use tokio::{io::AsyncWriteExt, net::UnixStream};
 
 use crate::{
-    bar::{Dependence, PanelDrawInfo},
+    bar::{Dependence, EventResponse, PanelDrawInfo},
+    ipc::ChannelEndpoint,
     Attrs,
 };
 
@@ -16,28 +17,38 @@ use crate::{
 /// results through a channel.
 pub struct UnixStreamWrapper {
     inner: UnixStream,
-    sender: Sender<String>,
+    endpoint: ChannelEndpoint<String, EventResponse>,
 }
 
 impl UnixStreamWrapper {
     /// Creates a new wrapper from a stream and a sender
-    pub const fn new(inner: UnixStream, sender: Sender<String>) -> Self {
-        Self { inner, sender }
+    pub const fn new(
+        inner: UnixStream,
+        endpoint: ChannelEndpoint<String, EventResponse>,
+    ) -> Self {
+        Self { inner, endpoint }
     }
 
     /// Reads from the inner [`UnixStream`] until an error is encountered or the
     /// program terminates.
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let mut data = [0; 1024];
-        loop {
-            self.inner.readable().await?;
-            let len = self.inner.try_read(&mut data)?;
-            let message = String::from_utf8_lossy(&data[0..len]);
-            if message.len() == 0 {
-                return Ok(());
-            }
-            self.sender.send(message.to_string()).await?;
+        self.inner.readable().await?;
+        let len = self.inner.try_read(&mut data)?;
+        let message = String::from_utf8_lossy(&data[0..len]);
+        if message.len() == 0 {
+            return Ok(());
         }
+        self.endpoint.send.send(message.to_string()).await?;
+        let response =
+            self.endpoint.recv.recv().await.unwrap_or(EventResponse::Ok);
+
+        self.inner.writable().await?;
+        self.inner.try_write(response.to_string().as_bytes())?;
+
+        self.inner.shutdown().await?;
+
+        Ok(())
     }
 }
 

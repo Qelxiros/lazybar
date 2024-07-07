@@ -29,9 +29,11 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt, StreamMap};
 
 use crate::{
-    bar::{Dependence, Event, MouseButton, PanelDrawInfo},
-    draw_common, remove_string_from_config, remove_uint_from_config, Actions,
-    Attrs, PanelCommon, PanelConfig, PanelStream, Ramp,
+    bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
+    draw_common,
+    ipc::ChannelEndpoint,
+    remove_string_from_config, remove_uint_from_config, Actions, Attrs,
+    PanelCommon, PanelConfig, PanelStream, Ramp,
 };
 
 /// Displays the current volume and mute status of a given sink.
@@ -92,14 +94,18 @@ impl Stream for Pulseaudio {
 impl Pulseaudio {
     fn draw(
         cr: &Rc<cairo::Context>,
-        data: Option<(Volume, bool)>,
+        data: Result<Option<(Volume, bool)>>,
         last_data: &Arc<Mutex<(Volume, bool)>>,
         ramp: Option<&Ramp>,
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
         dependence: Dependence,
     ) -> Result<PanelDrawInfo> {
-        let (volume, mute) = data.unwrap_or_else(|| *last_data.lock().unwrap());
+        let (volume, mute) = match data {
+            Ok(Some(data)) => data,
+            Ok(None) => *last_data.lock().unwrap(),
+            Err(e) => return Err(e),
+        };
         *last_data.lock().unwrap() = (volume, mute);
         let ramp = match (mute, muted_ramp) {
             (false, _) | (true, None) => ramp,
@@ -124,7 +130,8 @@ impl Pulseaudio {
         unit: u32,
         introspector: Rc<RefCell<Introspector>>,
         mainloop: Rc<RefCell<threaded::Mainloop>>,
-    ) -> (Volume, bool) {
+        response_send: tokio::sync::mpsc::Sender<EventResponse>,
+    ) -> Result<()> {
         match event {
             Event::Action(ref value) if value == "increment" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -162,6 +169,10 @@ impl Pulseaudio {
 
                     mainloop.borrow_mut().unlock();
                 };
+
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Ok(response_send.blocking_send(EventResponse::Ok)?)
+                }))?
             }
             Event::Action(ref value) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -202,6 +213,10 @@ impl Pulseaudio {
 
                     mainloop.borrow_mut().unlock();
                 };
+
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Ok(response_send.blocking_send(EventResponse::Ok)?)
+                }))?
             }
             Event::Action(ref value) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -224,55 +239,67 @@ impl Pulseaudio {
                         .set_sink_mute_by_name(sink, !mute, None);
                     mainloop.deref().borrow_mut().unlock();
                 };
-            }
-            Event::Mouse(event) => {
-                match event.button {
-                    MouseButton::Left => Self::process_event(
-                        Event::Action(actions.left.clone()),
-                        actions,
-                        sink,
-                        unit,
-                        introspector,
-                        mainloop,
-                    ),
-                    MouseButton::Right => Self::process_event(
-                        Event::Action(actions.right.clone()),
-                        actions,
-                        sink,
-                        unit,
-                        introspector,
-                        mainloop,
-                    ),
-                    MouseButton::Middle => Self::process_event(
-                        Event::Action(actions.middle.clone()),
-                        actions,
-                        sink,
-                        unit,
-                        introspector,
-                        mainloop,
-                    ),
-                    MouseButton::ScrollUp => Self::process_event(
-                        Event::Action(actions.up.clone()),
-                        actions,
-                        sink,
-                        unit,
-                        introspector,
-                        mainloop,
-                    ),
-                    MouseButton::ScrollDown => Self::process_event(
-                        Event::Action(actions.down.clone()),
-                        actions,
-                        sink,
-                        unit,
-                        introspector,
-                        mainloop,
-                    ),
-                };
-            }
-            _ => {}
-        };
 
-        (Volume(0), false)
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Ok(response_send.blocking_send(EventResponse::Ok)?)
+                }))?
+            }
+            Event::Action(ref value) => {
+                let value = value.to_owned();
+                futures::executor::block_on(task::spawn_blocking(move || {
+                    Ok(response_send.blocking_send(EventResponse::Err(
+                        format!("Unknown event {}", value),
+                    ))?)
+                }))?
+            }
+            Event::Mouse(event) => Ok(match event.button {
+                MouseButton::Left => Self::process_event(
+                    Event::Action(actions.left.clone()),
+                    actions,
+                    sink,
+                    unit,
+                    introspector,
+                    mainloop,
+                    response_send,
+                ),
+                MouseButton::Right => Self::process_event(
+                    Event::Action(actions.right.clone()),
+                    actions,
+                    sink,
+                    unit,
+                    introspector,
+                    mainloop,
+                    response_send,
+                ),
+                MouseButton::Middle => Self::process_event(
+                    Event::Action(actions.middle.clone()),
+                    actions,
+                    sink,
+                    unit,
+                    introspector,
+                    mainloop,
+                    response_send,
+                ),
+                MouseButton::ScrollUp => Self::process_event(
+                    Event::Action(actions.up.clone()),
+                    actions,
+                    sink,
+                    unit,
+                    introspector,
+                    mainloop,
+                    response_send,
+                ),
+                MouseButton::ScrollDown => Self::process_event(
+                    Event::Action(actions.down.clone()),
+                    actions,
+                    sink,
+                    unit,
+                    introspector,
+                    mainloop,
+                    response_send,
+                ),
+            }?),
+        }
     }
 }
 
@@ -364,7 +391,8 @@ impl PanelConfig for Pulseaudio {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         _height: i32,
-    ) -> Result<(PanelStream, Option<tokio::sync::mpsc::Sender<Event>>)> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         let mut mainloop = threaded::Mainloop::new()
             .context("Failed to create pulseaudio mainloop")?;
         mainloop.start()?;
@@ -431,7 +459,7 @@ impl PanelConfig for Pulseaudio {
 
         let mut map = StreamMap::<
             usize,
-            Pin<Box<dyn Stream<Item = Option<(Volume, bool)>>>>,
+            Pin<Box<dyn Stream<Item = Result<Option<(Volume, bool)>>>>>,
         >::new();
 
         let initial = sink_recv.recv()?;
@@ -442,14 +470,16 @@ impl PanelConfig for Pulseaudio {
         map.insert(
             0,
             Box::pin(
-                tokio_stream::once(Some(initial)).chain(self.map(Option::Some)),
+                tokio_stream::once(Ok(Some(initial)))
+                    .chain(self.map(Option::Some).map(Result::Ok)),
             ),
         );
 
-        let (action_send, action_recv) = tokio::sync::mpsc::channel(16);
+        let (event_send, event_recv) = tokio::sync::mpsc::channel(16);
+        let (response_send, response_recv) = tokio::sync::mpsc::channel(16);
         map.insert(
             1,
-            Box::pin(ReceiverStream::new(action_recv).map(move |s| {
+            Box::pin(ReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
                     s,
                     actions.clone(),
@@ -457,8 +487,9 @@ impl PanelConfig for Pulseaudio {
                     unit,
                     introspector.clone(),
                     mainloop.clone(),
-                );
-                None
+                    response_send.clone(),
+                )?;
+                Ok(None)
             })),
         );
 
@@ -476,7 +507,7 @@ impl PanelConfig for Pulseaudio {
                     dependence,
                 )
             })),
-            Some(action_send),
+            Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
     }
 }
