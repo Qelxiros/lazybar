@@ -1,12 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use config::{Config, File, FileFormat, Value};
-use lazy_static::lazy_static;
 
 use crate::{
     builders::BarConfigBuilder,
-    get_table_from_config,
+    cleanup, get_table_from_config,
     panels::{
         precision::{Days, Hours, Minutes, Seconds},
         Battery, Clock, Cpu, Custom, Fanotify, Inotify, Memory, Mpd, Network,
@@ -15,33 +14,6 @@ use crate::{
     remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
     PanelConfig, Position,
 };
-
-lazy_static! {
-    static ref CONFIG: Config = {
-        Config::builder()
-            .add_source(
-                File::new(
-                    format!(
-                        "{}/lazybar/config.toml",
-                        std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
-                            format!(
-                                "{}/.config",
-                                std::env::var("HOME").unwrap()
-                            )
-                        })
-                    )
-                    .as_str(),
-                    FileFormat::Toml,
-                )
-                .required(true),
-            )
-            .build()
-            .unwrap_or_else(|e| {
-                log::error!("Error parsing config file: {e}");
-                std::process::exit(101);
-            })
-    };
-}
 
 /// Parses a bar with a given name from the global [`Config`]
 ///
@@ -56,30 +28,36 @@ lazy_static! {
 /// - `ipc`: `true` or `false`. Whether to enable inter-process communication.
 ///
 /// See [`Attrs::parse`] for more parsing details.
-pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
-    let mut bars_table = CONFIG
+pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
+    let config = Config::builder()
+        .add_source(
+            File::new(
+                config.to_str().unwrap_or_else(|| {
+                    log::error!("Invalid config path");
+                    cleanup::exit(None, 101)
+                }),
+                FileFormat::Toml,
+            )
+            .required(true),
+        )
+        .build()
+        .unwrap_or_else(|e| {
+            log::error!("Error parsing config file: {e}");
+            cleanup::exit(None, 101)
+        });
+
+    let mut bars_table = config
         .get_table("bars")
         .context("`bars` doesn't exist or isn't a table")?;
 
-    let bar_name = bar_name
-        .unwrap_or_else(|| {
-            let mut keys = bars_table.keys().collect::<Vec<_>>();
-            keys.sort();
-            keys.first().unwrap_or_else(|| {
-                log::error!("No bars specified in config file");
-                std::process::exit(101);
-            })
-        })
-        .to_owned();
-
     let mut bar_table = bars_table
-        .remove(bar_name.as_str())
+        .remove(bar_name)
         .with_context(|| format!("`{bar_name}` doesn't exist"))?
         .into_table()
         .with_context(|| format!("`{bar_name}` isn't a table"))?;
 
     let mut bar = BarConfigBuilder::default()
-        .name(bar_name)
+        .name(bar_name.to_owned())
         .position(
             match bar_table
                 .remove("position")
@@ -196,22 +174,22 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
         }
     }
 
-    let panels_table = CONFIG
+    let panels_table = config
         .get_table("panels")
         .context("`panels` doesn't exist or isn't a table")?;
 
     // leak panel names so that we can use &'static str instead of String
     left_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Left));
     center_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Center));
     right_final
         .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table))
+        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
         .for_each(|p| bar.add_panel(p, Alignment::Right));
 
     Ok(bar)
@@ -220,12 +198,13 @@ pub fn parse(bar_name: Option<&str>) -> Result<BarConfig> {
 fn parse_panel(
     p: &'static str,
     panels_table: &HashMap<String, Value>,
+    config: &Config,
 ) -> Option<Box<dyn PanelConfig>> {
     if let Some(mut table) = get_table_from_config(p, panels_table) {
         if let Some(s) = remove_string_from_config("type", &mut table) {
             return match s.as_str() {
                 "battery" => {
-                    Battery::parse(p, &mut table, &CONFIG)
+                    Battery::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 "clock" => {
@@ -233,25 +212,25 @@ fn parse_panel(
                         if let Ok(precision) = precision.clone().into_string() {
                             match precision.as_str() {
                                 "days" => {
-                                    Clock::<Days>::parse(p, &mut table, &CONFIG)
+                                    Clock::<Days>::parse(p, &mut table, config)
+                                        .map::<Box<dyn PanelConfig>, _>(|p| {
+                                        Box::new(p)
+                                    })
+                                }
+                                "hours" => {
+                                    Clock::<Hours>::parse(p, &mut table, config)
                                         .map::<Box<dyn PanelConfig>, _>(|p| {
                                             Box::new(p)
                                         })
                                 }
-                                "hours" => Clock::<Hours>::parse(
-                                    p, &mut table, &CONFIG,
-                                )
-                                .map::<Box<dyn PanelConfig>, _>(|p| {
-                                    Box::new(p)
-                                }),
                                 "minutes" => Clock::<Minutes>::parse(
-                                    p, &mut table, &CONFIG,
+                                    p, &mut table, config,
                                 )
                                 .map::<Box<dyn PanelConfig>, _>(|p| {
                                     Box::new(p)
                                 }),
                                 "seconds" | _ => Clock::<Seconds>::parse(
-                                    p, &mut table, &CONFIG,
+                                    p, &mut table, config,
                                 )
                                 .map::<Box<dyn PanelConfig>, _>(|p| {
                                     Box::new(p)
@@ -263,53 +242,55 @@ fn parse_panel(
                                  (location attempt: {:?})",
                                 precision.origin()
                             );
-                            Clock::<Seconds>::parse(p, &mut table, &CONFIG)
+                            Clock::<Seconds>::parse(p, &mut table, config)
                                 .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                         }
                     } else {
-                        Clock::<Seconds>::parse(p, &mut table, &CONFIG)
+                        Clock::<Seconds>::parse(p, &mut table, config)
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                     }
                 }
-                "cpu" => Cpu::parse(p, &mut table, &CONFIG)
+                "cpu" => Cpu::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                 "custom" => {
-                    Custom::parse(p, &mut table, &CONFIG)
+                    Custom::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
-                "fanotify" => Fanotify::parse(p, &mut table, &CONFIG)
-                    .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                "fanotify" => {
+                    Fanotify::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
                 "inotify" => {
-                    Inotify::parse(p, &mut table, &CONFIG)
+                    Inotify::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 "memory" => {
-                    Memory::parse(p, &mut table, &CONFIG)
+                    Memory::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
-                "mpd" => Mpd::parse(p, &mut table, &CONFIG)
+                "mpd" => Mpd::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                 "network" => {
-                    Network::parse(p, &mut table, &CONFIG)
+                    Network::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 "ping" => {
-                    Ping::parse(p, &mut table, &CONFIG)
+                    Ping::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
-                "pulseaudio" => Pulseaudio::parse(p, &mut table, &CONFIG)
+                "pulseaudio" => Pulseaudio::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
-                "separator" => Separator::parse(p, &mut table, &CONFIG)
+                "separator" => Separator::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                 "temp" => {
-                    Temp::parse(p, &mut table, &CONFIG)
+                    Temp::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 "xwindow" => {
-                    XWindow::parse(p, &mut table, &CONFIG)
+                    XWindow::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
-                "xworkspaces" => XWorkspaces::parse(p, &mut table, &CONFIG)
+                "xworkspaces" => XWorkspaces::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                 s => Err(anyhow!("Unknown panel type {s}")),
             }

@@ -388,7 +388,7 @@ impl Bar {
         message: &str,
     ) -> Result<(PanelEndpoint, String)> {
         if message == "quit" {
-            cleanup::exit(self.name.as_str());
+            cleanup::exit(Some(self.name.as_str()), 0);
         }
 
         let (panel, message) = message
