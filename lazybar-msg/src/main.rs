@@ -1,4 +1,8 @@
-use std::{ffi::OsString, fs::read_dir, path::PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    fs::read_dir,
+    path::PathBuf,
+};
 
 use anyhow::Result;
 use clap::Parser;
@@ -35,7 +39,16 @@ async fn main() -> Result<()> {
     };
 
     for path in paths {
-        let mut stream = UnixStream::connect(path).await?;
+        let stream = UnixStream::connect(path.as_path()).await;
+
+        let Ok(mut stream) = stream else {
+            let e = stream.unwrap_err();
+            log::warn!(
+                "Error opening file (is the bar running? does it have ipc \
+                 enabled?): {e}"
+            );
+            continue;
+        };
 
         stream.writable().await?;
         stream.try_write(args.message.as_bytes())?;
@@ -45,7 +58,13 @@ async fn main() -> Result<()> {
         let mut response = [0; 1024];
         stream.try_read(&mut response)?;
 
-        println!("{}", String::from_utf8_lossy(&response));
+        println!(
+            "{}: {}",
+            path.file_name()
+                .map(OsStr::to_string_lossy)
+                .unwrap_or_default(),
+            String::from_utf8_lossy(&response)
+        );
 
         stream.shutdown().await?;
     }
