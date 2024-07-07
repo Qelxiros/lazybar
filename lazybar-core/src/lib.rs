@@ -41,6 +41,7 @@
 mod attrs;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
+mod cleanup;
 mod highlight;
 /// Support for inter-process communication, like that provided by the
 /// `lazybar-msg` crate.
@@ -175,7 +176,7 @@ impl Margins {
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`] for panel builders.
 pub mod builders {
-    use std::{fs::remove_file, pin::Pin, thread};
+    use std::{pin::Pin, thread};
 
     use anyhow::Result;
     use derive_builder::Builder;
@@ -190,6 +191,7 @@ pub mod builders {
 
     use crate::{
         bar::{Event, EventResponse},
+        cleanup,
         ipc::{self, ChannelEndpoint},
         x::XStream,
         Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
@@ -320,8 +322,7 @@ pub mod builders {
             let name = bar.name.clone();
             thread::spawn(move || {
                 signals.wait();
-                let _ = remove_file(format!("/tmp/lazybar-ipc/{name}"));
-                std::process::exit(0);
+                cleanup::exit(name.as_str());
             });
 
             let result = ipc::init(bar.ipc, bar.name.as_str());
@@ -347,7 +348,7 @@ pub mod builders {
                                 log::warn!("X event caused an error: {e}");
                                 // close when X server does
                                 // this could cause problems, maybe only exit under certain circumstances?
-                                std::process::exit(0);
+                                cleanup::exit(bar.name.as_str());
                             } else {
                                 log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
                             }

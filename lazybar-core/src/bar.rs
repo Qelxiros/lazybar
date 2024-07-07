@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs::remove_file, ops::BitAnd, rc::Rc, sync::Arc};
+use std::{fmt::Display, ops::BitAnd, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
@@ -7,7 +7,7 @@ use tokio_stream::StreamMap;
 use xcb::x;
 
 use crate::{
-    create_surface, create_window, ipc::ChannelEndpoint, map_window,
+    cleanup, create_surface, create_window, ipc::ChannelEndpoint, map_window,
     set_wm_properties, Alignment, Margins, PanelDrawFn, PanelEndpoint,
     PanelStream, Position,
 };
@@ -388,8 +388,7 @@ impl Bar {
         message: &str,
     ) -> Result<(PanelEndpoint, String)> {
         if message == "quit" {
-            let _ = remove_file(format!("/tmp/lazybar-ipc/{}", self.name));
-            std::process::exit(0);
+            cleanup::exit(self.name.as_str());
         }
 
         let (panel, message) = message
