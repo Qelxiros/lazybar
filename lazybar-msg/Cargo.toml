@@ -12,7 +12,8 @@ keywords = ["X11","WM","Linux","status-bar","i3"]
 
 [dependencies]
 anyhow = "1.0.86"
-clap = { version = "4.5.8", features = ["derive"] }
+clap = { version = "4.5.8", features = ["cargo", "derive"] }
+clap_complete = "4.5.7"
 log = "0.4.22"
 simple_logger = "5.0.0"
 tokio = { version = "1.38.0", features = ["io-util", "macros", "net", "rt", "rt-multi-thread"] }

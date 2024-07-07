@@ -1,11 +1,13 @@
 use std::{
     ffi::{OsStr, OsString},
     fs::read_dir,
+    io,
     path::PathBuf,
 };
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Command, CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Generator, Shell};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use tokio::{io::AsyncWriteExt, net::UnixStream};
@@ -13,19 +15,33 @@ use tokio::{io::AsyncWriteExt, net::UnixStream};
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// The name of the bar to which to send the message.
-    #[arg(short, long)]
-    bar: Vec<String>,
-    /// Send the message to all bars, ignoring all instances of `--bar`
-    #[arg(short, long)]
-    all: bool,
-    /// The message to send, in the format `<panel_name>.<message>`.
-    message: String,
+    #[command(subcommand)]
+    mode: Mode,
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum Mode {
+    /// Send a message to one or more bars, specified by name
+    Bars { bars: Vec<String>, message: String },
+    /// Send a message to all bars
+    All { message: String },
+    /// Generate completions for the given shell
+    Generate { shell: Shell },
+}
+
+fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
+    generate(gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let mode = Args::parse().mode;
+
+    if let Mode::Generate { shell } = mode {
+        eprintln!("Generating completions for {shell:?}");
+        print_completions(shell, &mut Args::command());
+        std::process::exit(0);
+    }
 
     SimpleLogger::new()
         .with_level(LevelFilter::Info)
@@ -34,18 +50,26 @@ async fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let paths = if args.all {
-        read_dir("/tmp/lazybar-ipc/")?
-            .filter_map(|r| r.map(|f| f.path()).ok())
-            .collect::<Vec<_>>()
-    } else {
-        args.bar
-            .iter()
-            .map(|b| {
-                PathBuf::from(OsString::from(format!("/tmp/lazybar-ipc/{b}")))
-            })
-            .collect()
+    let (paths, message) = match mode {
+        Mode::Bars { bars, message } => (
+            bars.iter()
+                .map(|b| {
+                    PathBuf::from(OsString::from(format!(
+                        "/tmp/lazybar-ipc/{b}"
+                    )))
+                })
+                .collect(),
+            message,
+        ),
+        Mode::All { message } => (
+            read_dir("/tmp/lazybar-ipc/")?
+                .filter_map(|r| r.map(|f| f.path()).ok())
+                .collect::<Vec<_>>(),
+            message,
+        ),
+        Mode::Generate { shell: _ } => unreachable!(),
     };
+
     log::debug!("got paths: {paths:?}");
 
     for path in paths {
@@ -68,7 +92,7 @@ async fn main() -> Result<()> {
         log::debug!("got unix stream");
 
         stream.writable().await?;
-        let bytes = stream.try_write(args.message.as_bytes())?;
+        let bytes = stream.try_write(message.as_bytes())?;
         log::debug!("message written ({bytes} bytes)");
 
         let mut response = [0; 1024];
