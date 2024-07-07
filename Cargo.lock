@@ -691,6 +691,7 @@ name = "lazybar"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "clap",
  "lazybar-core",
  "log",
  "signal-hook",

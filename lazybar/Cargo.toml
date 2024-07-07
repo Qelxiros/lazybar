@@ -12,6 +12,7 @@ keywords = ["X11","WM","Linux","status-bar","i3"]
 
 [dependencies]
 anyhow = "1.0.86"
+clap = { version = "4.5.8", features = ["derive"] }
 lazybar-core = { version = "0.3.2", path = "../lazybar-core" }
 log = "0.4.22"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
