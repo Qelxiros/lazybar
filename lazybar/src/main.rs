@@ -56,6 +56,12 @@ fn main() -> Result<()> {
                 .value_hint(ValueHint::Other)
                 .action(ArgAction::Set)
                 .required(true),
+        )
+        .arg(
+            Arg::new("verbosity")
+                .short('v')
+                .help("Increase the logging level up to three times")
+                .action(ArgAction::Count),
         );
     let args = cmd.clone().get_matches();
 
@@ -65,8 +71,15 @@ fn main() -> Result<()> {
         std::process::exit(0);
     }
 
+    let level = match args.get_one::<u8>("verbosity") {
+        None | Some(0) => LevelFilter::Warn,
+        Some(1) => LevelFilter::Info,
+        Some(2) => LevelFilter::Debug,
+        Some(_) => LevelFilter::Trace,
+    };
+
     SimpleLogger::new()
-        .with_level(LevelFilter::Warn)
+        .with_level(level)
         .env()
         .with_utc_timestamps()
         .init()
@@ -76,7 +89,8 @@ fn main() -> Result<()> {
     // $XDG_CONFIG_HOME/lazybar/config.toml, failing that
     // $HOME/.config/lazybar/config.toml, failing that
     // /etc/lazybar/config.toml
-    let path = if let Some(&ref config) = args.get_one::<PathBuf>("config") {
+    #[allow(clippy::option_if_let_else)]
+    let path = if let Some(config) = args.get_one::<PathBuf>("config") {
         config
     } else if let Ok(lazybar) = std::env::var("LAZYBAR_CONFIG_PATH") {
         &PathBuf::from(lazybar)
