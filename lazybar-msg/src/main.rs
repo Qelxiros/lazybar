@@ -6,6 +6,8 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
+use log::LevelFilter;
+use simple_logger::SimpleLogger;
 use tokio::{io::AsyncWriteExt, net::UnixStream};
 
 #[derive(Parser, Debug)]
@@ -25,6 +27,13 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
+    SimpleLogger::new()
+        .with_level(LevelFilter::Info)
+        .env()
+        .with_utc_timestamps()
+        .init()
+        .unwrap();
+
     let paths = if args.all {
         read_dir("/tmp/lazybar-ipc/")?
             .filter_map(|r| r.map(|f| f.path()).ok())
@@ -37,8 +46,15 @@ async fn main() -> Result<()> {
             })
             .collect()
     };
+    log::debug!("got paths: {paths:?}");
 
     for path in paths {
+        let file_name = path
+            .file_name()
+            .map(OsStr::to_string_lossy)
+            .unwrap_or_default();
+        log::debug!("Sending message to {file_name}");
+
         let stream = UnixStream::connect(path.as_path()).await;
 
         let Ok(mut stream) = stream else {
@@ -49,22 +65,18 @@ async fn main() -> Result<()> {
             );
             continue;
         };
+        log::debug!("got unix stream");
 
         stream.writable().await?;
-        stream.try_write(args.message.as_bytes())?;
-
-        stream.readable().await?;
+        let bytes = stream.try_write(args.message.as_bytes())?;
+        log::debug!("message written ({bytes} bytes)");
 
         let mut response = [0; 1024];
-        stream.try_read(&mut response)?;
+        stream.readable().await?;
+        let bytes = stream.try_read(&mut response)?;
+        log::debug!("response read ({bytes} bytes)");
 
-        println!(
-            "{}: {}",
-            path.file_name()
-                .map(OsStr::to_string_lossy)
-                .unwrap_or_default(),
-            String::from_utf8_lossy(&response)
-        );
+        log::info!("{}: {}", file_name, String::from_utf8_lossy(&response));
 
         stream.shutdown().await?;
     }
