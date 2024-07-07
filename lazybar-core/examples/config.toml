@@ -5,13 +5,14 @@ transparent = true
 bg = "#0000"
 default_bg = "#0000"
 default_fg = "#ccc"
-default_font = "FiraMono Nerd Font Mono 10"
+default_font = "FiraCode Nerd Font 10"
 margin_left = 10
 margin_internal = 10
 margin_right = 10
 panels_left = ["xwindow"]
 panels_center = ["clock"]
-panels_right = ["pulseaudio","separator","network","separator","battery"]
+panels_right = ["pulseaudio","first_separator","network","separator","battery"]
+ipc = true
 
 [panels.xwindow]
 type = "xwindow"
@@ -19,7 +20,7 @@ type = "xwindow"
 [panels.pulseaudio]
 type = "pulseaudio"
 ramp = "pa"
-muted_ramp = "pa_muted"
+ramp_muted = "pa_muted"
 
 [panels.network]
 type = "network"
@@ -31,9 +32,9 @@ format_disconnected = "<span foreground='#0ff'>%ifname%</span> <span foreground=
 [panels.mpd]
 type = "mpd"
 progress_bar = true
-max_width = 300
+max_width = 30
 strategy = "scroll"
-scroll_interval = 300
+scroll_interval = 1000
 
 [panels.battery]
 type = "battery"
@@ -46,7 +47,13 @@ click-left = "cycle"
 
 [panels.separator]
 type = "separator"
-format = "<span font='FiraMono Nerd Font Mono 13' foreground='#666'>  //  </span>"
+format = "<span font='FiraCode Nerd Font Mono 13' foreground='#666'>  //  </span>"
+dependence = "right"
+
+[panels.first_separator]
+type = "separator"
+format = "<span font='FiraCode Nerd Font Mono 13' foreground='#666'>  //  </span>"
+dependence = "both"
 
 [ramps.pa]
 0 = "<span font_size='25pt' rise='-7.5pt'>󰕿</span> "
