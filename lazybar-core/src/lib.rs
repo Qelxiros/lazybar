@@ -332,7 +332,7 @@ pub mod builders {
             thread::spawn(move || loop {
                 if let Some(signal) = signals.wait().next() {
                     log::info!("Received signal {signal} - shutting down");
-                    cleanup::exit(Some(name.as_str()), 0);
+                    cleanup::exit(Some((name.as_str(), self.ipc)), 0);
                 }
             });
             log::debug!("Set up signal listener");
@@ -367,7 +367,7 @@ pub mod builders {
                                 log::warn!("X event caused an error: {e}");
                                 // close when X server does
                                 // this could cause problems, maybe only exit under certain circumstances?
-                                cleanup::exit(Some(bar.name.as_str()), 0);
+                                cleanup::exit(Some((bar.name.as_str(), self.ipc)), 0);
                             } else {
                                 log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
                             }

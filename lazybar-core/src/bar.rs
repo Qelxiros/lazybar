@@ -394,7 +394,7 @@ impl Bar {
 
     fn handle_ipc_event(&mut self, message: &str) -> Result<()> {
         match message {
-            "quit" => cleanup::exit(Some(self.name.as_str()), 0),
+            "quit" => cleanup::exit(Some((self.name.as_str(), self.ipc)), 0),
             "show" => {
                 self.mapped = true;
                 Ok(self.conn.check_request(self.conn.send_request_checked(
