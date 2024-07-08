@@ -731,7 +731,6 @@ dependencies = [
  "pangocairo",
  "regex",
  "signal-hook",
- "simple_logger",
  "tokio",
  "tokio-stream",
  "unicode-segmentation",
