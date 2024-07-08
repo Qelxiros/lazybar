@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use csscolorparser::Color;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use tokio_stream::StreamMap;
@@ -13,8 +13,7 @@ use xcb::x;
 
 use crate::{
     cleanup, create_surface, create_window, ipc::ChannelEndpoint, map_window,
-    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelEndpoint,
-    PanelStream, Position,
+    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelStream, Position,
 };
 
 #[derive(PartialEq, Eq, Debug)]
@@ -255,6 +254,7 @@ pub struct Bar {
     pub(crate) right: Vec<Panel>,
     pub(crate) streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
     pub(crate) ipc: bool,
+    mapped: bool,
     center_state: CenterState,
 }
 
@@ -310,6 +310,7 @@ impl Bar {
             right: Vec::new(),
             streams: StreamMap::new(),
             ipc,
+            mapped: true,
             center_state: CenterState::Center,
         })
     }
@@ -391,26 +392,36 @@ impl Bar {
         }
     }
 
-    fn handle_ipc_event(&self, message: &str) -> Result<()> {
+    fn handle_ipc_event(&mut self, message: &str) -> Result<()> {
         match message {
             "quit" => cleanup::exit(Some(self.name.as_str()), 0),
-            "show" => Ok(self.conn.check_request(
-                self.conn.send_request_checked(&x::MapWindow {
-                    window: self.window,
-                }),
-            )?),
-            "hide" => Ok(self.conn.check_request(
-                self.conn.send_request_checked(&x::UnmapWindow {
-                    window: self.window,
-                }),
-            )?),
+            "show" => {
+                self.mapped = true;
+                Ok(self.conn.check_request(self.conn.send_request_checked(
+                    &x::MapWindow {
+                        window: self.window,
+                    },
+                ))?)
+            }
+            "hide" => {
+                self.mapped = true;
+                Ok(self.conn.check_request(self.conn.send_request_checked(
+                    &x::UnmapWindow {
+                        window: self.window,
+                    },
+                ))?)
+            }
+            "toggle" => match self.mapped {
+                true => self.handle_ipc_event("hide"),
+                false => self.handle_ipc_event("show"),
+            },
             _ => Ok(()),
         }
     }
 
     /// Given a message, find the endpoint of the panel it's addressed to.
     pub fn send_message(
-        &self,
+        &mut self,
         message: &str,
         ipc_set: &mut JoinSet<Result<()>>,
         ipc_send: UnboundedSender<EventResponse>,

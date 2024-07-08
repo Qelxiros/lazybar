@@ -697,7 +697,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lazybar"
-version = "0.3.0"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-msg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",

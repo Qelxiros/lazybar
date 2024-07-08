@@ -195,7 +195,6 @@ pub mod builders {
     use tokio_stream::{Stream, StreamExt, StreamMap};
 
     use crate::{
-        bar::{Event, EventResponse},
         cleanup,
         ipc::{self, ChannelEndpoint},
         x::XStream,

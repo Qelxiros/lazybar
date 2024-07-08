@@ -1,6 +1,6 @@
 [package]
 name = "lazybar"
-version = "0.3.0"
+version = "0.3.3"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
 rust-version = "1.79.0"
