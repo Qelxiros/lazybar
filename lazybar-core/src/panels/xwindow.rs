@@ -17,7 +17,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     draw_common,
     ipc::ChannelEndpoint,
-    remove_string_from_config,
+    remove_string_from_config, remove_uint_from_config,
     x::intern_named_atom,
     Attrs, PanelCommon, PanelConfig, PanelStream,
 };
@@ -91,6 +91,8 @@ pub struct XWindow {
     conn: Arc<xcb::Connection>,
     screen: i32,
     windows: HashSet<x::Window>,
+    #[builder(setter(strip_option), default = "None")]
+    max_width: Option<u32>,
     common: PanelCommon,
 }
 
@@ -130,23 +132,56 @@ impl XWindow {
                 ))?;
             }
 
-            let bytes = self
-                .conn
-                .wait_for_reply(self.conn.send_request(&x::GetProperty {
-                    delete: false,
-                    window,
-                    property: name_atom,
-                    r#type: utf8_atom,
-                    long_offset: 0,
-                    long_length: 64,
-                }))?
-                .value()
-                .to_vec();
+            if let Some(max_width) = self.max_width {
+                let bytes = self
+                    .conn
+                    .wait_for_reply(self.conn.send_request(&x::GetProperty {
+                        delete: false,
+                        window,
+                        property: name_atom,
+                        r#type: utf8_atom,
+                        long_offset: 0,
+                        // characters can be up to four bytes, so we ask X for
+                        // the upper bound
+                        long_length: max_width,
+                    }))?
+                    .value()
+                    .to_vec();
 
-            // TODO: read full string? not sure it's necessary, 64 longs is a
-            // lot but long strings of multi-byte characters might
-            // be cut off mid-grapheme
-            unsafe { String::from_utf8_unchecked(bytes) }
+                unsafe { std::str::from_utf8_unchecked(bytes.as_slice()) }
+                    .chars()
+                    .take(max_width as usize)
+                    .collect()
+            } else {
+                let mut offset = 0;
+                let mut title = String::new();
+                loop {
+                    let reply = self.conn.wait_for_reply(
+                        self.conn.send_request(&x::GetProperty {
+                            delete: false,
+                            window,
+                            property: name_atom,
+                            r#type: utf8_atom,
+                            long_offset: offset,
+                            // characters can be up to four bytes, so we ask X
+                            // for the upper bound
+                            long_length: 64,
+                        }),
+                    )?;
+
+                    title.push_str(unsafe {
+                        std::str::from_utf8_unchecked(reply.value())
+                    });
+
+                    if reply.bytes_after() == 0 {
+                        break;
+                    }
+
+                    offset += 64;
+                }
+
+                title
+            }
         };
 
         let text = self.common.formats[0].replace(
@@ -193,6 +228,9 @@ impl PanelConfig for XWindow {
         }
 
         builder.windows(HashSet::new());
+        if let Some(max_width) = remove_uint_from_config("max_width", table) {
+            builder.max_width(max_width as u32);
+        }
         builder.common(PanelCommon::parse(table, &[""], &["%name%"], &[""])?);
 
         Ok(builder.build()?)
