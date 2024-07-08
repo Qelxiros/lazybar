@@ -399,23 +399,8 @@ pub mod builders {
                         log::trace!("message received");
 
                         if let Some(message) = message {
-                            if let Ok((endpoint, message)) = bar.get_endpoint(message.as_str()) {
-                                ipc_set.spawn_blocking(move || {
-                                    let send = endpoint.lock().unwrap().send.clone();
-                                    let response = if let Err(e) = send.send(Event::Action(message)) {
-                                        EventResponse::Err(e.to_string())
-                                    } else {
-                                        endpoint.lock().unwrap().recv.blocking_recv().unwrap_or(EventResponse::Ok)
-                                    };
-                                    log::trace!("response received");
-
-                                    ipc_send.send(response)?;
-                                    log::trace!("response sent");
-
-                                    Ok(())
-                                });
-
-                                log::trace!("task spawned");
+                            if let Err(e) = bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
+                                log::warn!("Sending message {message} generated an error: {e}");
                             }
                         }
                     }

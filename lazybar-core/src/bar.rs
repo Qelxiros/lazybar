@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use csscolorparser::Color;
+use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use tokio_stream::StreamMap;
 use xcb::x;
 
@@ -390,40 +391,85 @@ impl Bar {
         }
     }
 
+    fn handle_ipc_event(&self, message: &str) -> Result<()> {
+        match message {
+            "quit" => cleanup::exit(Some(self.name.as_str()), 0),
+            "show" => Ok(self.conn.check_request(
+                self.conn.send_request_checked(&x::MapWindow {
+                    window: self.window,
+                }),
+            )?),
+            "hide" => Ok(self.conn.check_request(
+                self.conn.send_request_checked(&x::UnmapWindow {
+                    window: self.window,
+                }),
+            )?),
+            _ => Ok(()),
+        }
+    }
+
     /// Given a message, find the endpoint of the panel it's addressed to.
-    pub fn get_endpoint(
+    pub fn send_message(
         &self,
         message: &str,
-    ) -> Result<(PanelEndpoint, String)> {
-        if message == "quit" {
-            cleanup::exit(Some(self.name.as_str()), 0);
-        }
+        ipc_set: &mut JoinSet<Result<()>>,
+        ipc_send: UnboundedSender<EventResponse>,
+    ) -> Result<()> {
+        let (dest, message) = match message.split_once('.') {
+            Some((panel, message)) => (Some(panel), message),
+            None => (None, message),
+        };
 
-        let (panel, message) = message
-            .split_once('.')
-            .context("Message did not contain a `.` delimiter")?;
+        if let Some(panel) = dest {
+            let mut panels = self
+                .left
+                .iter()
+                .chain(self.center.iter())
+                .chain(self.right.iter())
+                .filter(|p| p.name == panel);
 
-        let mut panels = self
-            .left
-            .iter()
-            .chain(self.center.iter())
-            .chain(self.right.iter())
-            .filter(|p| p.name == panel);
+            let target = panels.next();
+            let (endpoint, message) = if target.is_none() {
+                Err(anyhow!("No panel with name {panel} was found"))
+            } else if panels.next().is_some() {
+                Err(anyhow!(
+                    "This panel has multiple instances and cannot be messaged"
+                ))
+            } else if let Some(ref endpoint) = target.unwrap().endpoint {
+                Ok((endpoint.clone(), message.to_string()))
+            } else {
+                Err(anyhow!(
+                    "The target panel has no associated sender and cannot be \
+                     messaged"
+                ))
+            }?;
 
-        let target = panels.next();
-        if target.is_none() {
-            Err(anyhow!("No panel with name {panel} was found"))
-        } else if panels.next().is_some() {
-            Err(anyhow!(
-                "This panel has multiple instances and cannot be messaged"
-            ))
-        } else if let Some(ref endpoint) = target.unwrap().endpoint {
-            Ok((endpoint.clone(), message.to_string()))
+            ipc_set.spawn_blocking(move || {
+                let send = endpoint.lock().unwrap().send.clone();
+                let response = if let Err(e) = send.send(Event::Action(message))
+                {
+                    EventResponse::Err(e.to_string())
+                } else {
+                    endpoint
+                        .lock()
+                        .unwrap()
+                        .recv
+                        .blocking_recv()
+                        .unwrap_or(EventResponse::Ok)
+                };
+                log::trace!("response received");
+
+                ipc_send.send(response)?;
+                log::trace!("response sent");
+
+                Ok(())
+            });
+
+            log::trace!("task spawned");
+
+            Ok(())
         } else {
-            Err(anyhow!(
-                "The target panel has no associated sender and cannot be \
-                 messaged"
-            ))
+            self.handle_ipc_event(message)
         }
     }
 
