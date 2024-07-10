@@ -23,7 +23,8 @@ use crate::{
 /// - `transparent`: `true` or `false`. If `bg` isn't transparent, the bar won't
 ///   be either.
 /// - `bg`: the background color. See [`csscolorparser::parse`].
-/// - `margins`: See [`Margins::parse`].
+/// - `margins`: See [`Margins`]. Keys are `margin_left`, `margin_right`, and
+///   `margin_internal`.
 /// - `reverse_scroll`: `true` or `false`. Whether to reverse scrolling.
 /// - `ipc`: `true` or `false`. Whether to enable inter-process communication.
 ///
@@ -145,7 +146,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             val
         })
         .attrs({
-            let val = Attrs::parse_global(&mut bar_table, "default_");
+            let val = Attrs::parse_global("default", &config);
             log::trace!("got bar attrs: {val:?}");
             val
         })

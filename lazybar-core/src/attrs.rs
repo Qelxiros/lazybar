@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-
+use anyhow::{Context, Result};
+use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pango::FontDescription;
@@ -10,6 +10,8 @@ use crate::{
 
 /// Attributes of a panel, or the defaults for the bar.
 #[derive(Builder, Clone, Default, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
 pub struct Attrs {
     #[builder(default, setter(strip_option))]
     font: Option<FontDescription>,
@@ -19,81 +21,63 @@ pub struct Attrs {
     pub(crate) bg: Option<Bg>,
 }
 
-impl AttrsBuilder {
-    const fn global() -> Self {
-        Self {
-            font: None,
-            fg: Some(Some(Color::new(1.0, 1.0, 1.0, 1.0))),
-            bg: Some(Some(Bg::None)),
-        }
-    }
-}
-
 impl Attrs {
     /// Parses an instance of this type from a subset of the global
-    /// [`Config`][config::Config].
+    /// [`Config`].
+    ///
+    /// This function first looks for a top-level table called `attrs` and then
+    /// a subtable of the given name. These options are contained within the
+    /// subtable.
     ///
     /// Configuration options:
     ///
     /// - `fg: String`: Specify the foreground (usually text) color. All parsing
     ///   methods from [csscolorparser] are available.
     ///
-    /// - `bg: String`: Specify the background color. All parsing methods from
-    ///   [csscolorparser] are available.
+    /// - `bg`: See [`Bg::parse`].
     ///
     /// - `font: String`: Specify the font to be used. This will be turned into
     ///   a [`pango::FontDescription`], so it's very configurable. Font family,
     ///   weight, size, and more can be specified.
-    pub fn parse<S: std::hash::BuildHasher>(
-        table: &mut HashMap<String, config::Value, S>,
-        prefix: &str,
-    ) -> Self {
+    pub fn parse(name: impl AsRef<str>, global: &Config) -> Result<Self> {
+        let attrs_table = global.get_table("attrs")?;
+        let name = name.as_ref();
+        log::debug!("parsing {name} attrs");
+        let mut attr_table = attrs_table
+            .get(name)
+            .with_context(|| {
+                format!("couldn't find attrs table with name {name}")
+            })?
+            .clone()
+            .into_table()?;
+        log::trace!("got attr table");
         let mut builder = AttrsBuilder::default();
-        if let Some(fg) =
-            remove_color_from_config(format!("{prefix}fg").as_str(), table)
-        {
+        if let Some(fg) = remove_color_from_config("fg", &mut attr_table) {
+            log::debug!("got fg: {fg}");
             builder.fg(fg);
         }
-        if let Some(bg) = Bg::parse(format!("{prefix}bg_").as_str(), table) {
-            builder.bg(bg);
+        if let Some(bg) = remove_string_from_config("bg", &mut attr_table) {
+            if let Some(bg) = Bg::parse(bg.as_str(), global) {
+                log::debug!("got bg: {bg:?}");
+                builder.bg(bg);
+            }
         }
-        if let Some(font) =
-            remove_string_from_config(format!("{prefix}font").as_str(), table)
-        {
+        if let Some(font) = remove_string_from_config("font", &mut attr_table) {
+            log::debug!("got font: {font}");
             builder.font(FontDescription::from_string(font.as_str()));
         }
 
-        // this can never panic: no validator functions, and all fields are
-        // optional
-        builder.build().unwrap()
+        Ok(builder.build()?)
     }
 
     /// Parses an instance of this type from a subset of the global
-    /// [`Config`][config::Config].
+    /// [`Config`].
     /// enforcing default colors. This ensures that the foreground and
     /// background colors always exist. No default font is set because
     /// [pango] will choose a reasonable font from those that exist on the host
     /// system.
-    pub fn parse_global(
-        table: &mut HashMap<String, config::Value>,
-        prefix: &str,
-    ) -> Self {
-        let mut builder = AttrsBuilder::global();
-        if let Some(fg) =
-            remove_color_from_config(format!("{prefix}fg").as_str(), table)
-        {
-            builder.fg(fg);
-        }
-        if let Some(bg) = Bg::parse(format!("{prefix}bg_").as_str(), table) {
-            builder.bg(bg);
-        }
-        if let Some(font) =
-            remove_string_from_config(format!("{prefix}font").as_str(), table)
-        {
-            builder.font(FontDescription::from_string(font.as_str()));
-        }
-
-        builder.build().unwrap()
+    pub fn parse_global(name: impl AsRef<str>, global: &Config) -> Self {
+        Self::parse(name, global).unwrap_or_default()
     }
 
     /// Sets the font of a [`pango::Layout`].

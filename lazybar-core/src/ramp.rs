@@ -16,8 +16,15 @@ impl Ramp {
         T: Sub + Copy,
         f64: From<T>,
     {
-        let prop = (f64::from(value) - f64::from(min))
-            / (f64::from(max) - f64::from(min));
+        let min = f64::from(min);
+        let max = f64::from(max);
+        let mut prop = (f64::from(value) - min) / (max - min);
+        if prop < min {
+            prop = min;
+        }
+        if prop > max {
+            prop = max;
+        }
         let idx = prop * (self.icons.len()) as f64;
         self.icons
             .get((idx.trunc() as usize).min(self.icons.len() - 1))
@@ -46,6 +53,14 @@ impl Ramp {
             }
         }
         Some(Self { icons })
+    }
+}
+
+impl Default for Ramp {
+    fn default() -> Self {
+        Self {
+            icons: vec![String::from("")],
+        }
     }
 }
 

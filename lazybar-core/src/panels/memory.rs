@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 
+use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Result};
 use config::Config;
 use derive_builder::Builder;
@@ -32,6 +33,7 @@ pub struct Memory {
     interval: Duration,
     #[builder(default = r#"String::from("/proc/meminfo")"#)]
     path: String,
+    formatter: AhoCorasick,
     common: PanelCommon,
 }
 
@@ -85,74 +87,125 @@ impl Memory {
         let percentage_swap_used =
             (swap_used as f64 / swap_total as f64 * 100.0) as u64;
 
-        let text = self.common.formats[0]
-            .replace(
-                "%gb_used%",
-                format!("{:.2}", (mem_used as f64 / 1024.0 / 1024.0)).as_str(),
-            )
-            .replace(
-                "%gb_free%",
-                format!("{:.2}", (mem_free as f64 / 1024.0 / 1024.0)).as_str(),
-            )
-            .replace(
-                "%gb_total%",
-                format!("{:.2}", (mem_total as f64 / 1024.0 / 1024.0)).as_str(),
-            )
-            .replace(
-                "%mb_used%",
-                ((mem_used as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace(
-                "%mb_free%",
-                ((mem_free as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace(
-                "%mb_total%",
-                ((mem_total as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace("%percentage_used%", percentage_used.to_string().as_str())
-            .replace(
-                "%percentage_free%",
-                (100 - percentage_used).to_string().as_str(),
-            )
-            .replace(
-                "%gb_swap_used%",
-                format!("{:.2}", ((swap_used as f64 / 1024.0 / 1024.0) as u64))
-                    .as_str(),
-            )
-            .replace(
-                "%gb_swap_free%",
-                format!("{:.2}", ((swap_free as f64 / 1024.0 / 1024.0) as u64))
-                    .as_str(),
-            )
-            .replace(
-                "%gb_swap_total%",
-                format!(
-                    "{:.2}",
-                    ((swap_total as f64 / 1024.0 / 1024.0) as u64)
-                )
-                .as_str(),
-            )
-            .replace(
-                "%mb_swap_used%",
-                ((swap_used as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace(
-                "%mb_swap_free%",
-                ((swap_free as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace(
-                "%mb_swap_total%",
-                ((swap_total as f64 / 1024.0) as u64).to_string().as_str(),
-            )
-            .replace(
-                "%percentage_swap_used%",
-                percentage_swap_used.to_string().as_str(),
-            )
-            .replace(
-                "%percentage_swap_free%",
-                (100 - percentage_swap_used).to_string().as_str(),
-            );
+        let mut text = String::new();
+        self.formatter.replace_all_with(
+            self.common.formats[0].as_str(),
+            &mut text,
+            |_, content, dst| match content {
+                "%gb_used%" => {
+                    dst.push_str(
+                        format!("{:.2}", (mem_used as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%gb_free%" => {
+                    dst.push_str(
+                        format!("{:.2}", (mem_free as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%gb_total%" => {
+                    dst.push_str(
+                        format!("{:.2}", (mem_total as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_used%" => {
+                    dst.push_str(
+                        ((mem_used as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_free%" => {
+                    dst.push_str(
+                        ((mem_free as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_total%" => {
+                    dst.push_str(
+                        ((mem_total as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%gb_swap_used%" => {
+                    dst.push_str(
+                        format!("{:.2}", (swap_used as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%gb_swap_free%" => {
+                    dst.push_str(
+                        format!("{:.2}", (swap_free as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%gb_swap_total%" => {
+                    dst.push_str(
+                        format!("{:.2}", (swap_total as f64 / 1024.0 / 1024.0))
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_swap_used%" => {
+                    dst.push_str(
+                        ((swap_used as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_swap_free%" => {
+                    dst.push_str(
+                        ((swap_free as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%mb_swap_total%" => {
+                    dst.push_str(
+                        ((swap_total as f64 / 1024.0) as u64)
+                            .to_string()
+                            .as_str(),
+                    );
+                    true
+                }
+                "%percentage_used%" => {
+                    dst.push_str(percentage_used.to_string().as_str());
+                    true
+                }
+                "%percentage_free%" => {
+                    dst.push_str((100 - percentage_used).to_string().as_str());
+                    true
+                }
+                "%percentage_swap_used%" => {
+                    dst.push_str(percentage_swap_used.to_string().as_str());
+                    true
+                }
+                "%percentage_swap_free%" => {
+                    dst.push_str(
+                        (100 - percentage_swap_used).to_string().as_str(),
+                    );
+                    true
+                }
+                other => {
+                    dst.push_str(other);
+                    true
+                }
+            },
+        );
 
         draw_common(
             cr,
@@ -171,9 +224,7 @@ impl PanelConfig for Memory {
     ///   - type: String
     ///   - default: `RAM: %percentage_used%`
     ///   - formatting options: `%{gb,mb}_[swap_]{total,used,free}%,
-    ///     %percentage_[swap_]{used,free}%` (where exactly one comma-separated
-    ///     value must be selected from each set of curly braces and the values
-    ///     in square brackets are optional)
+    ///     %percentage_[swap_]{used,free}%`
     /// - `interval`: how long to wait in seconds between each check
     ///   - type: u64
     ///   - default: 10
@@ -186,7 +237,7 @@ impl PanelConfig for Memory {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = MemoryBuilder::default();
 
@@ -199,10 +250,32 @@ impl PanelConfig for Memory {
         }
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[""],
             &["RAM: %percentage_used%%"],
             &[""],
+            &[""],
         )?);
+
+        builder.formatter(AhoCorasick::new(&[
+            "%gb_total%",
+            "%gb_used%",
+            "%gb_free%",
+            "%mb_total%",
+            "%mb_used%",
+            "%mb_free%",
+            "%gb_swap_total%",
+            "%gb_swap_used%",
+            "%gb_swap_free%",
+            "%mb_swap_total%",
+            "%mb_swap_used%",
+            "%mb_swap_free%",
+            "%percentage_used%",
+            "%percentage_free%",
+            "%percentage_swap_used%",
+            "%percentage_swap_free%",
+            "%ramp%",
+        ])?);
 
         Ok(builder.build()?)
     }

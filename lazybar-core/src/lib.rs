@@ -21,6 +21,10 @@
 //!   are referenced by panel tables (see below).
 //! - `panels`: each subtable defines a panel with the same name, and those
 //!   names are referenced by bar tables.
+//! - `attrs`: each subtable defines a set of attributes that can be referenced
+//!   by panels.
+//! - `bgs`: each subtable defines a background configuration (shape, color)
+//!   that can be referenced by attrs.
 //!
 //! None of these tables need to be declared explicitly, as they hold no values
 //! of their own. `[bars.example]` is sufficient to define a bar named
@@ -38,8 +42,10 @@
 //! ```
 #![deny(missing_docs)]
 
-mod attrs;
-mod background;
+/// Configuration options for colors and fonts.
+pub mod attrs;
+/// Background configuration options.
+pub mod background;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
 mod cleanup;
@@ -65,7 +71,7 @@ use std::{
 };
 
 use anyhow::Result;
-pub use attrs::Attrs;
+use attrs::Attrs;
 use bar::{Bar, Event, EventResponse, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
 use config::{Config, Value};

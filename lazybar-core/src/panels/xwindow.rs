@@ -216,7 +216,7 @@ impl PanelConfig for XWindow {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = XWindowBuilder::default();
 
@@ -233,7 +233,14 @@ impl PanelConfig for XWindow {
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as u32);
         }
-        builder.common(PanelCommon::parse(table, &[""], &["%name%"], &[""])?);
+        builder.common(PanelCommon::parse(
+            table,
+            global,
+            &[""],
+            &["%name%"],
+            &[""],
+            &[],
+        )?);
 
         Ok(builder.build()?)
     }

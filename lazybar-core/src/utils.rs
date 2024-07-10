@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use config::{Map, Value};
+use config::{Config, Map, Value};
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
@@ -10,7 +10,7 @@ use tokio::{io::AsyncWriteExt, net::UnixStream};
 use crate::{
     bar::{Dependence, EventResponse, PanelDrawInfo},
     ipc::ChannelEndpoint,
-    Attrs,
+    Attrs, Ramp,
 };
 
 /// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
@@ -172,8 +172,9 @@ pub struct PanelCommon {
     /// The instances of [`Attrs`] used by the panel
     pub attrs: Vec<Attrs>,
     /// The events that should be run on mouse events
-    // #[builder(default)]
     pub actions: Actions,
+    /// The ramps that are available for use in format strings
+    pub ramps: Vec<Ramp>,
 }
 
 impl PanelCommon {
@@ -181,31 +182,35 @@ impl PanelCommon {
     /// the global [`Config`][config::Config]. The format suffixes and defaults
     /// and attrs prefixes are documented by each panel.
     ///
-    /// Format strings should be specified as `format{suffix} = "value"`.
+    /// Format strings should be specified as `format{suffix} = "value"`. Where
+    /// not noted, panels accept one format string with no suffix.
     /// Dependence should be specified as `dependence = "value"`, where value is
     /// a valid variant of [`Dependence`].
     /// See [`Attrs::parse`] and [`Actions::parse`] for more parsing details.
     pub fn parse<S: std::hash::BuildHasher>(
         table: &mut HashMap<String, Value, S>,
+        global: &Config,
         format_suffixes: &[&'static str],
         format_defaults: &[&'static str],
         attrs_prefixes: &[&'static str],
+        ramp_suffixes: &[&'static str],
     ) -> Result<Self> {
         let mut builder = PanelCommonBuilder::default();
 
-        let mut formats = Vec::new();
-        for (suffix, default) in
-            format_suffixes.iter().zip(format_defaults.iter())
-        {
-            formats.push(
-                remove_string_from_config(
-                    format!("format{suffix}").as_str(),
-                    table,
-                )
-                .unwrap_or_else(|| (*default).to_string()),
-            );
-        }
-        builder.formats(formats);
+        builder.formats(
+            format_suffixes
+                .iter()
+                .zip(format_defaults.iter())
+                .map(|(suffix, default)| {
+                    remove_string_from_config(
+                        format!("format{suffix}").as_str(),
+                        table,
+                    )
+                    .unwrap_or_else(|| (*default).to_string())
+                })
+                .collect(),
+        );
+        log::debug!("got formats: {:?}", builder.formats);
 
         builder.dependence(
             match remove_string_from_config("dependence", table)
@@ -218,22 +223,52 @@ impl PanelCommon {
                 _ => Dependence::None,
             },
         );
+        log::debug!("got dependence: {:?}", builder.dependence);
 
         builder.attrs(
             attrs_prefixes
                 .iter()
-                .map(|p| Attrs::parse(table, p))
+                .map(|p| {
+                    if let Some(name) = remove_string_from_config(
+                        format!("{p}attrs").as_str(),
+                        table,
+                    ) {
+                        Attrs::parse(name, global).unwrap_or_default()
+                    } else {
+                        Attrs::default()
+                    }
+                })
                 .collect(),
         );
+        log::debug!("got attrs: {:?}", builder.attrs);
 
         builder.actions(Actions::parse(table)?);
+        log::debug!("got actions: {:?}", builder.actions);
+
+        builder.ramps(
+            ramp_suffixes
+                .iter()
+                .map(|suffix| {
+                    if let Some(ramp) = remove_string_from_config(
+                        format!("ramp{suffix}").as_str(),
+                        table,
+                    ) {
+                        Ramp::parse(ramp, global)
+                    } else {
+                        None
+                    }
+                    .unwrap_or_default()
+                })
+                .collect(),
+        );
+        log::debug!("got ramps: {:?}", builder.ramps);
 
         Ok(builder.build()?)
     }
 
     /// Attempts to parse common panel configuration options from a subset of
-    /// the global [`Config`][config::Config]. The format defaults and attrs
-    /// prefixes are documented by each panel.
+    /// the global [`Config`][config::Config]. The format defaults, attrs
+    /// prefixes, and ramp suffixes are documented by each panel.
     ///
     /// Format strings should be specified as `formats = ["value", ...]`.
     /// Dependence should be specified as `dependence = "value"`, where value is
@@ -241,8 +276,10 @@ impl PanelCommon {
     /// See [`Attrs::parse`] for more parsing details.
     pub fn parse_variadic<S: std::hash::BuildHasher>(
         table: &mut HashMap<String, Value, S>,
+        global: &Config,
         format_default: &[&'static str],
         attrs_prefixes: &[&'static str],
+        ramp_suffixes: &[&'static str],
     ) -> Result<Self> {
         let mut builder = PanelCommonBuilder::default();
 
@@ -260,6 +297,7 @@ impl PanelCommon {
                         .collect::<Vec<_>>()
                 }),
         );
+        log::debug!("got formats: {:?}", builder.formats);
 
         builder.dependence(
             match remove_string_from_config("dependence", table)
@@ -272,15 +310,45 @@ impl PanelCommon {
                 _ => Dependence::None,
             },
         );
+        log::debug!("got dependence: {:?}", builder.dependence);
 
         builder.attrs(
             attrs_prefixes
                 .iter()
-                .map(|p| Attrs::parse(table, p))
+                .map(|p| {
+                    if let Some(name) = remove_string_from_config(
+                        format!("{p}attrs").as_str(),
+                        table,
+                    ) {
+                        Attrs::parse(name, global).unwrap_or_default()
+                    } else {
+                        Attrs::default()
+                    }
+                })
                 .collect(),
         );
+        log::debug!("got attrs: {:?}", builder.attrs);
 
         builder.actions(Actions::parse(table)?);
+        log::debug!("got actions: {:?}", builder.actions);
+
+        builder.ramps(
+            ramp_suffixes
+                .iter()
+                .map(|suffix| {
+                    if let Some(ramp) = remove_string_from_config(
+                        format!("ramp{suffix}").as_str(),
+                        table,
+                    ) {
+                        Ramp::parse(ramp, global)
+                    } else {
+                        None
+                    }
+                    .unwrap_or_default()
+                })
+                .collect(),
+        );
+        log::debug!("got ramps: {:?}", builder.ramps);
 
         Ok(builder.build()?)
     }

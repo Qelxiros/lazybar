@@ -49,7 +49,11 @@ impl Cpu {
             * 100.0;
 
         let text = self.common.formats[0]
-            .replace("%percentage%", format!("{percentage:.0}").as_str());
+            .replace("%percentage%", format!("{percentage:.0}").as_str())
+            .replace(
+                "%ramp%",
+                self.common.ramps[0].choose(percentage, 0.0, 100.0).as_str(),
+            );
 
         self.last_load = load;
 
@@ -82,7 +86,7 @@ impl PanelConfig for Cpu {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        _global: &config::Config,
+        global: &config::Config,
     ) -> Result<Self> {
         let mut builder = CpuBuilder::default();
 
@@ -98,8 +102,10 @@ impl PanelConfig for Cpu {
         }
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[""],
             &["CPU: %percentage%%"],
+            &[""],
             &[""],
         )?);
 

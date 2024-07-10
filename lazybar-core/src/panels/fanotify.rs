@@ -119,7 +119,7 @@ impl PanelConfig for Fanotify {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = FanotifyBuilder::default();
 
@@ -127,7 +127,14 @@ impl PanelConfig for Fanotify {
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
         }
-        builder.common(PanelCommon::parse(table, &[""], &["%file%"], &[""])?);
+        builder.common(PanelCommon::parse(
+            table,
+            global,
+            &[""],
+            &["%file%"],
+            &[""],
+            &[],
+        )?);
 
         Ok(builder.build()?)
     }

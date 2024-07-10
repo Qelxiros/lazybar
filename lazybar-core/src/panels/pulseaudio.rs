@@ -51,10 +51,6 @@ pub struct Pulseaudio {
     sink: String,
     #[builder(default, setter(strip_option))]
     server: Option<String>,
-    #[builder(default, setter(strip_option))]
-    ramp: Option<Ramp>,
-    #[builder(default, setter(strip_option))]
-    ramp_muted: Option<Ramp>,
     #[builder(default = "10")]
     unit: u32,
     send: Sender<(Volume, bool)>,
@@ -101,8 +97,8 @@ impl Pulseaudio {
         cr: &Rc<cairo::Context>,
         data: Result<Option<(Volume, bool)>>,
         last_data: &Arc<Mutex<(Volume, bool)>>,
-        ramp: Option<&Ramp>,
-        muted_ramp: Option<&Ramp>,
+        ramp: &Ramp,
+        muted_ramp: &Ramp,
         attrs: &Attrs,
         dependence: Dependence,
         height: i32,
@@ -113,18 +109,12 @@ impl Pulseaudio {
             Err(e) => return Err(e),
         };
         *last_data.lock().unwrap() = (volume, mute);
-        let ramp = match (mute, muted_ramp) {
-            (false, _) | (true, None) => ramp,
-            (true, Some(_)) => muted_ramp,
+        let ramp = match mute {
+            false => ramp,
+            true => muted_ramp,
         };
-        let prefix = ramp
-            .as_ref()
-            .map(|r| r.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0));
-        let text = format!(
-            "{}{}",
-            prefix.as_deref().unwrap_or(""),
-            volume.to_string().as_str()
-        );
+        let prefix = ramp.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0);
+        let text = format!("{}{}", prefix, volume.to_string().as_str());
 
         draw_common(cr, text.as_str(), attrs, dependence, height)
     }
@@ -349,21 +339,6 @@ impl PanelConfig for Pulseaudio {
         if let Some(server) = remove_string_from_config("server", table) {
             builder.server(server);
         }
-        if let Some(ramp) = remove_string_from_config("ramp", table) {
-            if let Some(ramp) = Ramp::parse(ramp.as_str(), global) {
-                builder.ramp(ramp);
-            } else {
-                log::warn!("Invalid ramp {ramp}");
-            }
-        }
-        if let Some(ramp_muted) = remove_string_from_config("ramp_muted", table)
-        {
-            if let Some(ramp_muted) = Ramp::parse(ramp_muted.as_str(), global) {
-                builder.ramp_muted(ramp_muted);
-            } else {
-                log::warn!("Invalid ramp_muted {ramp_muted}");
-            }
-        }
         if let Some(unit) = remove_uint_from_config("unit", table) {
             builder.unit(unit as u32);
         }
@@ -373,9 +348,11 @@ impl PanelConfig for Pulseaudio {
         builder.recv(Arc::new(Mutex::new(recv)));
         builder.common(PanelCommon::parse(
             table,
+            global,
             &["_unmuted", "_muted"],
             &["%ramp%%volume%%", "%ramp%%volume%%"],
             &[""],
+            &["", "_muted"],
         )?);
 
         Ok(builder.build()?)
@@ -451,8 +428,8 @@ impl PanelConfig for Pulseaudio {
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
         }
-        let ramp = self.ramp.clone();
-        let muted_ramp = self.ramp_muted.clone();
+        let ramp = self.common.ramps[0].clone();
+        let muted_ramp = self.common.ramps[1].clone();
         let attrs = self.common.attrs[0].clone();
         let dependence = self.common.dependence;
 
@@ -500,8 +477,8 @@ impl PanelConfig for Pulseaudio {
                     &cr,
                     data,
                     &last_data,
-                    ramp.as_ref(),
-                    muted_ramp.as_ref(),
+                    &ramp,
+                    &muted_ramp,
                     &attrs,
                     dependence,
                     height,

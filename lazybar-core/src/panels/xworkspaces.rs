@@ -92,6 +92,13 @@ impl Stream for XStream {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
+enum WorkspaceState {
+    Active,
+    Nonempty,
+    Inactive,
+}
+
 /// Display information about workspaces
 ///
 /// Requires an EWMH-compliant window manager
@@ -152,15 +159,17 @@ impl XWorkspaces {
             .map(move |(i, w)| {
                 let i = i as u32;
                 let layout = create_layout(cr);
+                layout.set_text(w.as_str());
                 if i == current {
                     active.apply_font(&layout);
+                    (WorkspaceState::Active, layout)
                 } else if nonempty_set2.contains(&i) {
                     nonempty.apply_font(&layout);
+                    (WorkspaceState::Nonempty, layout)
                 } else {
                     inactive.apply_font(&layout);
+                    (WorkspaceState::Inactive, layout)
                 }
-                layout.set_text(w.as_str());
-                (i, layout)
             })
             .collect();
 
@@ -168,7 +177,21 @@ impl XWorkspaces {
         width_cache.clear();
         for l in &layouts {
             let size = l.1.pixel_size();
-            width_cache.push(size.0 + height - size.1);
+            width_cache.push(
+                match l.0 {
+                    WorkspaceState::Active => &self.common.attrs.as_slice()[0],
+                    WorkspaceState::Nonempty => {
+                        &self.common.attrs.as_slice()[1]
+                    }
+                    WorkspaceState::Inactive => {
+                        &self.common.attrs.as_slice()[2]
+                    }
+                }
+                .bg
+                .clone()
+                .map_or_else(|| size, |bg| bg.adjust_dims(size, height))
+                .0,
+            )
         }
         let width = width_cache.iter().sum::<i32>();
         drop(width_cache);
@@ -185,32 +208,36 @@ impl XWorkspaces {
                 for (i, layout) in &layouts {
                     let size = layout.pixel_size();
 
-                    let offset = if *i == current {
-                        active.bg.as_ref().unwrap_or(&Bg::None).draw(
-                            cr,
-                            size.0 as f64,
-                            size.1 as f64,
-                            height as f64,
-                        )?
-                    } else if nonempty_set.contains(i) {
-                        nonempty.bg.as_ref().unwrap_or(&Bg::None).draw(
-                            cr,
-                            size.0 as f64,
-                            size.1 as f64,
-                            height as f64,
-                        )?
-                    } else {
-                        inactive.bg.as_ref().unwrap_or(&Bg::None).draw(
-                            cr,
-                            size.0 as f64,
-                            size.1 as f64,
-                            height as f64,
-                        )?
+                    let offset = match i {
+                        WorkspaceState::Active => {
+                            active.bg.as_ref().unwrap_or(&Bg::None).draw(
+                                cr,
+                                size.0 as f64,
+                                size.1 as f64,
+                                height as f64,
+                            )?
+                        }
+                        WorkspaceState::Nonempty => {
+                            nonempty.bg.as_ref().unwrap_or(&Bg::None).draw(
+                                cr,
+                                size.0 as f64,
+                                size.1 as f64,
+                                height as f64,
+                            )?
+                        }
+                        WorkspaceState::Inactive => {
+                            inactive.bg.as_ref().unwrap_or(&Bg::None).draw(
+                                cr,
+                                size.0 as f64,
+                                size.1 as f64,
+                                height as f64,
+                            )?
+                        }
                     };
 
                     cr.save()?;
 
-                    if *i == current {
+                    if *i == WorkspaceState::Active {
                         if let Some(highlight) = &highlight {
                             cr.rectangle(
                                 0.0,
@@ -230,12 +257,10 @@ impl XWorkspaces {
 
                     cr.translate(offset.0, f64::from(height - size.1) / 2.0);
 
-                    if *i == current {
-                        active.apply_fg(cr);
-                    } else if nonempty_set.contains(i) {
-                        nonempty.apply_fg(cr);
-                    } else {
-                        inactive.apply_fg(cr);
+                    match i {
+                        WorkspaceState::Active => active.apply_fg(cr),
+                        WorkspaceState::Nonempty => nonempty.apply_fg(cr),
+                        WorkspaceState::Inactive => inactive.apply_fg(cr),
                     }
 
                     show_layout(cr, layout);
@@ -303,12 +328,10 @@ impl XWorkspaces {
                     let mut x = cache[0];
                     let len = cache.len();
                     while x < event.x as i32 && idx < len {
-                        println!("{x}");
                         idx += 1;
                         x += cache[idx];
                     }
                     drop(cache);
-                    println!("{x}");
 
                     if idx < len {
                         Self::process_event(
@@ -375,7 +398,7 @@ impl PanelConfig for XWorkspaces {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = XWorkspacesBuilder::default();
 
@@ -390,9 +413,11 @@ impl PanelConfig for XWorkspaces {
 
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[],
             &[],
             &["active_", "nonempty_", "inactive_"],
+            &[],
         )?);
 
         builder.highlight(Highlight::parse(table));

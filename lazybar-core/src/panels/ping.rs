@@ -23,7 +23,7 @@ use crate::{
     draw_common,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
-    PanelConfig, PanelStream, Ramp,
+    PanelConfig, PanelStream,
 };
 
 /// Displays the ping to a given address
@@ -41,8 +41,6 @@ pub struct Ping {
     interval: Option<Duration>,
     #[builder(default = "5")]
     pings: usize,
-    #[builder(default)]
-    ramp: Option<Ramp>,
     #[builder(default, setter(strip_option))]
     max_ping: Option<u32>,
     common: PanelCommon,
@@ -62,17 +60,12 @@ impl Ping {
                     .replace("%ping%", ping.to_string().as_str())
                     .replace(
                         "%ramp%",
-                        self.ramp
-                            .as_ref()
-                            .map_or_else(String::new, |r| {
-                                r.choose::<u32>(
-                                    ping as u32,
-                                    0,
-                                    self.max_ping
-                                        .unwrap_or(2000)
-                                        .clamp(0, 2000),
-                                )
-                            })
+                        self.common.ramps[0]
+                            .choose::<u32>(
+                                ping as u32,
+                                0,
+                                self.max_ping.unwrap_or(2000).clamp(0, 2000),
+                            )
                             .as_str(),
                     )
             },
@@ -136,17 +129,16 @@ impl PanelConfig for Ping {
         if let Some(pings) = remove_uint_from_config("pings", table) {
             builder.pings(pings as usize);
         }
-        if let Some(ramp) = remove_string_from_config("ramp", table) {
-            builder.ramp(Ramp::parse(ramp, global));
-        }
         if let Some(max_ping) = remove_uint_from_config("max_ping", table) {
             builder.max_ping(max_ping as u32);
         }
 
         builder.common(PanelCommon::parse(
             table,
+            global,
             &["_connected", "_disconnected"],
             &["%ping%ms", "disconnected"],
+            &[""],
             &[""],
         )?);
 

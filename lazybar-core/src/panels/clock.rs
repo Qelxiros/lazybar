@@ -228,15 +228,17 @@ where
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = ClockBuilder::default();
 
         builder.name(name);
         builder.common(PanelCommon::parse_variadic(
             table,
+            global,
             &["%Y-%m-%d %T"],
             &[""],
+            &[],
         )?);
         builder.format_idx(Arc::new(Mutex::new((
             0,

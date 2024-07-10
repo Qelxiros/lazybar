@@ -41,10 +41,14 @@ impl Temp {
         ))?
         .read_to_string(&mut temp)?;
 
-        let text = self.common.formats[0].replace(
-            "%temp%",
-            (temp.trim().parse::<u64>()? / 1000).to_string().as_str(),
-        );
+        let temp = temp.trim().parse::<u32>()? / 1000;
+
+        let text = self.common.formats[0]
+            .replace("%temp%", temp.to_string().as_str())
+            .replace(
+                "%ramp%",
+                self.common.ramps[0].choose(temp, 0, 200).as_str(),
+            );
 
         draw_common(
             cr,
@@ -73,7 +77,7 @@ impl PanelConfig for Temp {
     fn parse(
         name: &'static str,
         table: &mut std::collections::HashMap<String, config::Value>,
-        _global: &config::Config,
+        global: &config::Config,
     ) -> Result<Self> {
         let mut builder = TempBuilder::default();
 
@@ -86,8 +90,10 @@ impl PanelConfig for Temp {
         }
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[""],
             &["TEMP: %temp%"],
+            &[""],
             &[""],
         )?);
 

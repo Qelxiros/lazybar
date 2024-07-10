@@ -846,7 +846,7 @@ impl PanelConfig for Mpd {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = MpdBuilder::default();
 
@@ -915,6 +915,7 @@ impl PanelConfig for Mpd {
         ])?);
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[
                 "_playing",
                 "_paused",
@@ -951,6 +952,7 @@ impl PanelConfig for Mpd {
                 "",
             ],
             &[""],
+            &[],
         )?);
 
         Ok(builder.build()?)

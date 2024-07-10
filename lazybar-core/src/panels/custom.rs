@@ -116,7 +116,7 @@ impl PanelConfig for Custom {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        _global: &config::Config,
+        global: &config::Config,
     ) -> Result<Self> {
         let builder = match (
             remove_string_from_config("command", table),
@@ -143,7 +143,14 @@ impl PanelConfig for Custom {
         let builder = builder.name(name);
 
         Ok(builder
-            .common(PanelCommon::parse(table, &[""], &["%stdout%"], &[""])?)
+            .common(PanelCommon::parse(
+                table,
+                global,
+                &[""],
+                &["%stdout%"],
+                &[""],
+                &[],
+            )?)
             .build()?)
     }
 

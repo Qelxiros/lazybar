@@ -190,7 +190,7 @@ impl PanelConfig for Network {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = NetworkBuilder::default();
 
@@ -204,9 +204,11 @@ impl PanelConfig for Network {
 
         builder.common(PanelCommon::parse(
             table,
+            global,
             &["_connected", "_disconnected"],
             &["%ifname% %essid% %local_ip%", "%ifname% disconnected"],
             &[""],
+            &[],
         )?);
 
         Ok(builder.build()?)

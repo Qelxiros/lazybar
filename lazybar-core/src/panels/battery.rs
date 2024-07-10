@@ -63,7 +63,13 @@ impl Battery {
                 "Unknown" => self.common.formats[4]
                     .replace("%percentage%", capacity.trim()),
                 _ => String::from("Unknown battery state"),
-            };
+            }
+            .replace(
+                "%ramp%",
+                self.common.ramps[0]
+                    .choose(capacity.trim().parse::<u32>()?, 0, 100)
+                    .as_str(),
+            );
 
         draw_common(
             cr,
@@ -117,11 +123,12 @@ impl PanelConfig for Battery {
     ///   - type: u64
     ///   - default: 10
     ///
-    /// - See [`PanelCommon::parse`].
+    /// - See [`PanelCommon::parse`]. One ramp is supported corresponding to the
+    ///   battery level.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        _global: &Config,
+        global: &Config,
     ) -> Result<Self> {
         let mut builder = BatteryBuilder::default();
 
@@ -137,6 +144,7 @@ impl PanelConfig for Battery {
         }
         builder.common(PanelCommon::parse(
             table,
+            global,
             &[
                 "_charging",
                 "_discharging",
@@ -151,6 +159,7 @@ impl PanelConfig for Battery {
                 "FULL: %percentage%%",
                 "%percentage%%",
             ],
+            &[""],
             &[""],
         )?);
 
