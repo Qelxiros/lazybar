@@ -180,6 +180,14 @@ pub fn create_window(
         data: format!("lazybar_{name}").as_bytes(),
     }))?;
 
+    conn.check_request(conn.send_request_checked(&x::ChangeProperty {
+        mode: x::PropMode::Replace,
+        window,
+        property: x::ATOM_WM_CLASS,
+        r#type: x::ATOM_STRING,
+        data: "lazybar\0Lazybar".as_bytes(),
+    }))?;
+
     Ok((conn, screen_idx, window, width, visual))
 }
 
@@ -198,6 +206,18 @@ pub fn set_wm_properties(
         window,
         window_type_atom,
         &[window_type_dock_atom],
+    )?;
+
+    let window_state_atom = intern_named_atom(conn, b"_NET_WM_STATE")?;
+    let window_state_sticky_atom =
+        intern_named_atom(conn, b"_NET_WM_STATE_STICKY")?;
+    let window_state_above_atom =
+        intern_named_atom(conn, b"_NET_WM_STATE_ABOVE")?;
+    change_window_property(
+        conn,
+        window,
+        window_state_atom,
+        &[window_state_sticky_atom, window_state_above_atom],
     )?;
 
     let strut_partial_atom = intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")?;
