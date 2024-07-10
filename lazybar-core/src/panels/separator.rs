@@ -52,7 +52,7 @@ impl PanelConfig for Separator {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -65,6 +65,7 @@ impl PanelConfig for Separator {
                 self.common.formats[0].as_str(),
                 &self.common.attrs[0],
                 self.common.dependence,
+                height,
             ))),
             None,
         ))

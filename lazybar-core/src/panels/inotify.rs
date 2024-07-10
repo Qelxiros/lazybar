@@ -83,6 +83,7 @@ impl Inotify {
         &self,
         cr: &Rc<cairo::Context>,
         file: &Rc<Mutex<File>>,
+        height: i32,
     ) -> Result<PanelDrawInfo> {
         let mut buf = String::new();
         file.lock().unwrap().read_to_string(&mut buf)?;
@@ -95,6 +96,7 @@ impl Inotify {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -136,7 +138,7 @@ impl PanelConfig for Inotify {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         let init_flags = InitFlags::empty();
@@ -152,7 +154,7 @@ impl PanelConfig for Inotify {
         let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
         let stream = tokio_stream::once(file.clone())
             .chain(InotifyStream::new(inotify, file))
-            .map(move |f| self.draw(&cr, &f));
+            .map(move |f| self.draw(&cr, &f, height));
 
         Ok((Box::pin(stream), None))
     }

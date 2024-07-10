@@ -20,9 +20,10 @@ use tokio_stream::{
 use xcb::{x, XidNew};
 
 use crate::{
+    background::Bg,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config,
+    remove_string_from_config,
     x::intern_named_atom,
     Attrs, Highlight, PanelCommon, PanelConfig, PanelStream,
 };
@@ -101,8 +102,6 @@ pub struct XWorkspaces {
     name: &'static str,
     conn: Arc<xcb::Connection>,
     screen: i32,
-    #[builder(default = "0")]
-    padding: i32,
     #[builder(setter(strip_option))]
     highlight: Option<Highlight>,
     common: PanelCommon,
@@ -167,17 +166,13 @@ impl XWorkspaces {
 
         let mut width_cache = width_cache.lock().unwrap();
         width_cache.clear();
-        let width = layouts
-            .iter()
-            .map(|l| {
-                let width = l.1.pixel_size().0;
-                width_cache.push(width);
-                width + self.padding
-            })
-            .sum::<i32>();
+        for l in &layouts {
+            let size = l.1.pixel_size();
+            width_cache.push(size.0 + height - size.1);
+        }
+        let width = width_cache.iter().sum::<i32>();
         drop(width_cache);
 
-        let padding = self.padding;
         let active = self.common.attrs[0].clone();
         let nonempty = self.common.attrs[1].clone();
         let inactive = self.common.attrs[2].clone();
@@ -188,31 +183,39 @@ impl XWorkspaces {
             self.common.dependence,
             Box::new(move |cr| {
                 for (i, layout) in &layouts {
-                    if *i == current {
-                        active.apply_bg(cr);
-                    } else if nonempty_set.contains(i) {
-                        nonempty.apply_bg(cr);
-                    } else {
-                        inactive.apply_bg(cr);
-                    }
-
                     let size = layout.pixel_size();
 
+                    let offset = if *i == current {
+                        active.bg.as_ref().unwrap_or(&Bg::None).draw(
+                            cr,
+                            size.0 as f64,
+                            size.1 as f64,
+                            height as f64,
+                        )?
+                    } else if nonempty_set.contains(i) {
+                        nonempty.bg.as_ref().unwrap_or(&Bg::None).draw(
+                            cr,
+                            size.0 as f64,
+                            size.1 as f64,
+                            height as f64,
+                        )?
+                    } else {
+                        inactive.bg.as_ref().unwrap_or(&Bg::None).draw(
+                            cr,
+                            size.0 as f64,
+                            size.1 as f64,
+                            height as f64,
+                        )?
+                    };
+
                     cr.save()?;
-                    cr.rectangle(
-                        0.0,
-                        0.0,
-                        f64::from(size.0 + padding),
-                        f64::from(height),
-                    );
-                    cr.fill()?;
 
                     if *i == current {
                         if let Some(highlight) = &highlight {
                             cr.rectangle(
                                 0.0,
                                 f64::from(height) - highlight.height,
-                                f64::from(size.0 + padding),
+                                f64::from(size.0) + 2.0 * offset.0,
                                 highlight.height,
                             );
                             cr.set_source_rgba(
@@ -225,10 +228,7 @@ impl XWorkspaces {
                         }
                     }
 
-                    cr.translate(
-                        f64::from(padding / 2),
-                        f64::from(height - size.1) / 2.0,
-                    );
+                    cr.translate(offset.0, f64::from(height - size.1) / 2.0);
 
                     if *i == current {
                         active.apply_fg(cr);
@@ -242,7 +242,7 @@ impl XWorkspaces {
                     cr.restore()?;
 
                     cr.translate(
-                        f64::from(layout.pixel_size().0 + padding),
+                        f64::from(layout.pixel_size().0) + 2.0 * offset.0,
                         0.0,
                     );
                 }
@@ -256,7 +256,6 @@ impl XWorkspaces {
         conn: Arc<xcb::Connection>,
         root: x::Window,
         width_cache: Arc<Mutex<Vec<i32>>>,
-        padding: i32,
         names: &[String],
         current_atom: x::Atom,
         send: UnboundedSender<EventResponse>,
@@ -303,11 +302,13 @@ impl XWorkspaces {
                     }
                     let mut x = cache[0];
                     let len = cache.len();
-                    while x + padding < event.x as i32 && idx < len {
+                    while x < event.x as i32 && idx < len {
+                        println!("{x}");
                         idx += 1;
-                        x += cache[idx] + padding;
+                        x += cache[idx];
                     }
                     drop(cache);
+                    println!("{x}");
 
                     if idx < len {
                         Self::process_event(
@@ -315,7 +316,6 @@ impl XWorkspaces {
                             conn,
                             root,
                             width_cache,
-                            padding,
                             names,
                             current_atom,
                             send,
@@ -331,7 +331,6 @@ impl XWorkspaces {
                         conn,
                         root,
                         width_cache,
-                        padding,
                         names,
                         current_atom,
                         send,
@@ -347,7 +346,6 @@ impl XWorkspaces {
                         conn,
                         root,
                         width_cache,
-                        padding,
                         names,
                         current_atom,
                         send,
@@ -367,11 +365,6 @@ impl PanelConfig for XWorkspaces {
     ///   - type: String
     ///   - default: None (This will tell X to choose the default screen, which
     ///     is probably what you want.)
-    ///
-    /// - `padding`: The space in pixels between two workspace names. The
-    ///   [`Attrs`] will change (if applicable) halfway between the two names.
-    ///   - type: u64
-    ///   - default: 0
     ///
     /// - `highlight`: The highlight that will appear on the active workspaces.
     ///   See [`Highlight::parse`] for parsing options.
@@ -393,9 +386,6 @@ impl PanelConfig for XWorkspaces {
             builder.conn(Arc::new(conn)).screen(screen);
         } else {
             log::error!("Failed to connect to X server");
-        }
-        if let Some(padding) = remove_uint_from_config("padding", table) {
-            builder.padding(padding as i32);
         }
 
         builder.common(PanelCommon::parse(
@@ -473,7 +463,6 @@ impl PanelConfig for XWorkspaces {
         let conn = self.conn.clone();
         let width_cache = Arc::new(Mutex::new(Vec::new()));
         let cache = width_cache.clone();
-        let padding = self.padding;
         let names = get_workspaces(
             conn.as_ref(),
             root,
@@ -494,7 +483,6 @@ impl PanelConfig for XWorkspaces {
                     conn.clone(),
                     root,
                     cache.clone(),
-                    padding,
                     names.as_slice(),
                     current_atom,
                     send.clone(),

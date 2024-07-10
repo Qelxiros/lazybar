@@ -105,6 +105,7 @@ impl Pulseaudio {
         muted_ramp: Option<&Ramp>,
         attrs: &Attrs,
         dependence: Dependence,
+        height: i32,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
             Ok(Some(data)) => data,
@@ -125,7 +126,7 @@ impl Pulseaudio {
             volume.to_string().as_str()
         );
 
-        draw_common(cr, text.as_str(), attrs, dependence)
+        draw_common(cr, text.as_str(), attrs, dependence, height)
     }
 
     fn process_event(
@@ -388,7 +389,7 @@ impl PanelConfig for Pulseaudio {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         let mut mainloop = threaded::Mainloop::new()
@@ -503,6 +504,7 @@ impl PanelConfig for Pulseaudio {
                     muted_ramp.as_ref(),
                     &attrs,
                     dependence,
+                    height,
                 )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),

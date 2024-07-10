@@ -36,7 +36,11 @@ pub struct Memory {
 }
 
 impl Memory {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
         let mut meminfo = String::new();
         File::open(self.path.as_str())?.read_to_string(&mut meminfo)?;
 
@@ -155,6 +159,7 @@ impl Memory {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -210,7 +215,7 @@ impl PanelConfig for Memory {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -218,7 +223,7 @@ impl PanelConfig for Memory {
         }
 
         let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr));
+            .map(move |_| self.draw(&cr, height));
 
         Ok((Box::pin(stream), None))
     }

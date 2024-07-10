@@ -29,7 +29,11 @@ pub struct Temp {
 }
 
 impl Temp {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
         let mut temp = String::new();
         File::open(format!(
             "/sys/class/thermal/thermal_zone{}/temp",
@@ -47,6 +51,7 @@ impl Temp {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -97,7 +102,7 @@ impl PanelConfig for Temp {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -105,7 +110,7 @@ impl PanelConfig for Temp {
         }
 
         let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr));
+            .map(move |_| self.draw(&cr, height));
 
         Ok((Box::pin(stream), None))
     }

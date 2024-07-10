@@ -4,17 +4,19 @@ use csscolorparser::Color;
 use derive_builder::Builder;
 use pango::FontDescription;
 
-use crate::{remove_color_from_config, remove_string_from_config};
+use crate::{
+    background::Bg, remove_color_from_config, remove_string_from_config,
+};
 
 /// Attributes of a panel, or the defaults for the bar.
 #[derive(Builder, Clone, Default, Debug)]
 pub struct Attrs {
-    #[builder(default = "None", setter(strip_option))]
+    #[builder(default, setter(strip_option))]
     font: Option<FontDescription>,
-    #[builder(default = "None", setter(strip_option))]
+    #[builder(default, setter(strip_option))]
     fg: Option<Color>,
-    #[builder(default = "None", setter(strip_option))]
-    bg: Option<Color>,
+    #[builder(default, setter(strip_option))]
+    pub(crate) bg: Option<Bg>,
 }
 
 impl AttrsBuilder {
@@ -22,7 +24,7 @@ impl AttrsBuilder {
         Self {
             font: None,
             fg: Some(Some(Color::new(1.0, 1.0, 1.0, 1.0))),
-            bg: Some(Some(Color::new(0.0, 0.0, 0.0, 1.0))),
+            bg: Some(Some(Bg::None)),
         }
     }
 }
@@ -52,9 +54,7 @@ impl Attrs {
         {
             builder.fg(fg);
         }
-        if let Some(bg) =
-            remove_color_from_config(format!("{prefix}bg").as_str(), table)
-        {
+        if let Some(bg) = Bg::parse(format!("{prefix}bg_").as_str(), table) {
             builder.bg(bg);
         }
         if let Some(font) =
@@ -84,9 +84,7 @@ impl Attrs {
         {
             builder.fg(fg);
         }
-        if let Some(bg) =
-            remove_color_from_config(format!("{prefix}bg").as_str(), table)
-        {
+        if let Some(bg) = Bg::parse(format!("{prefix}bg_").as_str(), table) {
             builder.bg(bg);
         }
         if let Some(font) =
@@ -112,12 +110,12 @@ impl Attrs {
         }
     }
 
-    /// Sets the background color of a [`cairo::Context`].
-    pub fn apply_bg(&self, cr: &cairo::Context) {
-        if let Some(bg) = &self.bg {
-            cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
-        }
-    }
+    // /// Sets the background color of a [`cairo::Context`].
+    // pub fn apply_bg(&self, cr: &cairo::Context) {
+    //     if let Some(bg) = &self.bg {
+    //         cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
+    //     }
+    // }
 
     /// Combines two [`Attrs`] instances into one, choosing options from `self`
     /// as long as they are [`Some`], otherwise choosing them from `new`.

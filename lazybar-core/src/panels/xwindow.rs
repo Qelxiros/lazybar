@@ -104,6 +104,7 @@ impl XWindow {
         window_atom: x::Atom,
         root: x::Window,
         utf8_atom: x::Atom,
+        height: i32,
     ) -> Result<PanelDrawInfo> {
         let active: u32 = self
             .conn
@@ -194,6 +195,7 @@ impl XWindow {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -244,7 +246,7 @@ impl PanelConfig for XWindow {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
@@ -271,7 +273,7 @@ impl PanelConfig for XWindow {
         let stream = tokio_stream::once(())
             .chain(XStream::new(self.conn.clone(), name_atom, window_atom))
             .map(move |_| {
-                self.draw(&cr, name_atom, window_atom, root, utf8_atom)
+                self.draw(&cr, name_atom, window_atom, root, utf8_atom, height)
             });
         Ok((Box::pin(stream), None))
     }

@@ -70,7 +70,11 @@ pub struct Custom {
 }
 
 impl Custom {
-    fn draw(&mut self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
+    fn draw(
+        &mut self,
+        cr: &Rc<cairo::Context>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
         let output = self.command.output()?;
         let text = self.common.formats[0]
             .replace(
@@ -86,6 +90,7 @@ impl Custom {
             text.trim(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -150,7 +155,7 @@ impl PanelConfig for Custom {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -160,7 +165,7 @@ impl PanelConfig for Custom {
         Ok((
             Box::pin(
                 CustomStream::new(self.duration.map(|d| interval(d)))
-                    .map(move |_| self.draw(&cr)),
+                    .map(move |_| self.draw(&cr, height)),
             ),
             None,
         ))

@@ -39,6 +39,7 @@
 #![deny(missing_docs)]
 
 mod attrs;
+mod background;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
 mod cleanup;
@@ -46,6 +47,9 @@ mod highlight;
 /// Support for inter-process communication, like that provided by the
 /// `lazybar-msg` crate.
 pub mod ipc;
+/// Panels that can be added to the bar. A new panel must implement
+/// [`PanelConfig`].
+pub mod panels;
 /// The parser for the `config.toml` file.
 pub mod parser;
 mod ramp;
@@ -73,10 +77,6 @@ pub use ramp::Ramp;
 use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
-
-/// Panels that can be added to the bar. A new panel must implement
-/// [`PanelConfig`].
-pub mod panels;
 
 /// A function that can be called repeatedly to draw the panel.
 pub type PanelDrawFn = Box<dyn Fn(&cairo::Context) -> Result<()>>;

@@ -52,34 +52,48 @@ impl UnixStreamWrapper {
     }
 }
 
-/// The end of a typical draw function. Takes a cairo context, a string to
+/// The end of a typical draw function.
+///
+/// Takes a cairo context, a string to
 /// display, and attributes to use, and returns a closure that will do the
 /// drawing and a tuple representing the final width and height.
 ///
 /// The text will be interpreted as markup. If this is not your intended
 /// behavior, use [`markup_escape_text`][crate::markup_escape_text] to display
-/// what you want.
+/// what you want or implement this functionality manually.
 pub fn draw_common(
     cr: &Rc<cairo::Context>,
     text: &str,
     attrs: &Attrs,
     dependence: Dependence,
+    height: i32,
 ) -> Result<PanelDrawInfo> {
     let layout = pangocairo::functions::create_layout(cr);
     layout.set_markup(text);
     attrs.apply_font(&layout);
     let dims = layout.pixel_size();
+
     let attrs = attrs.clone();
+    let bg = attrs.bg.clone().unwrap_or_default();
 
     Ok(PanelDrawInfo::new(
-        dims,
+        bg.adjust_dims(dims, height),
         dependence,
         Box::new(move |cr| {
-            attrs.apply_bg(cr);
-            cr.rectangle(0.0, 0.0, f64::from(dims.0), f64::from(dims.1));
-            cr.fill()?;
+            let offset =
+                bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
+            cr.save()?;
+            cr.translate(
+                offset.0,
+                if offset.1 {
+                    (height - dims.1) as f64 / 2.0
+                } else {
+                    0.0
+                },
+            );
             attrs.apply_fg(cr);
             show_layout(cr, &layout);
+            cr.restore()?;
             Ok(())
         }),
     ))

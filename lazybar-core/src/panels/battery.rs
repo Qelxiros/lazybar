@@ -31,7 +31,11 @@ pub struct Battery {
 }
 
 impl Battery {
-    fn draw(&self, cr: &Rc<cairo::Context>) -> Result<PanelDrawInfo> {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
         let mut capacity_f = File::open(format!(
             "/sys/class/power_supply/{}/capacity",
             self.battery
@@ -66,6 +70,7 @@ impl Battery {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -160,7 +165,7 @@ impl PanelConfig for Battery {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -168,7 +173,7 @@ impl PanelConfig for Battery {
         }
 
         let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr));
+            .map(move |_| self.draw(&cr, height));
 
         Ok((Box::pin(stream), None))
     }

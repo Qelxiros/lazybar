@@ -290,18 +290,26 @@ impl Mpd {
             self.common.dependence,
             Box::new(move |cr| {
                 cr.save()?;
+
+                let offset = if let Some(bg) = &attrs.bg {
+                    bg.draw(cr, size.0 as f64, size.1 as f64, height as f64)?
+                } else {
+                    (0.0, false)
+                };
+
+                cr.translate(offset.0, 0.0);
+
                 cr.set_source_rgba(
                     progress_bg.r,
                     progress_bg.g,
                     progress_bg.b,
                     progress_bg.a,
                 );
-
                 cr.rectangle(
                     bar_start,
                     0.0,
                     bar_width.min(size.0 as f64),
-                    f64::from(height),
+                    size.1 as f64,
                 );
                 cr.fill()?;
 

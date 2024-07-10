@@ -140,6 +140,7 @@ impl<P: Precision + Clone> Clock<P> {
         &self,
         cr: &Rc<cairo::Context>,
         data: Result<()>,
+        height: i32,
     ) -> Result<PanelDrawInfo> {
         data?;
         let now = chrono::Local::now();
@@ -152,6 +153,7 @@ impl<P: Precision + Clone> Clock<P> {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 
@@ -252,7 +254,7 @@ where
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -277,7 +279,7 @@ where
         map.insert(1, Box::pin(ClockStream::new(P::tick).map(|_| Ok(()))));
 
         Ok((
-            Box::pin(map.map(move |(_, data)| self.draw(&cr, data))),
+            Box::pin(map.map(move |(_, data)| self.draw(&cr, data, height))),
             Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
     }

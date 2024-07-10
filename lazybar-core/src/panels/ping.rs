@@ -53,6 +53,7 @@ impl Ping {
         &self,
         cr: &Rc<cairo::Context>,
         ping: Result<u128>,
+        height: i32,
     ) -> Result<PanelDrawInfo> {
         let text = ping.map_or_else(
             |_| self.common.formats[1].clone(),
@@ -82,6 +83,7 @@ impl Ping {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            height,
         )
     }
 }
@@ -159,7 +161,7 @@ impl PanelConfig for Ping {
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
-        _height: i32,
+        height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         for attr in &mut self.common.attrs {
@@ -179,7 +181,7 @@ impl PanelConfig for Ping {
             interval: self.interval.map(interval),
             handle: None,
         }
-        .map(move |ping| self.draw(&cr, ping));
+        .map(move |ping| self.draw(&cr, ping, height));
 
         Ok((Box::pin(stream), None))
     }
