@@ -3,9 +3,7 @@ position = "top"
 height = 36
 transparent = true
 bg = "#0000"
-default_bg = "#0000"
-default_fg = "#ccc"
-default_font = "FiraCode Nerd Font 10"
+default_attrs = "default"
 margin_left = 10
 margin_internal = 10
 margin_right = 10
@@ -14,11 +12,32 @@ panels_center = ["clock"]
 panels_right = ["pulseaudio","first_separator","network","separator","battery"]
 ipc = true
 
+[attrs.default]
+bg = "default"
+fg = "#ccc"
+font = "FiraCode Nerd Font 10"
+
+[attrs.manual]
+bg = "manual"
+
+[bgs.default]
+style = "bubble_prop"
+radius = 12
+color = "#000"
+
+[bgs.manual]
+style = "bubble"
+border = 8
+radius = 12
+color = "#000"
+
 [panels.xwindow]
 type = "xwindow"
+max_width = 100
 
 [panels.pulseaudio]
 type = "pulseaudio"
+attrs = "manual"
 ramp = "pa"
 ramp_muted = "pa_muted"
 
