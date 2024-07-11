@@ -308,7 +308,7 @@ impl Mpd {
                 cr.rectangle(
                     bar_start,
                     0.0,
-                    bar_width.min(size.0 as f64),
+                    bar_width.min(bar_max_width),
                     size.1 as f64,
                 );
                 cr.fill()?;
