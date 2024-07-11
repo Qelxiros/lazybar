@@ -288,15 +288,23 @@ impl Bar {
         margins: Margins,
         reverse_scroll: bool,
         ipc: bool,
+        monitor: Option<String>,
     ) -> Result<Self> {
-        let (conn, screen, window, width, visual) =
-            create_window(position, height, transparent, &bg, name.as_str())?;
+        let (conn, screen, window, width, visual) = create_window(
+            position,
+            height,
+            transparent,
+            &bg,
+            name.as_str(),
+            monitor,
+        )?;
         set_wm_properties(
             &conn,
             window,
             position,
             width.into(),
             height.into(),
+            name.as_str(),
         )?;
         map_window(&conn, window)?;
         let surface =

@@ -36,4 +36,4 @@ signal-hook = { version = "0.3.17", features = ["iterator"] }
 tokio = { version = "1.38.0", features = ["rt", "net", "time", "macros", "rt-multi-thread", "fs", "io-util"] }
 tokio-stream = { version = "0.1.15", features = ["net"] }
 unicode-segmentation = "1.11.0"
-xcb = { version = "1.4.0" }
+xcb = { version = "1.4.0", features = ["randr"] }

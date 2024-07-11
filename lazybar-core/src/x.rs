@@ -1,4 +1,5 @@
 use std::{
+    ffi::CString,
     pin::Pin,
     sync::Arc,
     task::{self, Poll},
@@ -11,6 +12,7 @@ use futures::FutureExt;
 use tokio::task::JoinHandle;
 use tokio_stream::Stream;
 use xcb::{
+    randr,
     x::{self, Visualtype, Window},
     Connection, Xid,
 };
@@ -116,12 +118,36 @@ pub fn create_window(
     transparent: bool,
     background: &Color,
     name: &str,
+    monitor: Option<String>,
 ) -> Result<(xcb::Connection, i32, x::Window, u16, x::Visualtype)> {
     let (conn, screen_idx) = xcb::Connection::connect(None)?;
     let window: x::Window = conn.generate_id();
     let colormap: x::Colormap = conn.generate_id();
     let screen = conn.get_setup().roots().nth(screen_idx as usize).unwrap();
-    let width = screen.width_in_pixels();
+
+    let monitors =
+        conn.wait_for_reply(conn.send_request(&randr::GetMonitors {
+            window: screen.root(),
+            get_active: true,
+        }))?;
+    let mut iter = monitors.monitors();
+    let mon = if let Some(monitor) = monitor {
+        iter.find(|info| {
+            if let Ok(name) = conn.wait_for_reply(
+                conn.send_request(&x::GetAtomName { atom: info.name() }),
+            ) {
+                name.name().to_string() == monitor
+            } else {
+                false
+            }
+        })
+        .with_context(|| format!("No monitor found with name {monitor}"))?
+    } else {
+        iter.find(|info| info.primary())
+            .context("No primary monitor found")?
+    };
+
+    let width = mon.width();
 
     let depth = if transparent { 32 } else { 24 };
     let visual = *find_visual(screen, depth).expect("Failed to find visual");
@@ -151,11 +177,11 @@ pub fn create_window(
         depth,
         wid: window,
         parent: screen.root(),
-        x: 0,
+        x: mon.x(),
         y: if position == Position::Top {
-            0
+            mon.y()
         } else {
-            (screen.height_in_pixels() - height) as i16
+            mon.y() + (mon.height() - height) as i16
         },
         width,
         height,
@@ -189,6 +215,7 @@ pub fn set_wm_properties(
     position: Position,
     width: u32,
     height: u32,
+    bar_name: &str,
 ) -> Result<()> {
     let window_type_atom = intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")?;
     let window_type_dock_atom =
@@ -201,12 +228,79 @@ pub fn set_wm_properties(
     )?;
 
     let strut_partial_atom = intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")?;
+    let strut_atom = intern_named_atom(conn, b"_NET_WM_STRUT")?;
     let strut = if position == Position::Top {
         &[0, 0, height, 0, 0, 0, 0, 0, 0, width - 1, 0, 0]
     } else {
         &[0, 0, 0, height, 0, 0, 0, 0, 0, 0, 0, width - 1]
     };
     change_property(conn, window, strut_partial_atom, x::ATOM_CARDINAL, strut)?;
+    change_property(conn, window, strut_atom, x::ATOM_CARDINAL, &strut[0..4])?;
+
+    let wm_state_atom = intern_named_atom(conn, b"_NET_WM_STATE")?;
+    let wm_state_sticky_atom =
+        intern_named_atom(conn, b"_NET_WM_STATE_STICKY")?;
+    change_window_property(
+        conn,
+        window,
+        wm_state_atom,
+        &[wm_state_sticky_atom],
+    )?;
+
+    let normal_hints_atom = intern_named_atom(conn, b"WM_NORMAL_HINTS")?;
+    let size_hints_atom = intern_named_atom(conn, b"WM_SIZE_HINTS")?;
+    change_property(
+        conn,
+        window,
+        normal_hints_atom,
+        size_hints_atom,
+        &[
+            0x3c, 0, 0, width, height, width, height, width, height, 0, 0, 0,
+            0, width, height,
+        ],
+    )?;
+
+    let pid_atom = intern_named_atom(conn, b"_NET_WM_PID")?;
+    change_property(
+        conn,
+        window,
+        pid_atom,
+        x::ATOM_CARDINAL,
+        &[std::process::id()],
+    )?;
+
+    let desktop_atom = intern_named_atom(conn, b"_NET_WM_DESKTOP")?;
+    change_property(
+        conn,
+        window,
+        desktop_atom,
+        x::ATOM_CARDINAL,
+        &[0xFFFFFFFFu32],
+    )?;
+
+    let name_atom = intern_named_atom(conn, b"WM_NAME")?;
+    change_property(
+        conn,
+        window,
+        name_atom,
+        x::ATOM_STRING,
+        CString::new(format!("lazybar_{bar_name}"))?.as_bytes_with_nul(),
+    )?;
+
+    let class_atom = intern_named_atom(conn, b"WM_CLASS")?;
+    change_property(
+        conn,
+        window,
+        class_atom,
+        x::ATOM_STRING,
+        [
+            CString::new("lazybar")?.as_bytes_with_nul(),
+            CString::new("Lazybar")?.as_bytes_with_nul(),
+        ]
+        .concat()
+        .as_slice(),
+    )?;
+
     Ok(())
 }
 

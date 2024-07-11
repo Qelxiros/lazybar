@@ -155,6 +155,11 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             log::trace!("got bar attrs: {val:?}");
             val
         })
+        .monitor({
+            let val = remove_string_from_config("monitor", &mut bar_table);
+            log::trace!("got bar monitor: {val:?}");
+            val
+        })
         .left(Vec::new())
         .center(Vec::new())
         .right(Vec::new())

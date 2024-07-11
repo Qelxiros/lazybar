@@ -244,6 +244,9 @@ pub mod builders {
         /// Whether inter-process communication (via Unix socket) is enabled.
         /// See [`crate::ipc`] for details.
         pub ipc: bool,
+        /// Which monitor to display the bar on. Defaults to the primary
+        /// monitor.
+        pub monitor: Option<String>,
     }
 
     impl BarConfig {
@@ -286,6 +289,7 @@ pub mod builders {
                 self.margins,
                 self.reverse_scroll,
                 self.ipc,
+                self.monitor,
             )?;
             log::debug!("bar created");
 
