@@ -309,7 +309,7 @@ impl Mpd {
                     bar_start,
                     0.0,
                     bar_width.min(bar_max_width),
-                    size.1 as f64,
+                    height as f64,
                 );
                 cr.fill()?;
 
@@ -762,14 +762,14 @@ impl PanelConfig for Mpd {
     ///   - formatting options: `%title%`, `%artist%`, `%next%`, `%prev%`,
     ///     `%play%`, `%pause%`, `%toggle%`, `%main%`, `%shuffle%`, `%repeat%`,
     ///     `%random%`, `%single%`, `%consume%`
-    ///   - default: `%title% - %artist%`
+    ///   - default: `%main%`
     /// - `format_paused`: the format string to display on the panel when music
     ///   is paused
     ///   - type: String
     ///   - formatting options: `%title%`, `%artist%`, `%next%`, `%prev%`,
     ///     `%play%`, `%pause%`, `%toggle%`, `%main%`, `%shuffle%`, `%repeat%`,
     ///     `%random%`, `%single%`, `%consume%`
-    ///   - default: `%title% - %artist%`
+    ///   - default: `%main%`
     /// - `format_stopped`: the format string to display on the panel when no
     ///   music is playing
     ///   - type: String
@@ -782,7 +782,7 @@ impl PanelConfig for Mpd {
     ///   - type: String
     ///   - formatting options: `%title%`, `%artist%` (the others from above
     ///     will work, but they won't function as buttons)
-    ///   - default: empty
+    ///   - default: `%title% - %artist%`
     /// - `format_next`: the format of the button to skip forward one song
     ///   - type: String
     ///   - default: empty
@@ -935,10 +935,10 @@ impl PanelConfig for Mpd {
                 "_consume",
             ],
             &[
-                "%title% - %artist%",
-                "%title% - %artist%",
+                "%main%",
+                "%main%",
                 "not playing",
-                "",
+                "%title% - %artist%",
                 "",
                 "",
                 "",
