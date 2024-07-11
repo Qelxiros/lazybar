@@ -614,7 +614,11 @@ fn get_nonempty(
                 long_offset: 0,
                 long_length: 1,
             }))
-            .map_or(false, |r| r.value::<x::Atom>()[0] == normal_atom)
+            .map_or(false, |r| {
+                r.value::<x::Atom>()
+                    .get(0)
+                    .map_or(false, |&v| v == normal_atom)
+            })
         })
         .filter_map(|&w| {
             conn.wait_for_reply(conn.send_request(&x::GetProperty {
