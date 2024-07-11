@@ -18,10 +18,10 @@ pub enum Bg {
     None,
     /// A bubble will be drawn around the panel.
     Bubble {
-        /// How far past the left and right edges the bubble will extend.
-        radius: f64,
         /// `radius` describes how sharp the corners are. A radius of zero will
         /// result in a rectangle being drawn.
+        radius: f64,
+        /// How far past the left and right edges the bubble will extend.
         border: f64,
         /// The color of the background. See [`csscolorparser::parse`] for
         /// parsing options.
@@ -31,7 +31,8 @@ pub enum Bg {
     /// be inferred from the text height, which may not give the expected
     /// results (e.g. when using large fonts)
     BubbleProp {
-        /// How far past the left and right edges the bubble will extend.
+        /// `radius` describes how sharp the corners are. A radius of zero will
+        /// result in a rectangle being drawn.
         radius: f64,
         /// The color of the background. See [`csscolorparser::parse`] for
         /// parsing options.
