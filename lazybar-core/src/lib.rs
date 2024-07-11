@@ -107,7 +107,7 @@ pub trait PanelConfig {
 
     /// Returns the name of the panel. If the panel supports events, each
     /// instance must return a unique name.
-    fn name(&self) -> &'static str;
+    fn props(&self) -> (&'static str, bool);
 
     /// Performs any necessary setup, then returns a [`PanelStream`]
     /// representing the provided [`PanelConfig`].
@@ -291,13 +291,13 @@ pub mod builders {
 
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
-                let name = panel.name();
+                let (name, visible) = panel.props();
                 let (stream, sender) = panel.run(
                     bar.cr.clone(),
                     self.attrs.clone(),
                     i32::from(self.height),
                 )?;
-                bar.left.push(Panel::new(None, name, sender));
+                bar.left.push(Panel::new(None, name, sender, visible));
                 left_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Left, left_panels);
@@ -305,13 +305,13 @@ pub mod builders {
 
             let mut center_panels = StreamMap::with_capacity(self.center.len());
             for (idx, panel) in self.center.into_iter().enumerate() {
-                let name = panel.name();
+                let (name, visible) = panel.props();
                 let (stream, sender) = panel.run(
                     bar.cr.clone(),
                     self.attrs.clone(),
                     i32::from(self.height),
                 )?;
-                bar.center.push(Panel::new(None, name, sender));
+                bar.center.push(Panel::new(None, name, sender, visible));
                 center_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Center, center_panels);
@@ -319,13 +319,13 @@ pub mod builders {
 
             let mut right_panels = StreamMap::with_capacity(self.right.len());
             for (idx, panel) in self.right.into_iter().enumerate() {
-                let name = panel.name();
+                let (name, visible) = panel.props();
                 let (stream, sender) = panel.run(
                     bar.cr.clone(),
                     self.attrs.clone(),
                     i32::from(self.height),
                 )?;
-                bar.right.push(Panel::new(None, name, sender));
+                bar.right.push(Panel::new(None, name, sender, visible));
                 right_panels.insert(idx, stream);
             }
             bar.streams.insert(Alignment::Right, right_panels);

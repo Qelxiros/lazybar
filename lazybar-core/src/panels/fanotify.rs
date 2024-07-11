@@ -139,8 +139,8 @@ impl PanelConfig for Fanotify {
         Ok(builder.build()?)
     }
 
-    fn name(&self) -> &'static str {
-        self.name
+    fn props(&self) -> (&'static str, bool) {
+        (self.name, self.common.visible)
     }
 
     fn run(

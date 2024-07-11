@@ -7,6 +7,8 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use csscolorparser::Color;
+use lazy_static::lazy_static;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use tokio_stream::StreamMap;
@@ -16,6 +18,11 @@ use crate::{
     cleanup, create_surface, create_window, ipc::ChannelEndpoint, map_window,
     set_wm_properties, Alignment, Margins, PanelDrawFn, PanelStream, Position,
 };
+
+lazy_static! {
+    static ref REGEX: Regex =
+        Regex::new(r"(?<region>[lcr])(?<idx>\d+).(?<message>.+)").unwrap();
+}
 
 #[derive(PartialEq, Eq, Debug)]
 enum CenterState {
@@ -109,13 +116,17 @@ impl BitAnd for PanelStatus {
 
 impl From<&Panel> for PanelStatus {
     fn from(value: &Panel) -> Self {
-        value.draw_info.as_ref().map_or(Self::ZeroWidth, |d| {
-            match (d.dependence, d.width) {
-                (Dependence::None, 0) => Self::ZeroWidth,
-                (Dependence::None, _) => Self::Shown,
-                (dep, _) => Self::Dependent(dep),
-            }
-        })
+        if !value.visible {
+            Self::ZeroWidth
+        } else {
+            value.draw_info.as_ref().map_or(Self::ZeroWidth, |d| {
+                match (d.dependence, d.width) {
+                    (Dependence::None, 0) => Self::ZeroWidth,
+                    (Dependence::None, _) => Self::Shown,
+                    (dep, _) => Self::Dependent(dep),
+                }
+            })
+        }
     }
 }
 
@@ -212,6 +223,9 @@ pub struct Panel {
     /// The name of the panel (taken from the name of the toml table that
     /// defines it)
     pub name: &'static str,
+    /// Whether the panel is visible. To set this value on startup, see
+    /// [`PanelCommon`][crate::PanelCommon].
+    pub visible: bool,
     endpoint: Option<Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>>,
 }
 
@@ -222,12 +236,14 @@ impl Panel {
         draw_info: Option<PanelDrawInfo>,
         name: &'static str,
         endpoint: Option<ChannelEndpoint<Event, EventResponse>>,
+        visible: bool,
     ) -> Self {
         Self {
             draw_info,
             x: 0.0,
             y: 0.0,
             name,
+            visible,
             endpoint: endpoint.map(|e| Arc::new(Mutex::new(e))),
         }
     }
@@ -421,6 +437,37 @@ impl Bar {
         }
     }
 
+    fn handle_panel_event(&mut self, message: &str) -> Result<()> {
+        if let Some(caps) = REGEX.captures_iter(message).next() {
+            let region = &caps["region"];
+            let idx = caps["idx"].parse::<usize>()?;
+
+            if let Some(target) = match region {
+                "l" => self.left.get_mut(idx),
+                "c" => self.center.get_mut(idx),
+                "r" => self.right.get_mut(idx),
+                _ => unreachable!(),
+            } {
+                match &caps["message"] {
+                    "show" => target.visible = true,
+                    "hide" => target.visible = false,
+                    "toggle" => target.visible = !target.visible,
+                    message => {
+                        return Err(anyhow!("Unknown message {message}"))
+                    }
+                }
+
+                match region {
+                    "l" => self.redraw_left(),
+                    "c" => self.redraw_center_right(true),
+                    "r" => self.redraw_right(true, None),
+                    _ => unreachable!(),
+                }?;
+            }
+        }
+        Ok(())
+    }
+
     /// Given a message, find the endpoint of the panel it's addressed to.
     pub fn send_message(
         &mut self,
@@ -428,6 +475,10 @@ impl Bar {
         ipc_set: &mut JoinSet<Result<()>>,
         ipc_send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
+        if message.starts_with("#") {
+            return self.handle_panel_event(&message[1..]);
+        }
+
         let (dest, message) = match message.split_once('.') {
             Some((panel, message)) => (Some(panel), message),
             None => (None, message),

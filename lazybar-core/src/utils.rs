@@ -176,6 +176,8 @@ pub struct PanelCommon {
     pub actions: Actions,
     /// The ramps that are available for use in format strings
     pub ramps: Vec<Ramp>,
+    /// Whether the panel should be visible on startup
+    pub visible: bool,
 }
 
 impl PanelCommon {
@@ -264,6 +266,9 @@ impl PanelCommon {
         );
         log::debug!("got ramps: {:?}", builder.ramps);
 
+        builder
+            .visible(remove_bool_from_config("visible", table).unwrap_or(true));
+
         Ok(builder.build()?)
     }
 
@@ -350,6 +355,9 @@ impl PanelCommon {
                 .collect(),
         );
         log::debug!("got ramps: {:?}", builder.ramps);
+
+        builder
+            .visible(remove_bool_from_config("visible", table).unwrap_or(true));
 
         Ok(builder.build()?)
     }
