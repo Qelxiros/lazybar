@@ -97,8 +97,10 @@ impl Pulseaudio {
         cr: &Rc<cairo::Context>,
         data: Result<Option<(Volume, bool)>>,
         last_data: &Arc<Mutex<(Volume, bool)>>,
+        format_unmuted: &String,
+        format_muted: &String,
         ramp: &Ramp,
-        muted_ramp: &Ramp,
+        ramp_muted: &Ramp,
         attrs: &Attrs,
         dependence: Dependence,
         height: i32,
@@ -109,12 +111,15 @@ impl Pulseaudio {
             Err(e) => return Err(e),
         };
         *last_data.lock().unwrap() = (volume, mute);
-        let ramp = match mute {
-            false => ramp,
-            true => muted_ramp,
+        let (format, ramp) = match mute {
+            false => (format_unmuted, ramp),
+            true => (format_muted, ramp_muted),
         };
-        let prefix = ramp.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0);
-        let text = format!("{}{}", prefix, volume.to_string().as_str());
+        let ramp_text =
+            ramp.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0);
+        let text = format
+            .replace("%ramp%", ramp_text.as_str())
+            .replace("%volume%", volume.to_string().as_str());
 
         draw_common(cr, text.as_str(), attrs, dependence, height)
     }
@@ -316,8 +321,7 @@ impl PanelConfig for Pulseaudio {
     ///     will make its best guess. This is the right option on most systems.)
     ///
     /// - `ramp`: Shows an icon based on the volume level. See [`Ramp::parse`]
-    ///   for parsing details. This ramp is used when the sink is unmuted or
-    ///   when no `muted_ramp` is specified.-
+    ///   for parsing details. This ramp is used when the sink is unmuted.
     ///
     /// - `ramp_muted`: Shows an icon based on the volume level. See
     ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
@@ -429,7 +433,9 @@ impl PanelConfig for Pulseaudio {
             attr.apply_to(&global_attrs);
         }
         let ramp = self.common.ramps[0].clone();
-        let muted_ramp = self.common.ramps[1].clone();
+        let ramp_muted = self.common.ramps[1].clone();
+        let format_unmuted = self.common.formats[0].clone();
+        let format_muted = self.common.formats[1].clone();
         let attrs = self.common.attrs[0].clone();
         let dependence = self.common.dependence;
 
@@ -477,8 +483,10 @@ impl PanelConfig for Pulseaudio {
                     &cr,
                     data,
                     &last_data,
+                    &format_unmuted,
+                    &format_muted,
                     &ramp,
-                    &muted_ramp,
+                    &ramp_muted,
                     &attrs,
                     dependence,
                     height,
