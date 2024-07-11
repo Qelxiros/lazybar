@@ -44,7 +44,8 @@ impl UnixStreamWrapper {
             self.endpoint.recv.recv().await.unwrap_or(EventResponse::Ok);
 
         self.inner.writable().await?;
-        self.inner.try_write(response.to_string().as_bytes())?;
+        self.inner
+            .try_write(serde_json::to_string(&response)?.as_bytes())?;
 
         self.inner.shutdown().await?;
 

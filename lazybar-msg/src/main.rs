@@ -3,11 +3,13 @@ use std::{
     fs::read_dir,
     io,
     path::PathBuf,
+    process::ExitCode,
 };
 
 use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
+use lazybar_core::bar::EventResponse;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use tokio::{io::AsyncWriteExt, net::UnixStream};
@@ -39,7 +41,7 @@ fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<ExitCode> {
     let args = Args::parse();
     let mode = args.mode;
 
@@ -82,6 +84,8 @@ async fn main() -> Result<()> {
 
     log::debug!("got paths: {paths:?}");
 
+    let mut exit_code = ExitCode::SUCCESS;
+
     for path in paths {
         let file_name = path
             .file_name()
@@ -92,6 +96,7 @@ async fn main() -> Result<()> {
         let stream = UnixStream::connect(path.as_path()).await;
 
         let Ok(mut stream) = stream else {
+            exit_code = ExitCode::from(1);
             let e = stream.unwrap_err();
             log::warn!(
                 "Error opening file (is the bar running? does it have ipc \
@@ -110,10 +115,21 @@ async fn main() -> Result<()> {
         let bytes = stream.try_read(&mut response)?;
         log::debug!("response read ({bytes} bytes)");
 
-        log::info!("{}: {}", file_name, String::from_utf8_lossy(&response));
+        let response = serde_json::from_str::<EventResponse>(
+            String::from_utf8_lossy(&response[..bytes])
+                .to_string()
+                .as_str(),
+        )?;
+
+        match response {
+            EventResponse::Ok => (),
+            EventResponse::Err(_) => exit_code = ExitCode::from(2),
+        }
+
+        log::info!("{}: {}", file_name, response);
 
         stream.shutdown().await?;
     }
 
-    Ok(())
+    Ok(exit_code)
 }

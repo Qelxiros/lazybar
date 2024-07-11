@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use csscolorparser::Color;
+use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use tokio_stream::StreamMap;
 use xcb::x;
@@ -181,6 +182,7 @@ pub enum Event {
 }
 
 /// A response to an event
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventResponse {
     /// The event executed normally
     Ok,
@@ -440,7 +442,7 @@ impl Bar {
                 .filter(|p| p.name == panel);
 
             let target = panels.next();
-            let (endpoint, message) = if target.is_none() {
+            let (endpoint, message) = match if target.is_none() {
                 Err(anyhow!("No panel with name {panel} was found"))
             } else if panels.next().is_some() {
                 Err(anyhow!(
@@ -453,7 +455,16 @@ impl Bar {
                     "The target panel has no associated sender and cannot be \
                      messaged"
                 ))
-            }?;
+            } {
+                Ok(r) => r,
+                Err(e) => {
+                    let err = e.to_string();
+                    ipc_set.spawn_blocking(move || {
+                        Ok(ipc_send.send(EventResponse::Err(err))?)
+                    });
+                    return Err(e);
+                }
+            };
 
             ipc_set.spawn_blocking(move || {
                 let send = endpoint.lock().unwrap().send.clone();
