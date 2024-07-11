@@ -15,7 +15,7 @@ use tokio_stream::StreamMap;
 use xcb::x;
 
 use crate::{
-    cleanup, create_surface, create_window, ipc::ChannelEndpoint, map_window,
+    create_surface, create_window, ipc::ChannelEndpoint, map_window,
     set_wm_properties, Alignment, Margins, PanelDrawFn, PanelStream, Position,
 };
 
@@ -418,34 +418,36 @@ impl Bar {
         }
     }
 
-    fn handle_ipc_event(&mut self, message: &str) -> Result<()> {
+    fn handle_ipc_event(&mut self, message: &str) -> Result<bool> {
         match message {
-            "quit" => cleanup::exit(Some((self.name.as_str(), self.ipc)), 0),
+            "quit" => Ok(true),
             "show" => {
                 self.mapped = true;
-                Ok(self.conn.check_request(self.conn.send_request_checked(
+                self.conn.check_request(self.conn.send_request_checked(
                     &x::MapWindow {
                         window: self.window,
                     },
-                ))?)
+                ))?;
+                Ok(false)
             }
             "hide" => {
                 self.mapped = true;
-                Ok(self.conn.check_request(self.conn.send_request_checked(
+                self.conn.check_request(self.conn.send_request_checked(
                     &x::UnmapWindow {
                         window: self.window,
                     },
-                ))?)
+                ))?;
+                Ok(false)
             }
             "toggle" => match self.mapped {
                 true => self.handle_ipc_event("hide"),
                 false => self.handle_ipc_event("show"),
             },
-            _ => Ok(()),
+            _ => Ok(false),
         }
     }
 
-    fn handle_panel_event(&mut self, message: &str) -> Result<()> {
+    fn handle_panel_event(&mut self, message: &str) -> Result<bool> {
         if let Some(caps) = REGEX.captures_iter(message).next() {
             let region = &caps["region"];
             let idx = caps["idx"].parse::<usize>()?;
@@ -473,7 +475,7 @@ impl Bar {
                 }?;
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     /// Given a message, find the endpoint of the panel it's addressed to.
@@ -482,7 +484,7 @@ impl Bar {
         message: &str,
         ipc_set: &mut JoinSet<Result<()>>,
         ipc_send: UnboundedSender<EventResponse>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         if message.starts_with("#") {
             return self.handle_panel_event(&message[1..]);
         }
@@ -548,7 +550,7 @@ impl Bar {
 
             log::trace!("task spawned");
 
-            Ok(())
+            Ok(false)
         } else {
             self.handle_ipc_event(message)
         }

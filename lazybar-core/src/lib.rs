@@ -408,8 +408,10 @@ pub mod builders {
                         log::trace!("message received");
 
                         if let Some(message) = message {
-                            if let Err(e) = bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
-                                log::warn!("Sending message {message} generated an error: {e}");
+                            match bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
+                                Ok(true) => cleanup::exit(Some((bar.name.as_str(), bar.ipc)), 0),
+                                Err(e) => log::warn!("Sending message {message} generated an error: {e}"),
+                                _ => {}
                             }
                         }
                     }
