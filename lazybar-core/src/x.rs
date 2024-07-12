@@ -1,5 +1,4 @@
 use std::{
-    ffi::CString,
     pin::Pin,
     sync::Arc,
     task::{self, Poll},
@@ -119,7 +118,7 @@ pub fn create_window(
     background: &Color,
     name: &str,
     monitor: Option<String>,
-) -> Result<(xcb::Connection, i32, x::Window, u16, x::Visualtype)> {
+) -> Result<(xcb::Connection, i32, x::Window, u16, x::Visualtype, String)> {
     let (conn, screen_idx) = xcb::Connection::connect(None)?;
     let window: x::Window = conn.generate_id();
     let colormap: x::Colormap = conn.generate_id();
@@ -146,6 +145,13 @@ pub fn create_window(
         iter.find(|info| info.primary())
             .context("No primary monitor found")?
     };
+
+    let mon_name = conn
+        .wait_for_reply(
+            conn.send_request(&x::GetAtomName { atom: mon.name() }),
+        )?
+        .name()
+        .to_string();
 
     let width = mon.width();
 
@@ -206,7 +212,7 @@ pub fn create_window(
         data: format!("lazybar_{name}").as_bytes(),
     }))?;
 
-    Ok((conn, screen_idx, window, width, visual))
+    Ok((conn, screen_idx, window, width, visual, mon_name))
 }
 
 pub fn set_wm_properties(
@@ -216,6 +222,7 @@ pub fn set_wm_properties(
     width: u32,
     height: u32,
     bar_name: &str,
+    mon_name: &str,
 ) -> Result<()> {
     let window_type_atom = intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")?;
     let window_type_dock_atom =
@@ -284,7 +291,7 @@ pub fn set_wm_properties(
         window,
         name_atom,
         x::ATOM_STRING,
-        CString::new(format!("lazybar_{bar_name}"))?.as_bytes_with_nul(),
+        format!("lazybar_{bar_name}_{mon_name}").as_bytes(),
     )?;
 
     let class_atom = intern_named_atom(conn, b"WM_CLASS")?;
@@ -293,12 +300,7 @@ pub fn set_wm_properties(
         window,
         class_atom,
         x::ATOM_STRING,
-        [
-            CString::new("lazybar")?.as_bytes_with_nul(),
-            CString::new("Lazybar")?.as_bytes_with_nul(),
-        ]
-        .concat()
-        .as_slice(),
+        ["lazybar\0Lazybar".as_bytes()].concat().as_slice(),
     )?;
 
     Ok(())

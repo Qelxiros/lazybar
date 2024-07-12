@@ -290,7 +290,7 @@ impl Bar {
         ipc: bool,
         monitor: Option<String>,
     ) -> Result<Self> {
-        let (conn, screen, window, width, visual) = create_window(
+        let (conn, screen, window, width, visual, mon_name) = create_window(
             position,
             height,
             transparent,
@@ -305,6 +305,7 @@ impl Bar {
             width.into(),
             height.into(),
             name.as_str(),
+            mon_name.as_str(),
         )?;
         map_window(&conn, window)?;
         let surface =
