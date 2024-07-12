@@ -13,8 +13,8 @@ categories = ["os::linux-apis","os::unix-apis","gui","command-line-utilities","a
 
 [dependencies]
 anyhow = "1.0.86"
-clap = { version = "4.5.8", features = ["cargo"] }
-clap_complete = "4.5.7"
+clap = { version = "4.5.9", features = ["cargo"] }
+clap_complete = "4.5.8"
 lazybar-core = { version = "0.3.7", path = "../lazybar-core" }
 log = "0.4.22"
 signal-hook = { version = "0.3.17", features = ["iterator"] }

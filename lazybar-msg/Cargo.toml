@@ -3,7 +3,7 @@ name = "lazybar-msg"
 version = "0.2.2"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
-rust-version = "1.74.0"
+rust-version = "1.79.0"
 description = "IPC for lazybar using UNIX sockets"
 readme = "../README.md"
 repository = "https://github.com/Qelxiros/lazybar"
@@ -13,8 +13,8 @@ categories = ["os::linux-apis","os::unix-apis","command-line-utilities","asynchr
 
 [dependencies]
 anyhow = "1.0.86"
-clap = { version = "4.5.8", features = ["cargo", "derive"] }
-clap_complete = "4.5.7"
+clap = { version = "4.5.9", features = ["cargo", "derive"] }
+clap_complete = "4.5.8"
 lazybar-core = { version = "0.3.7", path = "../lazybar-core" }
 log = "0.4.22"
 serde = { version = "1.0.204", features = ["derive"] }
