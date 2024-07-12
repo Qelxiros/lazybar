@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
     ops::BitAnd,
+    pin::Pin,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -10,13 +11,15 @@ use csscolorparser::Color;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
-use tokio_stream::StreamMap;
+use tokio::{net::UnixStream, sync::mpsc::UnboundedSender, task::JoinSet};
+use tokio_stream::{Stream, StreamMap};
 use xcb::x;
 
 use crate::{
-    create_surface, create_window, ipc::ChannelEndpoint, map_window,
-    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelStream, Position,
+    create_surface, create_window,
+    ipc::{self, ChannelEndpoint},
+    map_window, set_wm_properties, Alignment, Margins, PanelDrawFn,
+    PanelStream, Position,
 };
 
 lazy_static! {
@@ -289,15 +292,37 @@ impl Bar {
         reverse_scroll: bool,
         ipc: bool,
         monitor: Option<String>,
-    ) -> Result<Self> {
-        let (conn, screen, window, width, visual, mon_name) = create_window(
-            position,
-            height,
-            transparent,
-            &bg,
-            name.as_str(),
-            monitor,
-        )?;
+    ) -> Result<(
+        Self,
+        Pin<
+            Box<
+                dyn tokio_stream::Stream<
+                    Item = std::result::Result<UnixStream, std::io::Error>,
+                >,
+            >,
+        >,
+    )> {
+        let (conn, screen, window, width, visual, mon_name) =
+            create_window(position, height, transparent, &bg, monitor)?;
+
+        let (result, name) = ipc::init(ipc, name.as_str(), mon_name.as_str());
+        let ipc_stream: Pin<
+            Box<
+                dyn Stream<
+                    Item = std::result::Result<UnixStream, std::io::Error>,
+                >,
+            >,
+        > = match result {
+            Ok(stream) => {
+                log::info!("IPC initialized");
+                stream
+            }
+            Err(e) => {
+                log::info!("IPC disabled due to an error: {e}");
+                Box::pin(tokio_stream::pending())
+            }
+        };
+
         set_wm_properties(
             &conn,
             window,
@@ -314,32 +339,35 @@ impl Bar {
         surface.flush();
         conn.flush()?;
 
-        Ok(Self {
-            name,
-            position,
-            conn: Arc::new(conn),
-            screen,
-            window,
-            surface,
-            cr: Rc::new(cr),
-            width: width.into(),
-            height,
-            bg,
-            margins,
-            extents: Extents {
-                left: 0.0,
-                center: ((width / 2).into(), (width / 2).into()),
-                right: width.into(),
+        Ok((
+            Self {
+                name,
+                position,
+                conn: Arc::new(conn),
+                screen,
+                window,
+                surface,
+                cr: Rc::new(cr),
+                width: width.into(),
+                height,
+                bg,
+                margins,
+                extents: Extents {
+                    left: 0.0,
+                    center: ((width / 2).into(), (width / 2).into()),
+                    right: width.into(),
+                },
+                reverse_scroll,
+                left: Vec::new(),
+                center: Vec::new(),
+                right: Vec::new(),
+                streams: StreamMap::new(),
+                ipc,
+                mapped: true,
+                center_state: CenterState::Center,
             },
-            reverse_scroll,
-            left: Vec::new(),
-            center: Vec::new(),
-            right: Vec::new(),
-            streams: StreamMap::new(),
-            ipc,
-            mapped: true,
-            center_state: CenterState::Center,
-        })
+            ipc_stream,
+        ))
     }
 
     fn apply_dependence(panels: &[Panel]) -> Vec<PanelStatus> {

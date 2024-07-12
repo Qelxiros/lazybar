@@ -1,4 +1,4 @@
-use std::{fs::DirBuilder, path::Path, pin::Pin};
+use std::{fs::DirBuilder, path::PathBuf, pin::Pin};
 
 use anyhow::Result;
 use tokio::{
@@ -7,29 +7,52 @@ use tokio::{
 };
 use tokio_stream::{wrappers::UnixListenerStream, Stream};
 
+const IPC_DIR: &'static str = "/tmp/lazybar-ipc/";
+
 /// Initialize IPC for a given bar
 pub fn init(
     enabled: bool,
     bar_name: &str,
-) -> Result<Pin<Box<dyn Stream<Item = Result<UnixStream, std::io::Error>>>>> {
-    Ok(if enabled {
-        DirBuilder::new()
-            .recursive(true)
-            .create("/tmp/lazybar-ipc/")?;
+    mon_name: &str,
+) -> (
+    Result<Pin<Box<dyn Stream<Item = Result<UnixStream, std::io::Error>>>>>,
+    String,
+) {
+    let mut final_name = bar_name.to_string();
+    (
+        if enabled && DirBuilder::new().recursive(true).create(IPC_DIR).is_ok()
+        {
+            let (path, idx) = find_path(bar_name, mon_name);
 
-        let path = format!("/tmp/lazybar-ipc/{bar_name}");
-        if Path::new(path.as_str()).exists() {
-            log::warn!("Socket path exists, starting without IPC");
-            return Ok(Box::pin(tokio_stream::pending()));
-        }
+            if idx > 0 {
+                final_name = format!("{bar_name}_{mon_name}({idx})")
+            }
 
-        let listener = UnixListener::bind(path)?;
-        let stream = UnixListenerStream::new(listener);
+            if let Ok(listener) = UnixListener::bind(path) {
+                let stream = UnixListenerStream::new(listener);
 
-        Box::pin(stream)
-    } else {
-        Box::pin(tokio_stream::pending())
-    })
+                Ok(Box::pin(stream))
+            } else {
+                Ok(Box::pin(tokio_stream::pending()))
+            }
+        } else {
+            Ok(Box::pin(tokio_stream::pending()))
+        },
+        final_name,
+    )
+}
+
+fn find_path(bar_name: &str, mon_name: &str) -> (PathBuf, i32) {
+    let mut fmt = format!("{IPC_DIR}{bar_name}_{mon_name}");
+    let mut path = PathBuf::from(fmt);
+    let mut idx = 0;
+    while path.exists() {
+        idx += 1;
+        fmt = format!("{IPC_DIR}{bar_name}_{mon_name}({idx})");
+        path = PathBuf::from(fmt.as_str());
+    }
+
+    (path, idx)
 }
 
 /// A sender and a receiver bundled together for two-way communication

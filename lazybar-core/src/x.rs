@@ -116,7 +116,6 @@ pub fn create_window(
     height: u16,
     transparent: bool,
     background: &Color,
-    name: &str,
     monitor: Option<String>,
 ) -> Result<(xcb::Connection, i32, x::Window, u16, x::Visualtype, String)> {
     let (conn, screen_idx) = xcb::Connection::connect(None)?;
@@ -202,14 +201,6 @@ pub fn create_window(
             ),
             x::Cw::Colormap(colormap),
         ],
-    }))?;
-
-    conn.check_request(conn.send_request_checked(&x::ChangeProperty {
-        mode: x::PropMode::Replace,
-        window,
-        property: x::ATOM_WM_NAME,
-        r#type: x::ATOM_STRING,
-        data: format!("lazybar_{name}").as_bytes(),
     }))?;
 
     Ok((conn, screen_idx, window, width, visual, mon_name))

@@ -187,25 +187,21 @@ impl Margins {
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`] for panel builders.
 pub mod builders {
-    use std::{pin::Pin, thread};
+    use std::thread;
 
     use anyhow::Result;
     use derive_builder::Builder;
     use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
     use tokio::{
-        net::UnixStream,
         runtime::Runtime,
         sync::mpsc::unbounded_channel,
         task::{self, JoinSet},
     };
-    use tokio_stream::{Stream, StreamExt, StreamMap};
+    use tokio_stream::{StreamExt, StreamMap};
 
     use crate::{
-        cleanup,
-        ipc::{self, ChannelEndpoint},
-        x::XStream,
-        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
-        UnixStreamWrapper,
+        cleanup, ipc::ChannelEndpoint, x::XStream, Alignment, Attrs, Bar,
+        Color, Margins, Panel, PanelConfig, Position, UnixStreamWrapper,
     };
     pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
@@ -280,7 +276,7 @@ pub mod builders {
 
         #[allow(clippy::future_not_send)]
         async fn run_inner(self) -> Result<()> {
-            let mut bar = Bar::new(
+            let (mut bar, mut ipc_stream) = Bar::new(
                 self.name,
                 self.position,
                 self.height,
@@ -346,25 +342,6 @@ pub mod builders {
                 }
             });
             log::debug!("Set up signal listener");
-
-            let result = ipc::init(bar.ipc, bar.name.as_str());
-
-            let mut ipc_stream: Pin<
-                Box<
-                    dyn Stream<
-                        Item = std::result::Result<UnixStream, std::io::Error>,
-                    >,
-                >,
-            > = match result {
-                Ok(stream) => {
-                    log::info!("IPC initialized");
-                    stream
-                }
-                Err(e) => {
-                    log::info!("IPC disabled due to an error: {e}");
-                    Box::pin(tokio_stream::pending())
-                }
-            };
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
 

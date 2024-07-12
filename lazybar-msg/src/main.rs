@@ -99,8 +99,8 @@ async fn main() -> Result<ExitCode> {
             exit_code = ExitCode::from(1);
             let e = stream.unwrap_err();
             log::warn!(
-                "Error opening file (is the bar running? does it have ipc \
-                 enabled?): {e}"
+                "{file_name}: Error opening file (is the bar running? does it \
+                 have ipc enabled?): {e}"
             );
             continue;
         };
@@ -119,14 +119,20 @@ async fn main() -> Result<ExitCode> {
             String::from_utf8_lossy(&response[..bytes])
                 .to_string()
                 .as_str(),
-        )?;
+        );
 
         match response {
-            EventResponse::Ok => (),
-            EventResponse::Err(_) => exit_code = ExitCode::from(2),
+            Ok(response @ EventResponse::Ok) => {
+                log::info!("{file_name}: {response}")
+            }
+            Ok(response @ EventResponse::Err(_)) => {
+                log::info!("{file_name}: {response}");
+                exit_code = ExitCode::from(2)
+            }
+            Err(ref e) => {
+                log::warn!("received invalid response from {path:?}: {e}")
+            }
         }
-
-        log::info!("{}: {}", file_name, response);
 
         stream.shutdown().await?;
     }
