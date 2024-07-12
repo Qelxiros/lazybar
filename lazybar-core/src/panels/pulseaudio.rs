@@ -354,7 +354,7 @@ impl PanelConfig for Pulseaudio {
             table,
             global,
             &["_unmuted", "_muted"],
-            &["%ramp%%volume%%", "%ramp%%volume%%"],
+            &["%ramp%%volume%", "%ramp%%volume%"],
             &[""],
             &["", "_muted"],
         )?);
@@ -373,21 +373,68 @@ impl PanelConfig for Pulseaudio {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        let mut mainloop = threaded::Mainloop::new()
-            .context("Failed to create pulseaudio mainloop")?;
-        mainloop.start()?;
-        let mut context = context::Context::new(&mainloop, "omnibars")
-            .ok_or_else(|| anyhow!("Failed to create pulseaudio context"))?;
-        context.connect(self.server.as_deref(), FlagSet::NOFAIL, None)?;
-        while context.get_state() != State::Ready {}
-        let introspector = context.introspect();
-        let mainloop = Rc::new(RefCell::new(mainloop));
+        let mainloop = Rc::new(RefCell::new(
+            threaded::Mainloop::new()
+                .context("Failed to create pulseaudio mainloop")?,
+        ));
+        let context = Rc::new(RefCell::new(
+            context::Context::new(mainloop.borrow().deref(), "lazybar")
+                .ok_or_else(|| {
+                    anyhow!("Failed to create pulseaudio context")
+                })?,
+        ));
+
+        {
+            let ml_ref = Rc::clone(&mainloop);
+            let context_ref = Rc::clone(&context);
+            context.borrow_mut().set_state_callback(Some(Box::new(
+                move || {
+                    let state = unsafe { (*context_ref.as_ptr()).get_state() };
+                    match state {
+                        State::Ready
+                        | State::Failed
+                        | State::Terminated => unsafe {
+                            (*ml_ref.as_ptr()).signal(false);
+                        },
+                        _ => {}
+                    }
+                },
+            )));
+        }
+
+        context.borrow_mut().connect(
+            self.server.as_deref(),
+            FlagSet::NOFAIL,
+            None,
+        )?;
+
+        mainloop.borrow_mut().lock();
+        mainloop.borrow_mut().start()?;
+
+        loop {
+            match context.borrow().get_state() {
+                State::Ready => {
+                    break;
+                }
+                State::Failed | State::Terminated => {
+                    mainloop.borrow_mut().unlock();
+                    mainloop.borrow_mut().stop();
+                    return Err(anyhow!(
+                        "pulseaudio context failed to connect"
+                    ));
+                }
+                _ => {
+                    mainloop.borrow_mut().wait();
+                }
+            }
+        }
+        context.borrow_mut().set_state_callback(None);
+
+        let introspector = context.borrow_mut().introspect();
 
         let (sink_send, sink_recv) = channel();
         self.send = sink_send.clone();
         let sink = self.sink.clone();
-
-        mainloop.borrow_mut().lock();
 
         let initial = sink_send.clone();
         let ml_ref = Rc::clone(&mainloop);
@@ -406,7 +453,9 @@ impl PanelConfig for Pulseaudio {
             mainloop.borrow_mut().wait();
         }
 
-        context.subscribe(InterestMaskSet::SINK, |_| {});
+        context
+            .borrow_mut()
+            .subscribe(InterestMaskSet::SINK, |_| {});
 
         let cb: Option<Box<dyn FnMut(_, _, _)>> =
             Some(Box::new(move |_, _, _| {
@@ -420,11 +469,12 @@ impl PanelConfig for Pulseaudio {
                 });
             }));
 
-        context.set_subscribe_callback(cb);
+        context.borrow_mut().set_subscribe_callback(cb);
 
         mainloop.borrow_mut().unlock();
 
-        let introspector = Rc::new(RefCell::new(context.introspect()));
+        let introspector =
+            Rc::new(RefCell::new(context.borrow_mut().introspect()));
 
         // prevent these structures from going out of scope
         Box::leak(Box::new(context));
