@@ -11,11 +11,29 @@ license = "MIT"
 keywords = ["X11","WM","Linux","status-bar","i3"]
 categories = ["os::linux-apis","os::unix-apis","gui","command-line-utilities","asynchronous"]
 
+[features]
+default = ["battery","clock","cpu","custom","fanotify","inotify","memory","mpd","network","ping","pulseaudio","separator","temp","xwindow","xworkspaces"]
+battery = ["lazybar-core/battery"]
+clock = ["lazybar-core/clock"]
+cpu = ["lazybar-core/cpu"]
+custom = ["lazybar-core/custom"]
+fanotify = ["lazybar-core/fanotify"]
+inotify = ["lazybar-core/inotify"]
+memory = ["lazybar-core/memory"]
+mpd = ["lazybar-core/mpd"]
+network = ["lazybar-core/network"]
+ping = ["lazybar-core/ping"]
+pulseaudio = ["lazybar-core/pulseaudio"]
+separator = ["lazybar-core/separator"]
+temp = ["lazybar-core/temp"]
+xwindow = ["lazybar-core/xwindow"]
+xworkspaces = ["lazybar-core/xworkspaces"]
+
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["cargo"] }
 clap_complete = "4.5.8"
-lazybar-core = { version = "0.3.8", path = "../lazybar-core" }
+lazybar-core = { version = "0.3.8", default-features = false, path = "../lazybar-core" }
 log = "0.4.22"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
 simple_logger = "5.0.0"

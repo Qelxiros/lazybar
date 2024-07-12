@@ -3,14 +3,41 @@ use std::{collections::HashMap, path::Path};
 use anyhow::{anyhow, Context, Result};
 use config::{Config, File, FileFormat, Value};
 
+#[cfg(feature = "battery")]
+use crate::panels::Battery;
+#[cfg(feature = "cpu")]
+use crate::panels::Cpu;
+#[cfg(feature = "custom")]
+use crate::panels::Custom;
+#[cfg(feature = "fanotify")]
+use crate::panels::Fanotify;
+#[cfg(feature = "inotify")]
+use crate::panels::Inotify;
+#[cfg(feature = "memory")]
+use crate::panels::Memory;
+#[cfg(feature = "mpd")]
+use crate::panels::Mpd;
+#[cfg(feature = "network")]
+use crate::panels::Network;
+#[cfg(feature = "ping")]
+use crate::panels::Ping;
+#[cfg(feature = "pulseaudio")]
+use crate::panels::Pulseaudio;
+#[cfg(feature = "separator")]
+use crate::panels::Separator;
+#[cfg(feature = "temp")]
+use crate::panels::Temp;
+#[cfg(feature = "xwindow")]
+use crate::panels::XWindow;
+#[cfg(feature = "xworkspaces")]
+use crate::panels::XWorkspaces;
+#[cfg(feature = "clock")]
+use crate::panels::{
+    precision::{Days, Hours, Minutes, Seconds},
+    Clock,
+};
 use crate::{
-    builders::BarConfigBuilder,
-    cleanup, get_table_from_config,
-    panels::{
-        precision::{Days, Hours, Minutes, Seconds},
-        Battery, Clock, Cpu, Custom, Fanotify, Inotify, Memory, Mpd, Network,
-        Ping, Pulseaudio, Separator, Temp, XWindow, XWorkspaces,
-    },
+    builders::BarConfigBuilder, cleanup, get_table_from_config,
     remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
     PanelConfig, Position,
 };
@@ -247,10 +274,12 @@ fn parse_panel(
         if let Some(s) = remove_string_from_config("type", &mut table) {
             log::debug!("parsing {s} panel");
             return match s.as_str() {
+                #[cfg(feature = "battery")]
                 "battery" => {
                     Battery::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "clock")]
                 "clock" => {
                     if let Some(precision) = &mut table.remove("precision") {
                         if let Ok(precision) = precision.clone().into_string() {
@@ -294,46 +323,59 @@ fn parse_panel(
                             .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                     }
                 }
+                #[cfg(feature = "cpu")]
                 "cpu" => Cpu::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "custom")]
                 "custom" => {
                     Custom::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "fanotify")]
                 "fanotify" => {
                     Fanotify::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "inotify")]
                 "inotify" => {
                     Inotify::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "memory")]
                 "memory" => {
                     Memory::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "mpd")]
                 "mpd" => Mpd::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "network")]
                 "network" => {
                     Network::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "ping")]
                 "ping" => {
                     Ping::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "pulseaudio")]
                 "pulseaudio" => Pulseaudio::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "separator")]
                 "separator" => Separator::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "temp")]
                 "temp" => {
                     Temp::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "xwindow")]
                 "xwindow" => {
                     XWindow::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
+                #[cfg(feature = "xworkspaces")]
                 "xworkspaces" => XWorkspaces::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
                 s => Err(anyhow!("Unknown panel type {s}")),
