@@ -215,81 +215,107 @@ pub fn set_wm_properties(
     bar_name: &str,
     mon_name: &str,
 ) -> Result<()> {
-    let window_type_atom = intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")?;
-    let window_type_dock_atom =
-        intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE_DOCK")?;
-    change_window_property(
-        conn,
-        window,
-        window_type_atom,
-        &[window_type_dock_atom],
-    )?;
+    if let Ok(window_type_atom) =
+        intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")
+    {
+        if let Ok(window_type_dock_atom) =
+            intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE_DOCK")
+        {
+            let _ = change_window_property(
+                conn,
+                window,
+                window_type_atom,
+                &[window_type_dock_atom],
+            );
+        }
+    }
 
-    let strut_partial_atom = intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")?;
-    let strut_atom = intern_named_atom(conn, b"_NET_WM_STRUT")?;
     let strut = if position == Position::Top {
         &[0, 0, height, 0, 0, 0, 0, 0, 0, width - 1, 0, 0]
     } else {
         &[0, 0, 0, height, 0, 0, 0, 0, 0, 0, 0, width - 1]
     };
-    change_property(conn, window, strut_partial_atom, x::ATOM_CARDINAL, strut)?;
-    change_property(conn, window, strut_atom, x::ATOM_CARDINAL, &strut[0..4])?;
+    if let Ok(strut_partial_atom) =
+        intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")
+    {
+        let _ = change_property(
+            conn,
+            window,
+            strut_partial_atom,
+            x::ATOM_CARDINAL,
+            strut,
+        );
+    }
+    if let Ok(strut_atom) = intern_named_atom(conn, b"_NET_WM_STRUT") {
+        let _ = change_property(
+            conn,
+            window,
+            strut_atom,
+            x::ATOM_CARDINAL,
+            &strut[0..4],
+        );
+    }
 
-    let wm_state_atom = intern_named_atom(conn, b"_NET_WM_STATE")?;
-    let wm_state_sticky_atom =
-        intern_named_atom(conn, b"_NET_WM_STATE_STICKY")?;
-    change_window_property(
+    if let Ok(wm_state_atom) = intern_named_atom(conn, b"_NET_WM_STATE") {
+        if let Ok(wm_state_sticky_atom) =
+            intern_named_atom(conn, b"_NET_WM_STATE_STICKY")
+        {
+            let _ = change_window_property(
+                conn,
+                window,
+                wm_state_atom,
+                &[wm_state_sticky_atom],
+            );
+        }
+    }
+
+    if let Ok(normal_hints_atom) = intern_named_atom(conn, b"WM_NORMAL_HINTS") {
+        if let Ok(size_hints_atom) = intern_named_atom(conn, b"WM_SIZE_HINTS") {
+            let _ = change_property(
+                conn,
+                window,
+                normal_hints_atom,
+                size_hints_atom,
+                &[
+                    0x3c, 0, 0, width, height, width, height, width, height, 0,
+                    0, 0, 0, width, height,
+                ],
+            );
+        }
+    }
+
+    if let Ok(pid_atom) = intern_named_atom(conn, b"_NET_WM_PID") {
+        let _ = change_property(
+            conn,
+            window,
+            pid_atom,
+            x::ATOM_CARDINAL,
+            &[std::process::id()],
+        )?;
+    }
+
+    if let Ok(desktop_atom) = intern_named_atom(conn, b"_NET_WM_DESKTOP") {
+        let _ = change_property(
+            conn,
+            window,
+            desktop_atom,
+            x::ATOM_CARDINAL,
+            &[0xFFFFFFFFu32],
+        );
+    }
+
+    let _ = change_property(
         conn,
         window,
-        wm_state_atom,
-        &[wm_state_sticky_atom],
-    )?;
-
-    let normal_hints_atom = intern_named_atom(conn, b"WM_NORMAL_HINTS")?;
-    let size_hints_atom = intern_named_atom(conn, b"WM_SIZE_HINTS")?;
-    change_property(
-        conn,
-        window,
-        normal_hints_atom,
-        size_hints_atom,
-        &[
-            0x3c, 0, 0, width, height, width, height, width, height, 0, 0, 0,
-            0, width, height,
-        ],
-    )?;
-
-    let pid_atom = intern_named_atom(conn, b"_NET_WM_PID")?;
-    change_property(
-        conn,
-        window,
-        pid_atom,
-        x::ATOM_CARDINAL,
-        &[std::process::id()],
-    )?;
-
-    let desktop_atom = intern_named_atom(conn, b"_NET_WM_DESKTOP")?;
-    change_property(
-        conn,
-        window,
-        desktop_atom,
-        x::ATOM_CARDINAL,
-        &[0xFFFFFFFFu32],
-    )?;
-
-    let name_atom = intern_named_atom(conn, b"WM_NAME")?;
-    change_property(
-        conn,
-        window,
-        name_atom,
+        x::ATOM_WM_NAME,
         x::ATOM_STRING,
         format!("lazybar_{bar_name}_{mon_name}").as_bytes(),
     )?;
 
-    let class_atom = intern_named_atom(conn, b"WM_CLASS")?;
-    change_property(
+    let _ = change_property(
         conn,
         window,
-        class_atom,
+        x::ATOM_WM_CLASS,
         x::ATOM_STRING,
         ["lazybar\0Lazybar".as_bytes()].concat().as_slice(),
     )?;
