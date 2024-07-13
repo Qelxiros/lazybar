@@ -9,10 +9,10 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
-    PanelConfig, PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelStream,
 };
 
 lazy_static! {

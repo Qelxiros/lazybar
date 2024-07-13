@@ -22,10 +22,11 @@ use xcb::{x, XidNew};
 use crate::{
     background::Bg,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
     x::intern_named_atom,
-    Attrs, Highlight, PanelCommon, PanelConfig, PanelStream,
+    Attrs, Highlight, PanelConfig, PanelStream,
 };
 
 struct XStream {

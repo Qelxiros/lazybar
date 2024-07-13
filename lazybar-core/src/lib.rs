@@ -42,6 +42,8 @@
 //! ```
 #![deny(missing_docs)]
 
+/// Configuration options for click/scroll events on panels.
+pub mod actions;
 /// Configuration options for colors and fonts.
 pub mod attrs;
 /// Background configuration options.
@@ -49,6 +51,8 @@ pub mod background;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
 mod cleanup;
+/// Common configuration for panels.
+pub mod common;
 mod highlight;
 /// Support for inter-process communication, like that provided by the
 /// `lazybar-msg` crate.
@@ -203,7 +207,6 @@ pub mod builders {
         cleanup, ipc::ChannelEndpoint, x::XStream, Alignment, Attrs, Bar,
         Color, Margins, Panel, PanelConfig, Position, UnixStreamWrapper,
     };
-    pub use crate::{PanelCommonBuilder, PanelCommonBuilderError};
 
     /// A set of options for a bar.
     ///

@@ -227,7 +227,7 @@ pub struct Panel {
     /// defines it)
     pub name: &'static str,
     /// Whether the panel is visible. To set this value on startup, see
-    /// [`PanelCommon`][crate::PanelCommon].
+    /// [`PanelCommon`][crate::common::PanelCommon].
     pub visible: bool,
     endpoint: Option<Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>>,
 }

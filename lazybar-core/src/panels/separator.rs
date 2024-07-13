@@ -6,9 +6,9 @@ use derive_builder::Builder;
 
 use crate::{
     bar::{Event, EventResponse},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    Attrs, PanelCommon, PanelConfig, PanelStream,
+    Attrs, PanelConfig, PanelStream,
 };
 
 /// Displays static text with [pango] markup.

@@ -15,11 +15,11 @@ use xcb::{x, XidNew};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::intern_named_atom,
-    Attrs, PanelCommon, PanelConfig, PanelStream,
+    Attrs, PanelConfig, PanelStream,
 };
 
 struct XStream {

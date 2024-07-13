@@ -22,10 +22,11 @@ use tokio_stream::{
 };
 
 use crate::{
+    actions::Actions,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    Actions, Attrs, PanelCommon, PanelConfig, PanelStream,
+    Attrs, PanelConfig, PanelStream,
 };
 
 /// Defines options for a [`Clock`]'s precision.

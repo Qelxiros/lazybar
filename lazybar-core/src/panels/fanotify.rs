@@ -18,9 +18,9 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    remove_string_from_config, Attrs, PanelCommon, PanelConfig, PanelStream,
+    remove_string_from_config, Attrs, PanelConfig, PanelStream,
 };
 
 struct FanotifyStream {

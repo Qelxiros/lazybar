@@ -34,11 +34,12 @@ use tokio_stream::{
 };
 
 use crate::{
+    actions::Actions,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Actions, Attrs,
-    PanelCommon, PanelConfig, PanelStream, Ramp,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelStream, Ramp,
 };
 
 /// Displays the current volume and mute status of a given sink.

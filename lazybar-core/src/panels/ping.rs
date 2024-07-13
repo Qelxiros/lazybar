@@ -20,10 +20,10 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    draw_common,
+    common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
-    PanelConfig, PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelStream,
 };
 
 /// Displays the ping to a given address
@@ -101,7 +101,7 @@ impl PanelConfig for Ping {
     ///   - type: String
     ///   - default: `disconnected`
     /// - `ramp`: the ramp to display based on the ping time. See
-    ///   [`Ramp::parse`] for parsing details.
+    ///   [`Ramp::parse`][crate::ramp::Ramp::parse] for parsing details.
     /// - `max_ping`: the value to use as the maximum for the ramp. Ignored if
     ///   `ramp` is unset. Clamped to [0, 2000].
     ///   - type: u64

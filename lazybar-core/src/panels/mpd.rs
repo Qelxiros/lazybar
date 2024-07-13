@@ -29,10 +29,11 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelCommon,
-    PanelConfig, PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
+    PanelStream,
 };
 
 #[derive(Clone, Debug)]
