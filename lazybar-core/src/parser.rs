@@ -1,7 +1,8 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::RwLock};
 
 use anyhow::{anyhow, Context, Result};
 use config::{Config, File, FileFormat, Value};
+use lazy_static::lazy_static;
 
 #[cfg(feature = "battery")]
 use crate::panels::Battery;
@@ -42,6 +43,12 @@ use crate::{
     PanelConfig, Position,
 };
 
+lazy_static! {
+    /// The `consts` table from the global [`Config`].
+    pub static ref CONSTS: RwLock<HashMap<String, Value>> =
+        RwLock::new(HashMap::new());
+}
+
 /// Parses a bar with a given name from the global [`Config`]
 ///
 /// Configuration options:
@@ -74,6 +81,10 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             cleanup::exit(None, 101)
         });
     log::info!("Read config file");
+
+    if let Ok(consts) = config.get_table("consts") {
+        *CONSTS.write().unwrap() = consts;
+    }
 
     let mut bars_table = config
         .get_table("bars")

@@ -1,11 +1,17 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::Result;
-use config::{Map, Value};
+use config::{Map, Value, ValueKind};
 use csscolorparser::Color;
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
 use tokio::{io::AsyncWriteExt, net::UnixStream};
 
-use crate::{bar::EventResponse, ipc::ChannelEndpoint};
+use crate::{bar::EventResponse, ipc::ChannelEndpoint, parser};
+
+lazy_static! {
+    static ref REGEX: Regex = Regex::new(r"%\{(?<const>\w+)}").unwrap();
+}
 
 /// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
 /// results through a channel.
@@ -76,7 +82,15 @@ pub fn remove_string_from_config<S: std::hash::BuildHasher>(
                 log::warn!("Ignoring non-string value {val:?}");
                 None
             },
-            Some,
+            |s| {
+                Some(
+                    replace_consts(
+                        s.as_str(),
+                        &*parser::CONSTS.read().unwrap(),
+                    )
+                    .to_string(),
+                )
+            },
         )
     })
 }
@@ -93,7 +107,29 @@ pub fn remove_array_from_config<S: std::hash::BuildHasher>(
                 log::warn!("Ignoring non-array value {val:?}");
                 None
             },
-            Some,
+            |v| {
+                Some(
+                    v.into_iter()
+                        .map(|val| {
+                            let origin = val.origin().map(|s| s.to_string());
+                            if let Ok(val) = val.clone().into_string() {
+                                Value::new(
+                                    origin.as_ref(),
+                                    ValueKind::String(
+                                        replace_consts(
+                                            val.as_str(),
+                                            &*parser::CONSTS.read().unwrap(),
+                                        )
+                                        .to_string(),
+                                    ),
+                                )
+                            } else {
+                                val
+                            }
+                        })
+                        .collect(),
+                )
+            },
         )
     })
 }
@@ -162,14 +198,35 @@ pub fn remove_color_from_config<S: std::hash::BuildHasher>(
                 None
             },
             |val| {
-                val.parse().map_or_else(
-                    |_| {
-                        log::warn!("Invalid color {val}");
-                        None
-                    },
-                    Some,
-                )
+                replace_consts(val.as_str(), &*parser::CONSTS.read().unwrap())
+                    .parse()
+                    .map_or_else(
+                        |_| {
+                            log::warn!("Invalid color {val}");
+                            None
+                        },
+                        Some,
+                    )
             },
         )
+    })
+}
+
+/// Replace references to constants (of the form `%{const_name}`) with their
+/// respective constants
+pub fn replace_consts<'a, S: std::hash::BuildHasher>(
+    format: &'a str,
+    consts: &HashMap<String, Value, S>,
+) -> Cow<'a, str> {
+    REGEX.replace_all(format, |caps: &Captures| {
+        let con = &caps["const"];
+        if let Some(con) =
+            consts.get(con).and_then(|c| c.clone().into_string().ok())
+        {
+            con
+        } else {
+            log::warn!("Invalid constant: {con}");
+            String::new()
+        }
     })
 }

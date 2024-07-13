@@ -5,6 +5,8 @@ use config::Config;
 use config::Value;
 use csscolorparser::Color;
 
+use crate::{remove_color_from_config, remove_float_from_config};
+
 /// Describes a bar to be drawn below a workspace name
 #[derive(Clone, Debug)]
 pub struct Highlight {
@@ -27,38 +29,9 @@ impl Highlight {
     ///   - type: String
     ///   - default: none
     pub fn parse(table: &mut HashMap<String, Value>) -> Self {
-        let height = table
-            .remove("height")
-            .and_then(|height| {
-                height.clone().into_float().map_or_else(
-                    |_| {
-                        log::warn!(
-                            "Ignoring non-float value {height:?} (location \
-                             attempt: {:?})",
-                            height.origin()
-                        );
-                        None
-                    },
-                    Some,
-                )
-            })
-            .unwrap_or(0.0);
+        let height = remove_float_from_config("height", table).unwrap_or(0.0);
 
-        let color = table
-            .remove("color")
-            .and_then(|color| {
-                color.clone().into_string().map_or_else(
-                    |_| {
-                        log::warn!(
-                            "Ignoring non-string value {color:?} (location \
-                             attempt: {:?})",
-                            color.origin()
-                        );
-                        None
-                    },
-                    |color| color.parse().ok(),
-                )
-            })
+        let color = remove_color_from_config("color", table)
             .unwrap_or_else(|| "#0000".parse().unwrap());
 
         Self { height, color }
