@@ -8,6 +8,8 @@ mod cpu;
 mod custom;
 #[cfg(feature = "fanotify")]
 mod fanotify;
+#[cfg(feature = "github")]
+mod github;
 #[cfg(feature = "inotify")]
 mod inotify;
 #[cfg(feature = "memory")]
@@ -39,6 +41,8 @@ pub use cpu::Cpu;
 pub use custom::Custom;
 #[cfg(feature = "fanotify")]
 pub use fanotify::Fanotify;
+#[cfg(feature = "github")]
+pub use github::Github;
 #[cfg(feature = "inotify")]
 pub use inotify::Inotify;
 #[cfg(feature = "memory")]
@@ -72,6 +76,8 @@ pub mod builders {
     pub use super::custom::{CustomBuilder, CustomBuilderError};
     #[cfg(feature = "fanotify")]
     pub use super::fanotify::{FanotifyBuilder, FanotifyBuilderError};
+    #[cfg(feature = "github")]
+    pub use super::github::{GithubBuilder, GithubBuilderError};
     #[cfg(feature = "inotify")]
     pub use super::inotify::{InotifyBuilder, InotifyBuilderError};
     #[cfg(feature = "memory")]

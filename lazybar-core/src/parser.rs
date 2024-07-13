@@ -13,6 +13,8 @@ use crate::panels::Cpu;
 use crate::panels::Custom;
 #[cfg(feature = "fanotify")]
 use crate::panels::Fanotify;
+#[cfg(feature = "github")]
+use crate::panels::Github;
 #[cfg(feature = "inotify")]
 use crate::panels::Inotify;
 #[cfg(feature = "memory")]
@@ -373,6 +375,11 @@ fn parse_panel(
                 #[cfg(feature = "fanotify")]
                 "fanotify" => {
                     Fanotify::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                #[cfg(feature = "github")]
+                "github" => {
+                    Github::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 #[cfg(feature = "inotify")]
