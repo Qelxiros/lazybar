@@ -5,6 +5,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 [<img alt="crates.io" src="https://img.shields.io/crates/v/lazybar.svg?color=fc8d62&logo=rust" height="20">](https://crates.io/crates/syn)
 [<img alt="docs.rs" src="https://docs.rs/lazybar-core/badge.svg" height="20">](https://docs.rs/syn)
 [<img alt="build status" src="https://img.shields.io/badge/build-passing-brightgreen?logo=github" height="20">](https://github.com/qelxiros/lazybar) <!-- :P -->
+[<img alt="dependency status" src="https://deps.rs/repo/github/qelxiros/lazybar/status.svg" height="20">](https://deps.rs/repo/github/qelxiros/lazybar)
 
 ## Features
 - [x] clock
