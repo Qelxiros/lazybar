@@ -2,6 +2,8 @@ use std::ops::Sub;
 
 use config::Config;
 
+use crate::remove_string_from_config;
+
 /// Utility data structure to display one of several strings based on a value in
 /// a range, like a volume icon.
 #[derive(Clone, Debug)]
@@ -40,17 +42,15 @@ impl Ramp {
     #[must_use]
     pub fn parse(name: impl AsRef<str>, global: &Config) -> Option<Self> {
         let ramps_table = global.get_table("ramps").ok()?;
-        let ramp_table =
+        let mut ramp_table =
             ramps_table.get(name.as_ref())?.clone().into_table().ok()?;
         let mut key = 0;
         let mut icons = Vec::new();
-        while let Some(icon) = ramp_table.get(&key.to_string()) {
-            if let Ok(icon) = icon.clone().into_string() {
-                icons.push(icon);
-                key += 1;
-            } else {
-                break;
-            }
+        while let Some(icon) =
+            remove_string_from_config(&key.to_string(), &mut ramp_table)
+        {
+            icons.push(icon);
+            key += 1;
         }
         Some(Self { icons })
     }
