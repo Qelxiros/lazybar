@@ -1,6 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
+use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 
@@ -20,6 +21,7 @@ pub struct Separator {
     common: PanelCommon,
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Separator {
     /// Configuration options:
     ///
@@ -49,7 +51,7 @@ impl PanelConfig for Separator {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

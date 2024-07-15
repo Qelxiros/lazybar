@@ -1,10 +1,13 @@
-use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
+use std::{
+    collections::HashMap, fs::File, io::Read, pin::Pin, rc::Rc, time::Duration,
+};
 
 use anyhow::Result;
+use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use tokio::time::interval;
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
@@ -82,6 +85,7 @@ impl Battery {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Battery {
     /// Parses an instance of the panel from the global [`Config`]
     ///
@@ -170,7 +174,7 @@ impl PanelConfig for Battery {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
@@ -181,9 +185,24 @@ impl PanelConfig for Battery {
             attr.apply_to(&global_attrs);
         }
 
-        let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr, height));
+        let mut map = StreamMap::<_, Pin<Box<dyn Stream<Item = ()>>>>::new();
 
-        Ok((Box::pin(stream), None))
+        map.insert(
+            0,
+            Box::pin(IntervalStream::new(interval(self.duration)).map(|_| ())),
+        );
+        let stream = acpid_plug::connect().await;
+        if let Ok(stream) = stream {
+            println!("got stream");
+            map.insert(
+                1,
+                Box::pin(stream.map(|_| {
+                    println!("chom");
+                    ()
+                })),
+            );
+        }
+
+        Ok((Box::pin(map.map(move |_| self.draw(&cr, height))), None))
     }
 }

@@ -10,6 +10,7 @@ use std::{
 
 use aho_corasick::{AhoCorasick, Match};
 use anyhow::Result;
+use async_trait::async_trait;
 use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
@@ -757,6 +758,7 @@ impl Mpd {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Mpd {
     /// Configuration options:
     ///
@@ -969,7 +971,7 @@ impl PanelConfig for Mpd {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

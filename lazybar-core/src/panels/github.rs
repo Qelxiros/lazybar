@@ -3,6 +3,7 @@ use std::{
 };
 
 use anyhow::Result;
+use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::{FutureExt, StreamExt};
 use lazy_static::lazy_static;
@@ -77,6 +78,7 @@ impl Github {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Github {
     /// Configuration options:
     ///
@@ -150,7 +152,7 @@ impl PanelConfig for Github {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: std::rc::Rc<cairo::Context>,
         global_attrs: crate::attrs::Attrs,

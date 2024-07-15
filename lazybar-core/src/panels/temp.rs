@@ -1,6 +1,7 @@
 use std::{fs::File, io::Read, rc::Rc, time::Duration};
 
 use anyhow::Result;
+use async_trait::async_trait;
 use derive_builder::Builder;
 use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
@@ -61,6 +62,7 @@ impl Temp {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Temp {
     /// Configuration options:
     ///
@@ -104,7 +106,7 @@ impl PanelConfig for Temp {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

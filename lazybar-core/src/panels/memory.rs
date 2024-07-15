@@ -2,6 +2,7 @@ use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 
 use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use lazy_static::lazy_static;
@@ -218,6 +219,7 @@ impl Memory {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Memory {
     /// Configuration options:
     ///
@@ -284,7 +286,7 @@ impl PanelConfig for Memory {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

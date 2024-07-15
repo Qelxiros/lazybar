@@ -77,6 +77,7 @@ use std::{
 };
 
 use anyhow::Result;
+use async_trait::async_trait;
 use attrs::Attrs;
 use bar::{Bar, Event, EventResponse, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
@@ -101,6 +102,7 @@ pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
 
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
+#[async_trait(?Send)]
 pub trait PanelConfig {
     /// Parses an instance of this type from a subset of the global [`Config`].
     fn parse(
@@ -121,7 +123,7 @@ pub trait PanelConfig {
     /// # Errors
     ///
     /// If the process of creating a [`PanelStream`] fails.
-    fn run(
+    async fn run(
         self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
@@ -297,11 +299,13 @@ pub mod builders {
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
                 let (name, visible) = panel.props();
-                let (stream, sender) = panel.run(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?;
+                let (stream, sender) = panel
+                    .run(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )
+                    .await?;
                 bar.left.push(Panel::new(None, name, sender, visible));
                 left_panels.insert(idx, stream);
             }
@@ -311,11 +315,13 @@ pub mod builders {
             let mut center_panels = StreamMap::with_capacity(self.center.len());
             for (idx, panel) in self.center.into_iter().enumerate() {
                 let (name, visible) = panel.props();
-                let (stream, sender) = panel.run(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?;
+                let (stream, sender) = panel
+                    .run(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )
+                    .await?;
                 bar.center.push(Panel::new(None, name, sender, visible));
                 center_panels.insert(idx, stream);
             }
@@ -325,11 +331,13 @@ pub mod builders {
             let mut right_panels = StreamMap::with_capacity(self.right.len());
             for (idx, panel) in self.right.into_iter().enumerate() {
                 let (name, visible) = panel.props();
-                let (stream, sender) = panel.run(
-                    bar.cr.clone(),
-                    self.attrs.clone(),
-                    i32::from(self.height),
-                )?;
+                let (stream, sender) = panel
+                    .run(
+                        bar.cr.clone(),
+                        self.attrs.clone(),
+                        i32::from(self.height),
+                    )
+                    .await?;
                 bar.right.push(Panel::new(None, name, sender, visible));
                 right_panels.insert(idx, stream);
             }

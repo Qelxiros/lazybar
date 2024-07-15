@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use derive_builder::Builder;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -68,6 +69,7 @@ impl Cpu {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Cpu {
     /// Configuration options:
     ///
@@ -116,7 +118,7 @@ impl PanelConfig for Cpu {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

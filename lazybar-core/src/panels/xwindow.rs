@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use tokio::task::{self, JoinHandle};
@@ -201,6 +202,7 @@ impl XWindow {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for XWindow {
     /// Configuration options:
     ///
@@ -249,7 +251,7 @@ impl PanelConfig for XWindow {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

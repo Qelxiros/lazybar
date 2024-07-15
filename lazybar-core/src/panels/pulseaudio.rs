@@ -12,6 +12,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::FutureExt;
@@ -300,6 +301,7 @@ impl Pulseaudio {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Pulseaudio {
     /// Configuration options:
     ///
@@ -368,7 +370,7 @@ impl PanelConfig for Pulseaudio {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

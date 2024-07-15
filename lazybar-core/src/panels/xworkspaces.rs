@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use pangocairo::functions::{create_layout, show_layout};
@@ -387,6 +388,7 @@ impl XWorkspaces {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for XWorkspaces {
     /// Configuration options:
     ///
@@ -434,7 +436,7 @@ impl PanelConfig for XWorkspaces {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

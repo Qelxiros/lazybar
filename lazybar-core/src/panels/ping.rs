@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
@@ -82,6 +83,7 @@ impl Ping {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Ping {
     /// Configuration options:
     ///
@@ -149,7 +151,7 @@ impl PanelConfig for Ping {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,

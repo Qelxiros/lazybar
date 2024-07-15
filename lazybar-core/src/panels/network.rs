@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::Result;
+use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use nix::{
@@ -165,6 +166,7 @@ impl Network {
     }
 }
 
+#[async_trait(?Send)]
 impl PanelConfig for Network {
     /// Configuration options:
     ///
@@ -218,7 +220,7 @@ impl PanelConfig for Network {
         (self.name, self.common.visible)
     }
 
-    fn run(
+    async fn run(
         mut self: Box<Self>,
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
