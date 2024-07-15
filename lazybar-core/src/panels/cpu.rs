@@ -62,6 +62,7 @@ impl Cpu {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -86,7 +87,7 @@ impl PanelConfig for Cpu {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &config::Config,
+        _global: &config::Config,
     ) -> Result<Self> {
         let mut builder = CpuBuilder::default();
 
@@ -102,7 +103,6 @@ impl PanelConfig for Cpu {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["CPU: %percentage%%"],
             &[""],

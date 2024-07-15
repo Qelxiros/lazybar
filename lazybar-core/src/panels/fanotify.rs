@@ -98,6 +98,7 @@ impl Fanotify {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -119,7 +120,7 @@ impl PanelConfig for Fanotify {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = FanotifyBuilder::default();
 
@@ -129,7 +130,6 @@ impl PanelConfig for Fanotify {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["%file%"],
             &[""],

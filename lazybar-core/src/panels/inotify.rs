@@ -96,6 +96,7 @@ impl Inotify {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -117,7 +118,7 @@ impl PanelConfig for Inotify {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = InotifyBuilder::default();
 
@@ -127,7 +128,6 @@ impl PanelConfig for Inotify {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["%file%"],
             &[""],

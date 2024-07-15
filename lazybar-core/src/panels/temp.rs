@@ -55,6 +55,7 @@ impl Temp {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -77,7 +78,7 @@ impl PanelConfig for Temp {
     fn parse(
         name: &'static str,
         table: &mut std::collections::HashMap<String, config::Value>,
-        global: &config::Config,
+        _global: &config::Config,
     ) -> Result<Self> {
         let mut builder = TempBuilder::default();
 
@@ -90,7 +91,6 @@ impl PanelConfig for Temp {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["TEMP: %temp%"],
             &[""],

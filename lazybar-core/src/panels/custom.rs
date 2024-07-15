@@ -90,6 +90,7 @@ impl Custom {
             text.trim(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -116,7 +117,7 @@ impl PanelConfig for Custom {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &config::Config,
+        _global: &config::Config,
     ) -> Result<Self> {
         let builder = match (
             remove_string_from_config("command", table),
@@ -145,7 +146,6 @@ impl PanelConfig for Custom {
         Ok(builder
             .common(PanelCommon::parse(
                 table,
-                global,
                 &[""],
                 &["%stdout%"],
                 &[""],

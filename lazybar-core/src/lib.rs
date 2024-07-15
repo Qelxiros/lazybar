@@ -54,6 +54,8 @@ mod cleanup;
 /// Common configuration for panels.
 pub mod common;
 mod highlight;
+/// Support for embedding images onto the bar
+pub mod image;
 /// Support for inter-process communication, like that provided by the
 /// `lazybar-msg` crate.
 pub mod ipc;

@@ -1,8 +1,6 @@
 use std::ops::Sub;
 
-use config::Config;
-
-use crate::remove_string_from_config;
+use crate::{parser, remove_string_from_config};
 
 /// Utility data structure to display one of several strings based on a value in
 /// a range, like a volume icon.
@@ -40,8 +38,8 @@ impl Ramp {
     /// a table with keys ranging from 0 to any number. The values should be
     /// [pango] markup strings.
     #[must_use]
-    pub fn parse(name: impl AsRef<str>, global: &Config) -> Option<Self> {
-        let ramps_table = global.get_table("ramps").ok()?;
+    pub fn parse(name: impl AsRef<str>) -> Option<Self> {
+        let ramps_table = parser::RAMPS.get().unwrap();
         let mut ramp_table =
             ramps_table.get(name.as_ref())?.clone().into_table().ok()?;
         let mut key = 0;

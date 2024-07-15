@@ -37,6 +37,7 @@ use crate::{
     actions::Actions,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
     common::{draw_common, PanelCommon},
+    image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream, Ramp,
@@ -104,6 +105,7 @@ impl Pulseaudio {
         ramp_muted: &Ramp,
         attrs: &Attrs,
         dependence: Dependence,
+        images: Vec<Image>,
         height: i32,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
@@ -122,7 +124,7 @@ impl Pulseaudio {
             .replace("%ramp%", ramp_text.as_str())
             .replace("%volume%", volume.to_string().as_str());
 
-        draw_common(cr, text.as_str(), attrs, dependence, height)
+        draw_common(cr, text.as_str(), attrs, dependence, images, height)
     }
 
     fn process_event(
@@ -333,7 +335,7 @@ impl PanelConfig for Pulseaudio {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = PulseaudioBuilder::default();
 
@@ -353,7 +355,6 @@ impl PanelConfig for Pulseaudio {
         builder.recv(Arc::new(Mutex::new(recv)));
         builder.common(PanelCommon::parse(
             table,
-            global,
             &["_unmuted", "_muted"],
             &["%ramp%%volume%", "%ramp%%volume%"],
             &[""],
@@ -489,6 +490,7 @@ impl PanelConfig for Pulseaudio {
         let format_muted = self.common.formats[1].clone();
         let attrs = self.common.attrs[0].clone();
         let dependence = self.common.dependence;
+        let images = self.common.images.clone();
 
         let mut map = StreamMap::<
             usize,
@@ -540,6 +542,7 @@ impl PanelConfig for Pulseaudio {
                     &ramp_muted,
                     &attrs,
                     dependence,
+                    images.clone(),
                     height,
                 )
             })),

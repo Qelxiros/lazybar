@@ -84,11 +84,8 @@ pub fn remove_string_from_config<S: std::hash::BuildHasher>(
             },
             |s| {
                 Some(
-                    replace_consts(
-                        s.as_str(),
-                        &*parser::CONSTS.read().unwrap(),
-                    )
-                    .to_string(),
+                    replace_consts(s.as_str(), parser::CONSTS.get().unwrap())
+                        .to_string(),
                 )
             },
         )
@@ -118,7 +115,7 @@ pub fn remove_array_from_config<S: std::hash::BuildHasher>(
                                     ValueKind::String(
                                         replace_consts(
                                             val.as_str(),
-                                            &*parser::CONSTS.read().unwrap(),
+                                            parser::CONSTS.get().unwrap(),
                                         )
                                         .to_string(),
                                     ),
@@ -198,7 +195,7 @@ pub fn remove_color_from_config<S: std::hash::BuildHasher>(
                 None
             },
             |val| {
-                replace_consts(val.as_str(), &*parser::CONSTS.read().unwrap())
+                replace_consts(val.as_str(), parser::CONSTS.get().unwrap())
                     .parse()
                     .map_or_else(
                         |_| {

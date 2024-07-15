@@ -154,6 +154,7 @@ impl<P: Precision + Clone> Clock<P> {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -229,14 +230,13 @@ where
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = ClockBuilder::default();
 
         builder.name(name);
         builder.common(PanelCommon::parse_variadic(
             table,
-            global,
             &["%Y-%m-%d %T"],
             &[""],
             &[],

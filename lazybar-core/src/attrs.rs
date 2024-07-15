@@ -1,11 +1,10 @@
 use anyhow::{Context, Result};
-use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pango::FontDescription;
 
 use crate::{
-    background::Bg, remove_color_from_config, remove_string_from_config,
+    background::Bg, parser, remove_color_from_config, remove_string_from_config,
 };
 
 /// Attributes of a panel, or the defaults for the bar.
@@ -39,8 +38,8 @@ impl Attrs {
     /// - `font: String`: Specify the font to be used. This will be turned into
     ///   a [`pango::FontDescription`], so it's very configurable. Font family,
     ///   weight, size, and more can be specified.
-    pub fn parse(name: impl AsRef<str>, global: &Config) -> Result<Self> {
-        let attrs_table = global.get_table("attrs")?;
+    pub fn parse(name: impl AsRef<str>) -> Result<Self> {
+        let attrs_table = parser::ATTRS.get().unwrap();
         let name = name.as_ref();
         log::debug!("parsing {name} attrs");
         let mut attr_table = attrs_table
@@ -57,7 +56,7 @@ impl Attrs {
             builder.fg(fg);
         }
         if let Some(bg) = remove_string_from_config("bg", &mut attr_table) {
-            if let Some(bg) = Bg::parse(bg.as_str(), global) {
+            if let Some(bg) = Bg::parse(bg.as_str()) {
                 log::debug!("got bg: {bg:?}");
                 builder.bg(bg);
             }
@@ -76,8 +75,8 @@ impl Attrs {
     /// background colors always exist. No default font is set because
     /// [pango] will choose a reasonable font from those that exist on the host
     /// system.
-    pub fn parse_global(name: impl AsRef<str>, global: &Config) -> Self {
-        Self::parse(name, global).unwrap_or_default()
+    pub fn parse_global(name: impl AsRef<str>) -> Self {
+        Self::parse(name).unwrap_or_default()
     }
 
     /// Sets the font of a [`pango::Layout`].

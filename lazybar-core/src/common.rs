@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use config::{Config, Value};
+use config::Value;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
 
@@ -9,6 +9,7 @@ use crate::{
     actions::Actions,
     attrs::Attrs,
     bar::{Dependence, PanelDrawInfo},
+    image::Image,
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, Ramp,
 };
@@ -27,6 +28,7 @@ pub fn draw_common(
     text: &str,
     attrs: &Attrs,
     dependence: Dependence,
+    images: Vec<Image>,
     height: i32,
 ) -> Result<PanelDrawInfo> {
     let layout = pangocairo::functions::create_layout(cr);
@@ -43,6 +45,11 @@ pub fn draw_common(
         Box::new(move |cr| {
             let offset =
                 bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
+
+            for image in &images {
+                image.draw(cr)?;
+            }
+
             cr.save()?;
             cr.translate(
                 offset.0,
@@ -76,6 +83,8 @@ pub struct PanelCommon {
     pub actions: Actions,
     /// The ramps that are available for use in format strings
     pub ramps: Vec<Ramp>,
+    /// The images that will be displayed on the bar
+    pub images: Vec<Image>,
     /// Whether the panel should be visible on startup
     pub visible: bool,
 }
@@ -89,10 +98,10 @@ impl PanelCommon {
     /// not noted, panels accept one format string with no suffix.
     /// Dependence should be specified as `dependence = "value"`, where value is
     /// a valid variant of [`Dependence`].
-    /// See [`Attrs::parse`] and [`Actions::parse`] for more parsing details.
+    /// See [`Attrs::parse`], [`Actions::parse`], [`Image::parse`], and
+    /// [`Ramp::parse`] for more parsing details.
     pub fn parse<S: std::hash::BuildHasher>(
         table: &mut HashMap<String, Value, S>,
-        global: &Config,
         format_suffixes: &[&'static str],
         format_defaults: &[&'static str],
         attrs_prefixes: &[&'static str],
@@ -136,7 +145,7 @@ impl PanelCommon {
                         format!("{p}attrs").as_str(),
                         table,
                     ) {
-                        Attrs::parse(name, global).unwrap_or_default()
+                        Attrs::parse(name).unwrap_or_default()
                     } else {
                         Attrs::default()
                     }
@@ -156,7 +165,7 @@ impl PanelCommon {
                         format!("ramp{suffix}").as_str(),
                         table,
                     ) {
-                        Ramp::parse(ramp, global)
+                        Ramp::parse(ramp)
                     } else {
                         None
                     }
@@ -165,6 +174,27 @@ impl PanelCommon {
                 .collect(),
         );
         log::debug!("got ramps: {:?}", builder.ramps);
+
+        builder.images(remove_array_from_config("images", table).map_or_else(
+            || Vec::new(),
+            |a| {
+                a.into_iter()
+                    .filter_map(|i| {
+                        Image::parse(
+                            i.into_string()
+                                .map_err(|e| {
+                                    log::warn!("Failed to parse string: {e}");
+                                })
+                                .ok()?
+                                .as_str(),
+                        )
+                        .map_err(|e| log::warn!("Failed to parse image: {e}"))
+                        .ok()
+                    })
+                    .collect()
+            },
+        ));
+        log::debug!("got images: {:?}", builder.images);
 
         builder
             .visible(remove_bool_from_config("visible", table).unwrap_or(true));
@@ -182,7 +212,6 @@ impl PanelCommon {
     /// See [`Attrs::parse`] for more parsing details.
     pub fn parse_variadic<S: std::hash::BuildHasher>(
         table: &mut HashMap<String, Value, S>,
-        global: &Config,
         format_default: &[&'static str],
         attrs_prefixes: &[&'static str],
         ramp_suffixes: &[&'static str],
@@ -226,7 +255,7 @@ impl PanelCommon {
                         format!("{p}attrs").as_str(),
                         table,
                     ) {
-                        Attrs::parse(name, global).unwrap_or_default()
+                        Attrs::parse(name).unwrap_or_default()
                     } else {
                         Attrs::default()
                     }
@@ -246,7 +275,7 @@ impl PanelCommon {
                         format!("ramp{suffix}").as_str(),
                         table,
                     ) {
-                        Ramp::parse(ramp, global)
+                        Ramp::parse(ramp)
                     } else {
                         None
                     }
@@ -255,6 +284,18 @@ impl PanelCommon {
                 .collect(),
         );
         log::debug!("got ramps: {:?}", builder.ramps);
+
+        builder.images(remove_array_from_config("images", table).map_or_else(
+            || Vec::new(),
+            |a| {
+                a.into_iter()
+                    .filter_map(|i| {
+                        Image::parse(i.into_string().ok()?.as_str()).ok()
+                    })
+                    .collect()
+            },
+        ));
+        log::debug!("got images: {:?}", builder.images);
 
         builder
             .visible(remove_bool_from_config("visible", table).unwrap_or(true));

@@ -76,6 +76,7 @@ impl Battery {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -128,7 +129,7 @@ impl PanelConfig for Battery {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = BatteryBuilder::default();
 
@@ -144,7 +145,6 @@ impl PanelConfig for Battery {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[
                 "_charging",
                 "_discharging",

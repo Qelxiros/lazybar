@@ -32,7 +32,7 @@ xworkspaces = ["chrono"]
 [dependencies]
 aho-corasick = { version = "1.1.3", optional = true }
 anyhow = "1.0.86"
-cairo-rs = { version = "0.20.0", features = ["xcb"] }
+cairo-rs = { version = "0.20.0", features = ["png", "xcb"] }
 chrono = { version = "0.4.38", default-features = false, features = ["alloc", "clock"], optional = true }
 config = { version = "0.14.0", default-features = false, features = ["toml"] }
 csscolorparser = "0.6.2"

@@ -195,6 +195,7 @@ impl XWindow {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -216,7 +217,7 @@ impl PanelConfig for XWindow {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = XWindowBuilder::default();
 
@@ -235,7 +236,6 @@ impl PanelConfig for XWindow {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["%name%"],
             &[""],

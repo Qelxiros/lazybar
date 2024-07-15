@@ -1,11 +1,10 @@
 use std::f64::consts::PI;
 
 use anyhow::Result;
-use config::Config;
 use csscolorparser::Color;
 
 use crate::{
-    remove_color_from_config, remove_float_from_config,
+    parser, remove_color_from_config, remove_float_from_config,
     remove_string_from_config,
 };
 
@@ -53,8 +52,8 @@ impl Bg {
     ///   - default: 0.0
     /// - `color`: the background color. See [csscolorparser] for parsing
     ///   options.
-    pub fn parse(name: impl AsRef<str>, global: &Config) -> Option<Self> {
-        let bgs_table = global.get_table("bgs").ok()?;
+    pub fn parse(name: impl AsRef<str>) -> Option<Self> {
+        let bgs_table = parser::BGS.get().unwrap();
         let mut bg_table =
             bgs_table.get(name.as_ref())?.clone().into_table().ok()?;
         if let Some(style) =

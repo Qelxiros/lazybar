@@ -29,14 +29,13 @@ impl PanelConfig for Separator {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = SeparatorBuilder::default();
 
         builder.name(name);
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &[" <span foreground='#666'>|</span> "],
             &[""],
@@ -67,6 +66,7 @@ impl PanelConfig for Separator {
                 self.common.formats[0].as_str(),
                 &self.common.attrs[0],
                 self.common.dependence,
+                self.common.images.clone(),
                 height,
             ))),
             None,

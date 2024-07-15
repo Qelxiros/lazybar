@@ -212,6 +212,7 @@ impl Memory {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -237,7 +238,7 @@ impl PanelConfig for Memory {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = MemoryBuilder::default();
 
@@ -250,7 +251,6 @@ impl PanelConfig for Memory {
         }
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[""],
             &["RAM: %percentage_used%%"],
             &[""],

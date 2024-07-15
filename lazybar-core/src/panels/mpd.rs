@@ -285,6 +285,7 @@ impl Mpd {
         let bar_width = self.last_progress_width;
         let attrs = self.common.attrs[0].clone();
         let progress_bg = self.progress_bg.clone();
+        let images = self.common.images.clone();
 
         Ok(PanelDrawInfo::new(
             (size.0, height),
@@ -298,6 +299,7 @@ impl Mpd {
                     (0.0, false)
                 };
 
+                cr.save()?;
                 cr.translate(offset.0, 0.0);
 
                 cr.set_source_rgba(
@@ -313,8 +315,13 @@ impl Mpd {
                     height as f64,
                 );
                 cr.fill()?;
+                cr.restore()?;
 
-                cr.translate(0.0, f64::from(height - size.1) / 2.0);
+                for image in &images {
+                    image.draw(cr)?;
+                }
+
+                cr.translate(offset.0, f64::from(height - size.1) / 2.0);
 
                 attrs.apply_fg(cr);
                 show_layout(cr, &layout);
@@ -847,7 +854,7 @@ impl PanelConfig for Mpd {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = MpdBuilder::default();
 
@@ -916,7 +923,6 @@ impl PanelConfig for Mpd {
         ])?);
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[
                 "_playing",
                 "_paused",

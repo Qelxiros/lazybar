@@ -1,8 +1,9 @@
-use std::{collections::HashMap, path::Path, sync::RwLock};
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use config::{Config, File, FileFormat, Value};
 use lazy_static::lazy_static;
+use tokio::sync::OnceCell;
 
 #[cfg(feature = "battery")]
 use crate::panels::Battery;
@@ -44,9 +45,21 @@ use crate::{
 };
 
 lazy_static! {
+    /// The `attrs` table from the global [`Config`].
+    pub static ref ATTRS: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
+    /// The `ramps` table from the global [`Config`].
+    pub static ref RAMPS: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
+    /// The `bgs` table from the global [`Config`].
+    pub static ref BGS: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
     /// The `consts` table from the global [`Config`].
-    pub static ref CONSTS: RwLock<HashMap<String, Value>> =
-        RwLock::new(HashMap::new());
+    pub static ref CONSTS: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
+    /// The `images` table from the global [`Config`].
+    pub static ref IMAGES: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
 }
 
 /// Parses a bar with a given name from the global [`Config`]
@@ -82,9 +95,24 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
         });
     log::info!("Read config file");
 
-    if let Ok(consts) = config.get_table("consts") {
-        *CONSTS.write().unwrap() = consts;
-    }
+    ATTRS
+        .set(config.get_table("attrs").unwrap_or_default())
+        .unwrap();
+
+    RAMPS
+        .set(config.get_table("ramps").unwrap_or_default())
+        .unwrap();
+
+    BGS.set(config.get_table("bgs").unwrap_or_default())
+        .unwrap();
+
+    CONSTS
+        .set(config.get_table("consts").unwrap_or_default())
+        .unwrap();
+
+    IMAGES
+        .set(config.get_table("images").unwrap_or_default())
+        .unwrap();
 
     let mut bars_table = config
         .get_table("bars")
@@ -188,7 +216,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
                 remove_string_from_config("default_attrs", &mut bar_table)
                     .map_or_else(
                         || Attrs::default(),
-                        |name| Attrs::parse_global(name, &config),
+                        |name| Attrs::parse_global(name),
                     );
             log::trace!("got bar attrs: {val:?}");
             val

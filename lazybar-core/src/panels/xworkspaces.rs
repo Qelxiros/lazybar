@@ -201,11 +201,16 @@ impl XWorkspaces {
         let nonempty = self.common.attrs[1].clone();
         let inactive = self.common.attrs[2].clone();
         let highlight = self.highlight.clone();
+        let images = self.common.images.clone();
 
         Ok(PanelDrawInfo::new(
             (width, height),
             self.common.dependence,
             Box::new(move |cr| {
+                for image in &images {
+                    image.draw(cr)?;
+                }
+
                 for (i, layout) in &layouts {
                     let size = layout.pixel_size();
 
@@ -399,7 +404,7 @@ impl PanelConfig for XWorkspaces {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = XWorkspacesBuilder::default();
 
@@ -414,7 +419,6 @@ impl PanelConfig for XWorkspaces {
 
         builder.common(PanelCommon::parse(
             table,
-            global,
             &[],
             &[],
             &["active_", "nonempty_", "inactive_"],

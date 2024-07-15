@@ -76,6 +76,7 @@ impl Ping {
             text.as_str(),
             &self.common.attrs[0],
             self.common.dependence,
+            self.common.images.clone(),
             height,
         )
     }
@@ -110,7 +111,7 @@ impl PanelConfig for Ping {
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
-        global: &Config,
+        _global: &Config,
     ) -> Result<Self> {
         let mut builder = PingBuilder::default();
 
@@ -135,7 +136,6 @@ impl PanelConfig for Ping {
 
         builder.common(PanelCommon::parse(
             table,
-            global,
             &["_connected", "_disconnected"],
             &["%ping%ms", "disconnected"],
             &[""],
