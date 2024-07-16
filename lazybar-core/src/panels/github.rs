@@ -51,7 +51,7 @@ pub struct Github {
 
 impl Github {
     fn draw(
-        &mut self,
+        &self,
         cr: &Rc<cairo::Context>,
         height: i32,
         count: usize,
@@ -64,7 +64,7 @@ impl Github {
         };
 
         if count == 50 {
-            text.push_str("+");
+            text.push('+');
         }
 
         draw_common(
@@ -171,7 +171,7 @@ impl PanelConfig for Github {
         }
 
         let stream = GithubStream::new(
-            self.token.clone(),
+            self.token.as_str(),
             self.interval,
             self.filter.clone(),
             self.include,
@@ -192,7 +192,7 @@ struct GithubStream {
 
 impl GithubStream {
     pub fn new(
-        token: String,
+        token: &str,
         duration: Duration,
         filter: Vec<String>,
         include: bool,
@@ -244,10 +244,7 @@ impl Stream for GithubStream {
             let include = self.include;
             let client = self.client.clone();
             self.handle = Some(task::spawn(get_notifications(
-                interval.clone(),
-                filter.clone(),
-                include,
-                client.clone(),
+                interval, filter, include, client,
             )));
 
             Poll::Pending
@@ -270,10 +267,8 @@ async fn get_notifications(
     let headers = response.headers().clone();
     let wait = headers
         .get("X-Poll-Interval")
-        .map(|v| v.to_str().ok())
-        .flatten()
-        .map(|s| s.parse().ok())
-        .flatten()
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse().ok())
         .unwrap_or(60);
 
     interval.lock().await.reset_after(Duration::from_secs(wait));

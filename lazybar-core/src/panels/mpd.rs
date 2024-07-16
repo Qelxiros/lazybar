@@ -657,7 +657,7 @@ impl Mpd {
         conn: Arc<Mutex<Client>>,
         last_layout: Rc<Mutex<Option<(Layout, String)>>>,
         index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
-        send: UnboundedSender<EventResponse>,
+        send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let ev = event.clone();
         let result = match event {
@@ -734,7 +734,7 @@ impl Mpd {
                                             conn,
                                             last_layout,
                                             index_cache,
-                                            send.clone(),
+                                            send,
                                         )
                                     });
                             };
@@ -748,8 +748,7 @@ impl Mpd {
         .map_or_else(
             |e| {
                 EventResponse::Err(format!(
-                    "Event {:?} produced an error: {e}",
-                    ev
+                    "Event {ev:?} produced an error: {e}",
                 ))
             },
             |_| EventResponse::Ok,
@@ -1028,7 +1027,7 @@ impl PanelConfig for Mpd {
                     conn.clone(),
                     last_layout.clone(),
                     index_cache.clone(),
-                    response_send.clone(),
+                    &response_send,
                 )
             })),
         );

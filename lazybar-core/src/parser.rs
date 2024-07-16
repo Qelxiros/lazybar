@@ -216,10 +216,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
         .attrs({
             let val =
                 remove_string_from_config("default_attrs", &mut bar_table)
-                    .map_or_else(
-                        || Attrs::default(),
-                        |name| Attrs::parse_global(name),
-                    );
+                    .map_or_else(Attrs::default, Attrs::parse_global);
             log::trace!("got bar attrs: {val:?}");
             val
         })

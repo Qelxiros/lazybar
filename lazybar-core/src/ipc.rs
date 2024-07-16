@@ -7,7 +7,7 @@ use tokio::{
 };
 use tokio_stream::{wrappers::UnixListenerStream, Stream};
 
-const IPC_DIR: &'static str = "/tmp/lazybar-ipc/";
+const IPC_DIR: &str = "/tmp/lazybar-ipc/";
 
 /// Initialize IPC for a given bar
 pub fn init(
@@ -25,9 +25,11 @@ pub fn init(
             let (path, idx) = find_path(bar_name, mon_name);
 
             if idx > 0 {
-                final_name = format!("{bar_name}_{mon_name}({idx})")
+                final_name = format!("{bar_name}_{mon_name}({idx})");
             }
 
+            // map_or_else is invalid here due to type coercion issues
+            #[allow(clippy::option_if_let_else)]
             if let Ok(listener) = UnixListener::bind(path) {
                 let stream = UnixListenerStream::new(listener);
 

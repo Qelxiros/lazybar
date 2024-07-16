@@ -123,14 +123,14 @@ async fn main() -> Result<ExitCode> {
 
         match response {
             Ok(response @ EventResponse::Ok) => {
-                log::info!("{file_name}: {response}")
+                log::info!("{file_name}: {response}");
             }
             Ok(response @ EventResponse::Err(_)) => {
                 log::info!("{file_name}: {response}");
-                exit_code = ExitCode::from(2)
+                exit_code = ExitCode::from(2);
             }
             Err(ref e) => {
-                log::warn!("received invalid response from {path:?}: {e}")
+                log::warn!("received invalid response from {path:?}: {e}");
             }
         }
 

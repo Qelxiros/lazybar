@@ -259,7 +259,7 @@ impl PanelConfig for Memory {
             &[""],
         )?);
 
-        builder.formatter(AhoCorasick::new(&[
+        builder.formatter(AhoCorasick::new([
             "%gb_total%",
             "%gb_used%",
             "%gb_free%",

@@ -115,9 +115,10 @@ impl Pulseaudio {
             Err(e) => return Err(e),
         };
         *last_data.lock().unwrap() = (volume, mute);
-        let (format, ramp) = match mute {
-            false => (format_unmuted, ramp),
-            true => (format_muted, ramp_muted),
+        let (format, ramp) = if mute {
+            (format_muted, ramp_muted)
+        } else {
+            (format_unmuted, ramp)
         };
         let ramp_text =
             ramp.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0);
@@ -182,11 +183,10 @@ impl Pulseaudio {
                 mainloop.borrow_mut().lock();
                 introspector.deref().borrow_mut().get_sink_info_by_name(
                     sink,
-                    move |r| match r {
-                        ListResult::Item(i) => {
+                    move |r| {
+                        if let ListResult::Item(i) = r {
                             let _ = send.send(i.volume);
                         }
-                        _ => {}
                     },
                 );
                 mainloop.borrow_mut().unlock();
@@ -246,8 +246,7 @@ impl Pulseaudio {
             Event::Action(ref value) => {
                 let value = value.to_owned();
                 Ok(response_send.send(EventResponse::Err(format!(
-                    "Unknown event {}",
-                    value
+                    "Unknown event {value}",
                 )))?)
             }
             Event::Mouse(event) => Ok(match event.button {
@@ -382,10 +381,9 @@ impl PanelConfig for Pulseaudio {
                 .context("Failed to create pulseaudio mainloop")?,
         ));
         let context = Rc::new(RefCell::new(
-            context::Context::new(mainloop.borrow().deref(), "lazybar")
-                .ok_or_else(|| {
-                    anyhow!("Failed to create pulseaudio context")
-                })?,
+            context::Context::new(&*mainloop.borrow(), "lazybar").ok_or_else(
+                || anyhow!("Failed to create pulseaudio context"),
+            )?,
         ));
 
         {
@@ -530,7 +528,7 @@ impl PanelConfig for Pulseaudio {
             })),
         );
 
-        let last_data = Arc::new(Mutex::new(initial.clone()));
+        let last_data = Arc::new(Mutex::new(initial));
 
         Ok((
             Box::pin(map.map(move |(_, data)| {

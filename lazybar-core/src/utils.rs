@@ -108,8 +108,8 @@ pub fn remove_array_from_config<S: std::hash::BuildHasher>(
                 Some(
                     v.into_iter()
                         .map(|val| {
-                            let origin = val.origin().map(|s| s.to_string());
-                            if let Ok(val) = val.clone().into_string() {
+                            let origin = val.origin().map(ToString::to_string);
+                            val.clone().into_string().map_or(val, |val| {
                                 Value::new(
                                     origin.as_ref(),
                                     ValueKind::String(
@@ -120,9 +120,7 @@ pub fn remove_array_from_config<S: std::hash::BuildHasher>(
                                         .to_string(),
                                     ),
                                 )
-                            } else {
-                                val
-                            }
+                            })
                         })
                         .collect(),
                 )
@@ -217,13 +215,15 @@ pub fn replace_consts<'a, S: std::hash::BuildHasher>(
 ) -> Cow<'a, str> {
     REGEX.replace_all(format, |caps: &Captures| {
         let con = &caps["const"];
-        if let Some(con) =
-            consts.get(con).and_then(|c| c.clone().into_string().ok())
-        {
-            con
-        } else {
-            log::warn!("Invalid constant: {con}");
-            String::new()
-        }
+        consts
+            .get(con)
+            .and_then(|c| c.clone().into_string().ok())
+            .map_or_else(
+                || {
+                    log::warn!("Invalid constant: {con}");
+                    String::new()
+                },
+                |con| con,
+            )
     })
 }

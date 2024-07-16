@@ -41,7 +41,7 @@ impl Image {
     pub fn parse(name: &str) -> Result<Self> {
         let images_table = parser::IMAGES.get().unwrap();
 
-        let mut table = get_table_from_config(name, &images_table)
+        let mut table = get_table_from_config(name, images_table)
             .with_context(|| format!("No subtable found with name {name}"))?;
 
         let mut builder = ImageBuilder::default();

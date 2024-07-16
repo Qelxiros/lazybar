@@ -119,9 +119,7 @@ impl BitAnd for PanelStatus {
 
 impl From<&Panel> for PanelStatus {
     fn from(value: &Panel) -> Self {
-        if !value.visible {
-            Self::ZeroWidth
-        } else {
+        if value.visible {
             value.draw_info.as_ref().map_or(Self::ZeroWidth, |d| {
                 match (d.dependence, d.width) {
                     (Dependence::None, 0) => Self::ZeroWidth,
@@ -129,6 +127,8 @@ impl From<&Panel> for PanelStatus {
                     (dep, _) => Self::Dependent(dep),
                 }
             })
+        } else {
+            Self::ZeroWidth
         }
     }
 }
@@ -283,7 +283,7 @@ impl Bar {
     /// Create a new bar, typically from information held by a
     /// [`BarConfig`][crate::BarConfig].
     pub fn new(
-        name: String,
+        name: &str,
         position: Position,
         height: u16,
         transparent: bool,
@@ -305,7 +305,7 @@ impl Bar {
         let (conn, screen, window, width, visual, mon_name) =
             create_window(position, height, transparent, &bg, monitor)?;
 
-        let (result, name) = ipc::init(ipc, name.as_str(), mon_name.as_str());
+        let (result, name) = ipc::init(ipc, name, mon_name.as_str());
         let ipc_stream: Pin<
             Box<
                 dyn Stream<
@@ -331,7 +331,7 @@ impl Bar {
             height.into(),
             name.as_str(),
             mon_name.as_str(),
-        )?;
+        );
         map_window(&conn, window)?;
         let surface =
             create_surface(&conn, window, visual, width.into(), height.into())?;
@@ -395,7 +395,7 @@ impl Bar {
     }
 
     /// Handle an event from the X server.
-    pub async fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
+    pub fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
         match event {
             xcb::Event::X(x::Event::Expose(_)) => {
                 log::info!(
@@ -468,10 +468,13 @@ impl Bar {
                 ))?;
                 Ok(false)
             }
-            "toggle" => match self.mapped {
-                true => self.handle_ipc_event("hide"),
-                false => self.handle_ipc_event("show"),
-            },
+            "toggle" => {
+                if self.mapped {
+                    self.handle_ipc_event("hide")
+                } else {
+                    self.handle_ipc_event("show")
+                }
+            }
             _ => Ok(false),
         }
     }
@@ -514,8 +517,8 @@ impl Bar {
         ipc_set: &mut JoinSet<Result<()>>,
         ipc_send: UnboundedSender<EventResponse>,
     ) -> Result<bool> {
-        if message.starts_with("#") {
-            return self.handle_panel_event(&message[1..]);
+        if let Some(stripped) = message.strip_prefix('#') {
+            return self.handle_panel_event(stripped);
         }
 
         let (dest, message) = match message.split_once('.') {

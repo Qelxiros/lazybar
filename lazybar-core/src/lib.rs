@@ -41,6 +41,14 @@
 #![doc = include_str!("../examples/config.toml")]
 //! ```
 #![deny(missing_docs)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::similar_names)]
 
 /// Configuration options for click/scroll events on panels.
 pub mod actions;
@@ -284,7 +292,7 @@ pub mod builders {
         #[allow(clippy::future_not_send)]
         async fn run_inner(self) -> Result<()> {
             let (mut bar, mut ipc_stream) = Bar::new(
-                self.name,
+                self.name.as_str(),
                 self.position,
                 self.height,
                 self.transparent,
@@ -413,7 +421,7 @@ pub mod builders {
                 tokio::select! {
                     Some(Ok(event)) = x_stream.next() => {
                         log::trace!("X event: {event:?}");
-                        if let Err(e) = bar.process_event(&event).await {
+                        if let Err(e) = bar.process_event(&event) {
                             if let Some(e) = e.downcast_ref::<xcb::Error>() {
                                 log::warn!("X event caused an error: {e}");
                                 // close when X server does

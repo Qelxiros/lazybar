@@ -141,14 +141,13 @@ impl PanelCommon {
             attrs_prefixes
                 .iter()
                 .map(|p| {
-                    if let Some(name) = remove_string_from_config(
+                    remove_string_from_config(
                         format!("{p}attrs").as_str(),
                         table,
-                    ) {
+                    )
+                    .map_or_else(Attrs::default, |name| {
                         Attrs::parse(name).unwrap_or_default()
-                    } else {
-                        Attrs::default()
-                    }
+                    })
                 })
                 .collect(),
         );
@@ -161,14 +160,11 @@ impl PanelCommon {
             ramp_suffixes
                 .iter()
                 .map(|suffix| {
-                    if let Some(ramp) = remove_string_from_config(
+                    remove_string_from_config(
                         format!("ramp{suffix}").as_str(),
                         table,
-                    ) {
-                        Ramp::parse(ramp)
-                    } else {
-                        None
-                    }
+                    )
+                    .and_then(Ramp::parse)
                     .unwrap_or_default()
                 })
                 .collect(),
@@ -176,7 +172,7 @@ impl PanelCommon {
         log::debug!("got ramps: {:?}", builder.ramps);
 
         builder.images(remove_array_from_config("images", table).map_or_else(
-            || Vec::new(),
+            Vec::new,
             |a| {
                 a.into_iter()
                     .filter_map(|i| {
@@ -219,18 +215,19 @@ impl PanelCommon {
         let mut builder = PanelCommonBuilder::default();
 
         builder.formats(
-            remove_array_from_config("formats", table)
-                .map(|arr| {
-                    arr.into_iter()
-                        .filter_map(|v| v.into_string().ok())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_else(|| {
+            remove_array_from_config("formats", table).map_or_else(
+                || {
                     format_default
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
-                }),
+                },
+                |arr| {
+                    arr.into_iter()
+                        .filter_map(|v| v.into_string().ok())
+                        .collect::<Vec<_>>()
+                },
+            ),
         );
         log::debug!("got formats: {:?}", builder.formats);
 
@@ -251,14 +248,13 @@ impl PanelCommon {
             attrs_prefixes
                 .iter()
                 .map(|p| {
-                    if let Some(name) = remove_string_from_config(
+                    remove_string_from_config(
                         format!("{p}attrs").as_str(),
                         table,
-                    ) {
+                    )
+                    .map_or_else(Attrs::default, |name| {
                         Attrs::parse(name).unwrap_or_default()
-                    } else {
-                        Attrs::default()
-                    }
+                    })
                 })
                 .collect(),
         );
@@ -271,14 +267,11 @@ impl PanelCommon {
             ramp_suffixes
                 .iter()
                 .map(|suffix| {
-                    if let Some(ramp) = remove_string_from_config(
+                    remove_string_from_config(
                         format!("ramp{suffix}").as_str(),
                         table,
-                    ) {
-                        Ramp::parse(ramp)
-                    } else {
-                        None
-                    }
+                    )
+                    .and_then(Ramp::parse)
                     .unwrap_or_default()
                 })
                 .collect(),
@@ -286,7 +279,7 @@ impl PanelCommon {
         log::debug!("got ramps: {:?}", builder.ramps);
 
         builder.images(remove_array_from_config("images", table).map_or_else(
-            || Vec::new(),
+            Vec::new,
             |a| {
                 a.into_iter()
                     .filter_map(|i| {

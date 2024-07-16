@@ -131,13 +131,10 @@ pub fn create_window(
     let mut iter = monitors.monitors();
     let mon = if let Some(monitor) = monitor {
         iter.find(|info| {
-            if let Ok(name) = conn.wait_for_reply(
+            conn.wait_for_reply(
                 conn.send_request(&x::GetAtomName { atom: info.name() }),
-            ) {
-                name.name().to_string() == monitor
-            } else {
-                false
-            }
+            )
+            .map_or(false, |name| name.name().to_string() == monitor)
         })
         .with_context(|| format!("No monitor found with name {monitor}"))?
     } else {
@@ -214,7 +211,7 @@ pub fn set_wm_properties(
     height: u32,
     bar_name: &str,
     mon_name: &str,
-) -> Result<()> {
+) {
     if let Ok(window_type_atom) =
         intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")
     {
@@ -291,7 +288,7 @@ pub fn set_wm_properties(
             pid_atom,
             x::ATOM_CARDINAL,
             &[std::process::id()],
-        )?;
+        );
     }
 
     if let Ok(desktop_atom) = intern_named_atom(conn, b"_NET_WM_DESKTOP") {
@@ -310,17 +307,15 @@ pub fn set_wm_properties(
         x::ATOM_WM_NAME,
         x::ATOM_STRING,
         format!("lazybar_{bar_name}_{mon_name}").as_bytes(),
-    )?;
+    );
 
     let _ = change_property(
         conn,
         window,
         x::ATOM_WM_CLASS,
         x::ATOM_STRING,
-        ["lazybar\0Lazybar".as_bytes()].concat().as_slice(),
-    )?;
-
-    Ok(())
+        b"lazybar\0Lazybar",
+    );
 }
 
 #[allow(

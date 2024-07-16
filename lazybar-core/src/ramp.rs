@@ -57,7 +57,7 @@ impl Ramp {
 impl Default for Ramp {
     fn default() -> Self {
         Self {
-            icons: vec![String::from("")],
+            icons: vec![String::new()],
         }
     }
 }

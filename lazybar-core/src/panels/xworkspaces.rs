@@ -149,9 +149,6 @@ impl XWorkspaces {
             desktop_atom,
         )?;
 
-        // TODO: avoid cloning?
-        let nonempty_set2 = nonempty_set.clone();
-
         let active = self.common.attrs[0].clone();
         let nonempty = self.common.attrs[1].clone();
         let inactive = self.common.attrs[2].clone();
@@ -165,7 +162,7 @@ impl XWorkspaces {
                 if i == current {
                     active.apply_font(&layout);
                     (WorkspaceState::Active, layout)
-                } else if nonempty_set2.contains(&i) {
+                } else if nonempty_set.contains(&i) {
                     nonempty.apply_font(&layout);
                     (WorkspaceState::Nonempty, layout)
                 } else {
@@ -193,7 +190,7 @@ impl XWorkspaces {
                 .clone()
                 .map_or_else(|| size, |bg| bg.adjust_dims(size, height))
                 .0,
-            )
+            );
         }
         let width = width_cache.iter().sum::<i32>();
         drop(width_cache);
@@ -249,7 +246,7 @@ impl XWorkspaces {
                             cr.rectangle(
                                 0.0,
                                 f64::from(height) - highlight.height,
-                                f64::from(size.0) + 2.0 * offset.0,
+                                2.0f64.mul_add(offset.0, f64::from(size.0)),
                                 highlight.height,
                             );
                             cr.set_source_rgba(
@@ -274,7 +271,10 @@ impl XWorkspaces {
                     cr.restore()?;
 
                     cr.translate(
-                        f64::from(layout.pixel_size().0) + 2.0 * offset.0,
+                        2.0f64.mul_add(
+                            offset.0,
+                            f64::from(layout.pixel_size().0),
+                        ),
                         0.0,
                     );
                 }
@@ -506,19 +506,15 @@ impl PanelConfig for XWorkspaces {
         map.insert(
             1,
             Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
-                let conn = conn.clone();
-                let cache = cache.clone();
-                let names = names.clone();
-                let send = response_send.clone();
-                Ok(Self::process_event(
+                Self::process_event(
                     s,
                     conn.clone(),
                     root,
                     cache.clone(),
                     names.as_slice(),
                     current_atom,
-                    send.clone(),
-                )?)
+                    response_send.clone(),
+                )
             })),
         );
 
@@ -623,7 +619,7 @@ fn get_nonempty(
             }))
             .map_or(false, |r| {
                 r.value::<x::Atom>()
-                    .get(0)
+                    .first()
                     .map_or(false, |&v| v == normal_atom)
             })
         })

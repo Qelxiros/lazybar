@@ -56,9 +56,7 @@ impl Bg {
         let bgs_table = parser::BGS.get().unwrap();
         let mut bg_table =
             bgs_table.get(name.as_ref())?.clone().into_table().ok()?;
-        if let Some(style) =
-            remove_string_from_config(format!("style").as_str(), &mut bg_table)
-        {
+        remove_string_from_config("style", &mut bg_table).and_then(|style| {
             match style.as_str() {
                 "bubble" => {
                     let radius =
@@ -70,7 +68,7 @@ impl Bg {
                     let color =
                         remove_color_from_config("color", &mut bg_table)
                             .unwrap_or_default();
-                    Some(Bg::Bubble {
+                    Some(Self::Bubble {
                         radius,
                         border,
                         color,
@@ -83,17 +81,14 @@ impl Bg {
                     let color =
                         remove_color_from_config("color", &mut bg_table)
                             .unwrap_or_default();
-                    Some(Bg::BubbleProp { radius, color })
+                    Some(Self::BubbleProp { radius, color })
                 }
-                "none" => Some(Bg::None),
+                "none" => Some(Self::None),
                 _ => None,
             }
-        } else {
-            None
-        }
+        })
     }
 
-    #[must_use]
     pub(crate) fn draw(
         &self,
         cr: &cairo::Context,
@@ -137,7 +132,7 @@ impl Bg {
             }
             Self::BubbleProp { radius, color } => {
                 let border = (max_height - text_height) / 2.0;
-                let total_width = width + 2.0 * border;
+                let total_width = 2.0f64.mul_add(border, width);
 
                 cr.move_to(*radius, 0.0);
                 cr.rel_line_to(total_width - 2.0 * radius, 0.0);
@@ -186,13 +181,13 @@ impl Bg {
     /// Adjusts the dimensions of a panel to account for the background.
     pub fn adjust_dims(&self, dims: (i32, i32), max_height: i32) -> (i32, i32) {
         match self {
-            Bg::None => dims,
-            Bg::Bubble {
+            Self::None => dims,
+            Self::Bubble {
                 radius: _,
                 border,
                 color: _,
             } => (dims.0 + (2.0 * border).round() as i32, max_height),
-            Bg::BubbleProp {
+            Self::BubbleProp {
                 radius: _,
                 color: _,
             } => (dims.0 + max_height - dims.1, max_height),
