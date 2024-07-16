@@ -25,6 +25,10 @@
 //!   by panels.
 //! - `bgs`: each subtable defines a background configuration (shape, color)
 //!   that can be referenced by attrs.
+//! - `images`: each value is a path to an image that can be rendered on a panel
+//!   by referencing its key.
+//! - `consts`: each value is a string that can be substituted into any other
+//!   string by using `%{key}`
 //!
 //! None of these tables need to be declared explicitly, as they hold no values
 //! of their own. `[bars.example]` is sufficient to define a bar named
