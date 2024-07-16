@@ -15,7 +15,7 @@ categories = ["os::linux-apis","os::unix-apis","command-line-utilities","asynchr
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["cargo", "derive"] }
 clap_complete = "4.5.8"
-lazybar-core = { version = "0.3.9", path = "../lazybar-core" }
+lazybar-core = { version = "0.4.0", path = "../lazybar-core" }
 log = "0.4.22"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"

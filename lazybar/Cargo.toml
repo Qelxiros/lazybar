@@ -33,7 +33,7 @@ xworkspaces = ["lazybar-core/xworkspaces"]
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["cargo"] }
 clap_complete = "4.5.8"
-lazybar-core = { version = "0.3.9", default-features = false, path = "../lazybar-core" }
+lazybar-core = { version = "0.4.0", default-features = false, path = "../lazybar-core" }
 log = "0.4.22"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
 simple_logger = "5.0.0"
