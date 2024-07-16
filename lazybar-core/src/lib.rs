@@ -296,51 +296,102 @@ pub mod builders {
             )?;
             log::debug!("bar created");
 
+            let mut joinset = JoinSet::new();
+
             let mut left_panels = StreamMap::with_capacity(self.left.len());
             for (idx, panel) in self.left.into_iter().enumerate() {
-                let (name, visible) = panel.props();
-                let (stream, sender) = panel
-                    .run(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
+                let cr = bar.cr.clone();
+                let attrs = self.attrs.clone();
+                joinset.spawn_local(async move {
+                    (
+                        Alignment::Left,
+                        idx,
+                        panel.props(),
+                        panel
+                            .run(
+                                cr.clone(),
+                                attrs.clone(),
+                                i32::from(self.height),
+                            )
+                            .await,
                     )
-                    .await?;
-                bar.left.push(Panel::new(None, name, sender, visible));
-                left_panels.insert(idx, stream);
+                });
             }
-            bar.streams.insert(Alignment::Left, left_panels);
-            log::debug!("left panels running");
 
             let mut center_panels = StreamMap::with_capacity(self.center.len());
             for (idx, panel) in self.center.into_iter().enumerate() {
-                let (name, visible) = panel.props();
-                let (stream, sender) = panel
-                    .run(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
+                let cr = bar.cr.clone();
+                let attrs = self.attrs.clone();
+                joinset.spawn_local(async move {
+                    (
+                        Alignment::Center,
+                        idx,
+                        panel.props(),
+                        panel
+                            .run(
+                                cr.clone(),
+                                attrs.clone(),
+                                i32::from(self.height),
+                            )
+                            .await,
                     )
-                    .await?;
-                bar.center.push(Panel::new(None, name, sender, visible));
-                center_panels.insert(idx, stream);
+                });
             }
-            bar.streams.insert(Alignment::Center, center_panels);
-            log::debug!("center panels running");
 
             let mut right_panels = StreamMap::with_capacity(self.right.len());
             for (idx, panel) in self.right.into_iter().enumerate() {
-                let (name, visible) = panel.props();
-                let (stream, sender) = panel
-                    .run(
-                        bar.cr.clone(),
-                        self.attrs.clone(),
-                        i32::from(self.height),
+                let cr = bar.cr.clone();
+                let attrs = self.attrs.clone();
+                joinset.spawn_local(async move {
+                    (
+                        Alignment::Right,
+                        idx,
+                        panel.props(),
+                        panel
+                            .run(
+                                cr.clone(),
+                                attrs.clone(),
+                                i32::from(self.height),
+                            )
+                            .await,
                     )
-                    .await?;
-                bar.right.push(Panel::new(None, name, sender, visible));
-                right_panels.insert(idx, stream);
+                });
             }
+
+            while !joinset.is_empty() {
+                if let Some(Ok((
+                    alignment,
+                    idx,
+                    (name, visible),
+                    Ok((stream, sender)),
+                ))) = joinset.join_next().await
+                {
+                    match alignment {
+                        Alignment::Left => {
+                            bar.left
+                                .push(Panel::new(None, name, sender, visible));
+                            left_panels.insert(idx, stream);
+                        }
+                        Alignment::Center => {
+                            bar.center
+                                .push(Panel::new(None, name, sender, visible));
+                            center_panels.insert(idx, stream);
+                        }
+                        Alignment::Right => {
+                            bar.right
+                                .push(Panel::new(None, name, sender, visible));
+                            right_panels.insert(idx, stream);
+                        }
+                    }
+                }
+            }
+
+            bar.streams.insert(Alignment::Left, left_panels);
+            log::debug!("left panels running");
+
+            bar.streams.insert(Alignment::Center, center_panels);
+            log::debug!("center panels running");
+
             bar.streams.insert(Alignment::Right, right_panels);
             log::debug!("right panels running");
 

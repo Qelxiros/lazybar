@@ -193,14 +193,7 @@ impl PanelConfig for Battery {
         );
         let stream = acpid_plug::connect().await;
         if let Ok(stream) = stream {
-            println!("got stream");
-            map.insert(
-                1,
-                Box::pin(stream.map(|_| {
-                    println!("chom");
-                    ()
-                })),
-            );
+            map.insert(1, Box::pin(stream.map(|_| ())));
         }
 
         Ok((Box::pin(map.map(move |_| self.draw(&cr, height))), None))

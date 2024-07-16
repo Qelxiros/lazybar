@@ -280,14 +280,10 @@ async fn get_notifications(
 
     let body = response.json::<Vec<Thread>>().await?;
 
-    println!("{body:?}");
-
     let count = body
         .into_iter()
         .filter(|t| !(include ^ filter.contains(&t.reason)))
         .count();
-
-    println!("{count}");
 
     Ok(count)
 }
