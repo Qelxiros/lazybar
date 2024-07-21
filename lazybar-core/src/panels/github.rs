@@ -46,6 +46,7 @@ pub struct Github {
     include: bool,
     #[builder(default = "true")]
     show_zero: bool,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -59,8 +60,7 @@ impl Github {
         let mut text = if !self.show_zero && count == 0 {
             String::new()
         } else {
-            self.common.formats[0]
-                .replace("%count%", count.to_string().as_str())
+            self.format.replace("%count%", count.to_string().as_str())
         };
 
         if count == 50 {
@@ -137,13 +137,11 @@ impl PanelConfig for Github {
             builder.show_zero(show_zero);
         }
 
-        builder.common(PanelCommon::parse(
-            table,
-            &[""],
-            &["%count%"],
-            &[""],
-            &[],
-        )?);
+        let (common, formats) =
+            PanelCommon::parse(table, &[""], &["%count%"], &[""], &[])?;
+
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         Ok(builder.build()?)
     }

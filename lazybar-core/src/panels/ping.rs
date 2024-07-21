@@ -22,10 +22,13 @@ use tokio_stream::{Stream, StreamExt};
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
+    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream,
 };
+
+format_struct!(PingFormats, connected, disconnected);
 
 /// Displays the ping to a given address
 ///
@@ -44,6 +47,7 @@ pub struct Ping {
     pings: usize,
     #[builder(default, setter(strip_option))]
     max_ping: Option<u32>,
+    formats: PingFormats,
     common: PanelCommon,
 }
 
@@ -55,9 +59,10 @@ impl Ping {
         height: i32,
     ) -> Result<PanelDrawInfo> {
         let text = ping.map_or_else(
-            |_| self.common.formats[1].clone(),
+            |_| self.formats.disconnected.to_string(),
             |ping| {
-                self.common.formats[0]
+                self.formats
+                    .connected
                     .replace("%ping%", ping.to_string().as_str())
                     .replace(
                         "%ramp%",
@@ -136,13 +141,17 @@ impl PanelConfig for Ping {
             builder.max_ping(max_ping as u32);
         }
 
-        builder.common(PanelCommon::parse(
+        let (common, formats) = PanelCommon::parse(
             table,
             &["_connected", "_disconnected"],
             &["%ping%ms", "disconnected"],
             &[""],
             &[""],
-        )?);
+        )?;
+
+        builder.common(common);
+
+        builder.formats(PingFormats::new(formats));
 
         Ok(builder.build()?)
     }

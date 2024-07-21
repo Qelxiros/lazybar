@@ -26,6 +26,7 @@ pub struct Temp {
     zone: usize,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -44,7 +45,8 @@ impl Temp {
 
         let temp = temp.trim().parse::<u32>()? / 1000;
 
-        let text = self.common.formats[0]
+        let text = self
+            .format
             .replace("%temp%", temp.to_string().as_str())
             .replace(
                 "%ramp%",
@@ -91,13 +93,12 @@ impl PanelConfig for Temp {
         if let Some(zone) = remove_uint_from_config("zone", table) {
             builder.zone(zone as usize);
         }
-        builder.common(PanelCommon::parse(
-            table,
-            &[""],
-            &["TEMP: %temp%"],
-            &[""],
-            &[""],
-        )?);
+
+        let (common, formats) =
+            PanelCommon::parse(table, &[""], &["TEMP: %temp%"], &[""], &[""])?;
+
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         Ok(builder.build()?)
     }

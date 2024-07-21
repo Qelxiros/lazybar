@@ -23,64 +23,6 @@ use crate::{
     Attrs, PanelConfig, PanelStream,
 };
 
-struct XStream {
-    conn: Arc<xcb::Connection>,
-    name_atom: x::Atom,
-    window_atom: x::Atom,
-    handle: Option<JoinHandle<()>>,
-}
-
-impl XStream {
-    const fn new(
-        conn: Arc<xcb::Connection>,
-        name_atom: x::Atom,
-        window_atom: x::Atom,
-    ) -> Self {
-        Self {
-            conn,
-            name_atom,
-            window_atom,
-            handle: None,
-        }
-    }
-}
-
-impl Stream for XStream {
-    type Item = ();
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &self.handle {
-            if handle.is_finished() {
-                self.handle = None;
-                Poll::Ready(Some(()))
-            } else {
-                Poll::Pending
-            }
-        } else {
-            let conn = self.conn.clone();
-            let waker = cx.waker().clone();
-            let name_atom = self.name_atom;
-            let window_atom = self.window_atom;
-            self.handle = Some(task::spawn_blocking(move || loop {
-                let event = conn.wait_for_event();
-                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
-                    event
-                {
-                    if event.atom() == name_atom || event.atom() == window_atom
-                    {
-                        waker.wake();
-                        break;
-                    }
-                }
-            }));
-            Poll::Pending
-        }
-    }
-}
-
 /// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
 ///
 /// Requires an EWMH-compliant window manager
@@ -94,6 +36,7 @@ pub struct XWindow {
     windows: HashSet<x::Window>,
     #[builder(setter(strip_option), default = "None")]
     max_width: Option<u32>,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -186,7 +129,7 @@ impl XWindow {
             }
         };
 
-        let text = self.common.formats[0].replace(
+        let text = self.format.replace(
             "%name%",
             glib::markup_escape_text(name.as_str()).as_str(),
         );
@@ -236,13 +179,12 @@ impl PanelConfig for XWindow {
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as u32);
         }
-        builder.common(PanelCommon::parse(
-            table,
-            &[""],
-            &["%name%"],
-            &[""],
-            &[],
-        )?);
+
+        let (common, formats) =
+            PanelCommon::parse(table, &[""], &["%name%"], &[""], &[])?;
+
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         Ok(builder.build()?)
     }
@@ -285,5 +227,63 @@ impl PanelConfig for XWindow {
                 self.draw(&cr, name_atom, window_atom, root, utf8_atom, height)
             });
         Ok((Box::pin(stream), None))
+    }
+}
+
+struct XStream {
+    conn: Arc<xcb::Connection>,
+    name_atom: x::Atom,
+    window_atom: x::Atom,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl XStream {
+    const fn new(
+        conn: Arc<xcb::Connection>,
+        name_atom: x::Atom,
+        window_atom: x::Atom,
+    ) -> Self {
+        Self {
+            conn,
+            name_atom,
+            window_atom,
+            handle: None,
+        }
+    }
+}
+
+impl Stream for XStream {
+    type Item = ();
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        if let Some(handle) = &self.handle {
+            if handle.is_finished() {
+                self.handle = None;
+                Poll::Ready(Some(()))
+            } else {
+                Poll::Pending
+            }
+        } else {
+            let conn = self.conn.clone();
+            let waker = cx.waker().clone();
+            let name_atom = self.name_atom;
+            let window_atom = self.window_atom;
+            self.handle = Some(task::spawn_blocking(move || loop {
+                let event = conn.wait_for_event();
+                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
+                    event
+                {
+                    if event.atom() == name_atom || event.atom() == window_atom
+                    {
+                        waker.wake();
+                        break;
+                    }
+                }
+            }));
+            Poll::Pending
+        }
     }
 }

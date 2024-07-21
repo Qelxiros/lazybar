@@ -21,10 +21,142 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
+    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream,
 };
+
+format_struct!(NetworkFormats, connected, disconnected);
+
+/// Displays information about the current network connection on a given
+/// interface.
+#[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
+pub struct Network {
+    name: &'static str,
+    #[builder(default = r#"String::from("wlan0")"#)]
+    if_name: String,
+    #[builder(default = r#"Duration::from_secs(10)"#)]
+    duration: Duration,
+    formats: NetworkFormats,
+    common: PanelCommon,
+}
+
+impl Network {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
+        let essid = glib::markup_escape_text(
+            query_essid(self.if_name.as_str())
+                .unwrap_or_default()
+                .as_str(),
+        );
+        let ip = query_ip(self.if_name.as_str());
+
+        let text = ip.map_or_else(
+            || {
+                self.formats
+                    .disconnected
+                    .replace("%ifname%", self.if_name.as_str())
+                    .replace("%essid%", essid.as_str())
+            },
+            |ip| {
+                self.formats
+                    .connected
+                    .replace("%ifname%", self.if_name.as_str())
+                    .replace("%essid%", essid.as_str())
+                    .replace("%local_ip%", ip.to_string().as_str())
+            },
+        );
+
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            self.common.dependence,
+            self.common.images.clone(),
+            height,
+        )
+    }
+}
+
+#[async_trait(?Send)]
+impl PanelConfig for Network {
+    /// Configuration options:
+    ///
+    /// - `if_name`: the name of the given interface. These can be listed with
+    ///   `ip link`.
+    ///   - type: String
+    ///   - default: "wlan0"
+    ///
+    /// - `format_connected`: the format string when there is a connection
+    ///   present on the interface
+    ///   - type: String
+    ///   - default: "%ifname% %essid% %local_ip%"
+    ///
+    /// - `format_disconnected`: the format string when there is no connection
+    ///   present on the interface
+    ///   - type: String
+    ///   - default: "%ifname% disconnected"
+    ///
+    /// - `interval`: the amount of time in seconds to wait between polls
+    ///   - type: u64
+    ///   - default: 10
+    ///
+    /// - See [`PanelCommon::parse`].
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = NetworkBuilder::default();
+
+        builder.name(name);
+        if let Some(if_name) = remove_string_from_config("if_name", table) {
+            builder.if_name(if_name);
+        }
+        if let Some(duration) = remove_uint_from_config("interval", table) {
+            builder.duration(Duration::from_secs(duration));
+        }
+
+        let (common, formats) = PanelCommon::parse(
+            table,
+            &["_connected", "_disconnected"],
+            &["%ifname% %essid% %local_ip%", "%ifname% disconnected"],
+            &[""],
+            &[],
+        )?;
+
+        builder.common(common);
+        builder.formats(NetworkFormats::new(formats));
+
+        Ok(builder.build()?)
+    }
+
+    fn props(&self) -> (&'static str, bool) {
+        (self.name, self.common.visible)
+    }
+
+    async fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        height: i32,
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+        let stream = IntervalStream::new(interval(self.duration))
+            .map(move |_| self.draw(&cr, height));
+
+        Ok((Box::pin(stream), None))
+    }
+}
 
 #[repr(C)]
 struct Essid {
@@ -112,127 +244,4 @@ fn query_ipv6(if_name: &str) -> Option<IpAddr> {
 
 fn query_ip(if_name: &str) -> Option<IpAddr> {
     query_ipv4(if_name).or_else(|| query_ipv6(if_name))
-}
-
-/// Displays information about the current network connection on a given
-/// interface.
-#[derive(Builder, Debug)]
-#[builder_struct_attr(allow(missing_docs))]
-#[builder_impl_attr(allow(missing_docs))]
-pub struct Network {
-    name: &'static str,
-    #[builder(default = r#"String::from("wlan0")"#)]
-    if_name: String,
-    #[builder(default = r#"Duration::from_secs(10)"#)]
-    duration: Duration,
-    common: PanelCommon,
-}
-
-impl Network {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-        height: i32,
-    ) -> Result<PanelDrawInfo> {
-        let essid = glib::markup_escape_text(
-            query_essid(self.if_name.as_str())
-                .unwrap_or_default()
-                .as_str(),
-        );
-        let ip = query_ip(self.if_name.as_str());
-
-        let text = ip.map_or_else(
-            || {
-                self.common.formats[1]
-                    .replace("%ifname%", self.if_name.as_str())
-                    .replace("%essid%", essid.as_str())
-            },
-            |ip| {
-                self.common.formats[0]
-                    .replace("%ifname%", self.if_name.as_str())
-                    .replace("%essid%", essid.as_str())
-                    .replace("%local_ip%", ip.to_string().as_str())
-            },
-        );
-
-        draw_common(
-            cr,
-            text.as_str(),
-            &self.common.attrs[0],
-            self.common.dependence,
-            self.common.images.clone(),
-            height,
-        )
-    }
-}
-
-#[async_trait(?Send)]
-impl PanelConfig for Network {
-    /// Configuration options:
-    ///
-    /// - `if_name`: the name of the given interface. These can be listed with
-    ///   `ip link`.
-    ///   - type: String
-    ///   - default: "wlan0"
-    ///
-    /// - `format_connected`: the format string when there is a connection
-    ///   present on the interface
-    ///   - type: String
-    ///   - default: "%ifname% %essid% %local_ip%"
-    ///
-    /// - `format_disconnected`: the format string when there is no connection
-    ///   present on the interface
-    ///   - type: String
-    ///   - default: "%ifname% disconnected"
-    ///
-    /// - `interval`: the amount of time in seconds to wait between polls
-    ///   - type: u64
-    ///   - default: 10
-    ///
-    /// - See [`PanelCommon::parse`].
-    fn parse(
-        name: &'static str,
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = NetworkBuilder::default();
-
-        builder.name(name);
-        if let Some(if_name) = remove_string_from_config("if_name", table) {
-            builder.if_name(if_name);
-        }
-        if let Some(duration) = remove_uint_from_config("interval", table) {
-            builder.duration(Duration::from_secs(duration));
-        }
-
-        builder.common(PanelCommon::parse(
-            table,
-            &["_connected", "_disconnected"],
-            &["%ifname% %essid% %local_ip%", "%ifname% disconnected"],
-            &[""],
-            &[],
-        )?);
-
-        Ok(builder.build()?)
-    }
-
-    fn props(&self) -> (&'static str, bool) {
-        (self.name, self.common.visible)
-    }
-
-    async fn run(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-        let stream = IntervalStream::new(interval(self.duration))
-            .map(move |_| self.draw(&cr, height));
-
-        Ok((Box::pin(stream), None))
-    }
 }

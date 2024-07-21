@@ -24,6 +24,115 @@ use crate::{
     remove_string_from_config, Attrs, PanelConfig, PanelStream,
 };
 
+/// Uses fanotify to monitor and display the contents of a file. Useful for
+/// one-off scripts that can write to a file easily.
+#[derive(Builder, Debug)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
+pub struct Fanotify {
+    name: &'static str,
+    path: String,
+    format: &'static str,
+    common: PanelCommon,
+}
+
+impl Fanotify {
+    fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        file: &Rc<Mutex<File>>,
+        height: i32,
+    ) -> Result<PanelDrawInfo> {
+        let mut buf = String::new();
+        file.lock().unwrap().read_to_string(&mut buf)?;
+        file.lock().unwrap().rewind()?;
+        let text = self
+            .format
+            .replace("%file%", buf.lines().next().unwrap_or(""));
+
+        draw_common(
+            cr,
+            text.as_str(),
+            &self.common.attrs[0],
+            self.common.dependence,
+            self.common.images.clone(),
+            height,
+        )
+    }
+}
+
+#[async_trait(?Send)]
+impl PanelConfig for Fanotify {
+    /// Configuration options:
+    ///
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%file%`
+    ///   - formatting options: `%file%`
+    ///
+    /// - `path`: the file to monitor
+    ///   - type: String
+    ///   - default: none
+    ///
+    /// - See [`PanelCommon::parse`].
+    fn parse(
+        name: &'static str,
+        table: &mut HashMap<String, Value>,
+        _global: &Config,
+    ) -> Result<Self> {
+        let mut builder = FanotifyBuilder::default();
+
+        builder.name(name);
+
+        if let Some(path) = remove_string_from_config("path", table) {
+            builder.path(path);
+        }
+
+        let (common, formats) =
+            PanelCommon::parse(table, &[""], &["%file%"], &[""], &[])?;
+
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
+
+        Ok(builder.build()?)
+    }
+
+    fn props(&self) -> (&'static str, bool) {
+        (self.name, self.common.visible)
+    }
+
+    async fn run(
+        mut self: Box<Self>,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
+        height: i32,
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
+        // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
+        // doesn't know that it's real
+        let init_flags = InitFlags::from_bits_retain(0x00000200);
+        let event_f_flags = EventFFlags::O_RDONLY | EventFFlags::O_NOATIME;
+        let fanotify = fanotify::Fanotify::init(init_flags, event_f_flags)?;
+
+        let mark_flags = MarkFlags::FAN_MARK_ADD;
+        let mask = MaskFlags::FAN_MODIFY
+            | MaskFlags::FAN_DELETE_SELF
+            | MaskFlags::FAN_MOVE_SELF;
+        fanotify.mark(mark_flags, mask, None, Some(self.path.as_str()))?;
+
+        for attr in &mut self.common.attrs {
+            attr.apply_to(&global_attrs);
+        }
+
+        let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
+        let stream = tokio_stream::once(file.clone())
+            .chain(FanotifyStream::new(fanotify, file))
+            .map(move |f| self.draw(&cr, &f, height));
+
+        Ok((Box::pin(stream), None))
+    }
+}
+
 struct FanotifyStream {
     f: Arc<fanotify::Fanotify>,
     file: Rc<Mutex<File>>,
@@ -67,112 +176,5 @@ impl Stream for FanotifyStream {
             }));
             Poll::Pending
         }
-    }
-}
-
-/// Uses fanotify to monitor and display the contents of a file. Useful for
-/// one-off scripts that can write to a file easily.
-#[derive(Builder, Debug)]
-#[builder_struct_attr(allow(missing_docs))]
-#[builder_impl_attr(allow(missing_docs))]
-pub struct Fanotify {
-    name: &'static str,
-    path: String,
-    common: PanelCommon,
-}
-
-impl Fanotify {
-    fn draw(
-        &self,
-        cr: &Rc<cairo::Context>,
-        file: &Rc<Mutex<File>>,
-        height: i32,
-    ) -> Result<PanelDrawInfo> {
-        let mut buf = String::new();
-        file.lock().unwrap().read_to_string(&mut buf)?;
-        file.lock().unwrap().rewind()?;
-        let text = self.common.formats[0]
-            .replace("%file%", buf.lines().next().unwrap_or(""));
-
-        draw_common(
-            cr,
-            text.as_str(),
-            &self.common.attrs[0],
-            self.common.dependence,
-            self.common.images.clone(),
-            height,
-        )
-    }
-}
-
-#[async_trait(?Send)]
-impl PanelConfig for Fanotify {
-    /// Configuration options:
-    ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `%file%`
-    ///   - formatting options: `%file%`
-    ///
-    /// - `path`: the file to monitor
-    ///   - type: String
-    ///   - default: none
-    ///
-    /// - See [`PanelCommon::parse`].
-    fn parse(
-        name: &'static str,
-        table: &mut HashMap<String, Value>,
-        _global: &Config,
-    ) -> Result<Self> {
-        let mut builder = FanotifyBuilder::default();
-
-        builder.name(name);
-        if let Some(path) = remove_string_from_config("path", table) {
-            builder.path(path);
-        }
-        builder.common(PanelCommon::parse(
-            table,
-            &[""],
-            &["%file%"],
-            &[""],
-            &[],
-        )?);
-
-        Ok(builder.build()?)
-    }
-
-    fn props(&self) -> (&'static str, bool) {
-        (self.name, self.common.visible)
-    }
-
-    async fn run(
-        mut self: Box<Self>,
-        cr: Rc<cairo::Context>,
-        global_attrs: Attrs,
-        height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
-        // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
-        // doesn't know that it's real
-        let init_flags = InitFlags::from_bits_retain(0x00000200);
-        let event_f_flags = EventFFlags::O_RDONLY | EventFFlags::O_NOATIME;
-        let fanotify = fanotify::Fanotify::init(init_flags, event_f_flags)?;
-
-        let mark_flags = MarkFlags::FAN_MARK_ADD;
-        let mask = MaskFlags::FAN_MODIFY
-            | MaskFlags::FAN_DELETE_SELF
-            | MaskFlags::FAN_MOVE_SELF;
-        fanotify.mark(mark_flags, mask, None, Some(self.path.as_str()))?;
-
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-
-        let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
-        let stream = tokio_stream::once(file.clone())
-            .chain(FanotifyStream::new(fanotify, file))
-            .map(move |f| self.draw(&cr, &f, height));
-
-        Ok((Box::pin(stream), None))
     }
 }

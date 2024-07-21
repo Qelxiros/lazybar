@@ -30,70 +30,6 @@ use crate::{
     Attrs, Highlight, PanelConfig, PanelStream,
 };
 
-struct XStream {
-    conn: Arc<xcb::Connection>,
-    number_atom: x::Atom,
-    current_atom: x::Atom,
-    names_atom: x::Atom,
-    handle: Option<JoinHandle<()>>,
-}
-
-impl XStream {
-    const fn new(
-        conn: Arc<xcb::Connection>,
-        number_atom: x::Atom,
-        current_atom: x::Atom,
-        names_atom: x::Atom,
-    ) -> Self {
-        Self {
-            conn,
-            number_atom,
-            current_atom,
-            names_atom,
-            handle: None,
-        }
-    }
-}
-
-impl Stream for XStream {
-    type Item = ();
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &self.handle {
-            if handle.is_finished() {
-                self.handle = None;
-                Poll::Ready(Some(()))
-            } else {
-                Poll::Pending
-            }
-        } else {
-            let conn = self.conn.clone();
-            let waker = cx.waker().clone();
-            let number_atom = self.number_atom;
-            let current_atom = self.current_atom;
-            let names_atom = self.names_atom;
-            self.handle = Some(task::spawn_blocking(move || loop {
-                let event = conn.wait_for_event();
-                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
-                    event
-                {
-                    if event.atom() == number_atom
-                        || event.atom() == current_atom
-                        || event.atom() == names_atom
-                    {
-                        waker.wake();
-                        break;
-                    }
-                }
-            }));
-            Poll::Pending
-        }
-    }
-}
-
 #[derive(PartialEq, Eq, Debug)]
 enum WorkspaceState {
     Active,
@@ -419,13 +355,15 @@ impl PanelConfig for XWorkspaces {
             log::error!("Failed to connect to X server");
         }
 
-        builder.common(PanelCommon::parse(
+        let (common, _formats) = PanelCommon::parse(
             table,
             &[],
             &[],
             &["active_", "nonempty_", "inactive_"],
             &[],
-        )?);
+        )?;
+
+        builder.common(common);
 
         builder.highlight(Highlight::parse(table));
 
@@ -667,4 +605,68 @@ fn get_clients(
     }
 
     Ok(windows)
+}
+
+struct XStream {
+    conn: Arc<xcb::Connection>,
+    number_atom: x::Atom,
+    current_atom: x::Atom,
+    names_atom: x::Atom,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl XStream {
+    const fn new(
+        conn: Arc<xcb::Connection>,
+        number_atom: x::Atom,
+        current_atom: x::Atom,
+        names_atom: x::Atom,
+    ) -> Self {
+        Self {
+            conn,
+            number_atom,
+            current_atom,
+            names_atom,
+            handle: None,
+        }
+    }
+}
+
+impl Stream for XStream {
+    type Item = ();
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        if let Some(handle) = &self.handle {
+            if handle.is_finished() {
+                self.handle = None;
+                Poll::Ready(Some(()))
+            } else {
+                Poll::Pending
+            }
+        } else {
+            let conn = self.conn.clone();
+            let waker = cx.waker().clone();
+            let number_atom = self.number_atom;
+            let current_atom = self.current_atom;
+            let names_atom = self.names_atom;
+            self.handle = Some(task::spawn_blocking(move || loop {
+                let event = conn.wait_for_event();
+                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
+                    event
+                {
+                    if event.atom() == number_atom
+                        || event.atom() == current_atom
+                        || event.atom() == names_atom
+                    {
+                        waker.wake();
+                        break;
+                    }
+                }
+            }));
+            Poll::Pending
+        }
+    }
 }

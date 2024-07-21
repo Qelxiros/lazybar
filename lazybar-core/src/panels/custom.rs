@@ -21,20 +21,6 @@ use crate::{
     PanelStream,
 };
 
-struct CustomStream {
-    interval: Option<Interval>,
-    fired: bool,
-}
-
-impl CustomStream {
-    const fn new(interval: Option<Interval>) -> Self {
-        Self {
-            interval,
-            fired: false,
-        }
-    }
-}
-
 impl Stream for CustomStream {
     type Item = ();
     fn poll_next(
@@ -67,6 +53,7 @@ pub struct Custom {
     command: Command,
     #[builder(setter(strip_option))]
     duration: Option<Duration>,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -77,7 +64,8 @@ impl Custom {
         height: i32,
     ) -> Result<PanelDrawInfo> {
         let output = self.command.output()?;
-        let text = self.common.formats[0]
+        let text = self
+            .format
             .replace(
                 "%stdout%",
                 String::from_utf8_lossy(output.stdout.as_slice()).as_ref(),
@@ -143,16 +131,13 @@ impl PanelConfig for Custom {
             (None, None) => CustomBuilder::default(),
         };
 
-        let builder = builder.name(name);
+        let (common, formats) =
+            PanelCommon::parse(table, &[""], &["%stdout%"], &[""], &[])?;
 
         Ok(builder
-            .common(PanelCommon::parse(
-                table,
-                &[""],
-                &["%stdout%"],
-                &[""],
-                &[],
-            )?)
+            .name(name)
+            .common(common)
+            .format(formats.into_iter().next().unwrap().leak())
             .build()?)
     }
 
@@ -178,5 +163,19 @@ impl PanelConfig for Custom {
             ),
             None,
         ))
+    }
+}
+
+struct CustomStream {
+    interval: Option<Interval>,
+    fired: bool,
+}
+
+impl CustomStream {
+    const fn new(interval: Option<Interval>) -> Self {
+        Self {
+            interval,
+            fired: false,
+        }
     }
 }

@@ -1,6 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
+#[cfg(doc)]
+use config::Config;
 use config::Value;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
@@ -73,8 +75,6 @@ pub fn draw_common(
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct PanelCommon {
-    /// The format strings used by the panel
-    pub formats: Vec<String>,
     /// Whether the panel depends on its neighbors
     pub dependence: Dependence,
     /// The instances of [`Attrs`] used by the panel
@@ -106,23 +106,21 @@ impl PanelCommon {
         format_defaults: &[&'static str],
         attrs_prefixes: &[&'static str],
         ramp_suffixes: &[&'static str],
-    ) -> Result<Self> {
+    ) -> Result<(Self, Vec<String>)> {
         let mut builder = PanelCommonBuilder::default();
 
-        builder.formats(
-            format_suffixes
-                .iter()
-                .zip(format_defaults.iter())
-                .map(|(suffix, default)| {
-                    remove_string_from_config(
-                        format!("format{suffix}").as_str(),
-                        table,
-                    )
-                    .unwrap_or_else(|| (*default).to_string())
-                })
-                .collect(),
-        );
-        log::debug!("got formats: {:?}", builder.formats);
+        let formats = format_suffixes
+            .iter()
+            .zip(format_defaults.iter())
+            .map(|(suffix, default)| {
+                remove_string_from_config(
+                    format!("format{suffix}").as_str(),
+                    table,
+                )
+                .unwrap_or_else(|| (*default).to_string())
+            })
+            .collect();
+        log::debug!("got formats: {:?}", formats);
 
         builder.dependence(
             match remove_string_from_config("dependence", table)
@@ -195,7 +193,7 @@ impl PanelCommon {
         builder
             .visible(remove_bool_from_config("visible", table).unwrap_or(true));
 
-        Ok(builder.build()?)
+        Ok((builder.build()?, formats))
     }
 
     /// Attempts to parse common panel configuration options from a subset of
@@ -211,25 +209,23 @@ impl PanelCommon {
         format_default: &[&'static str],
         attrs_prefixes: &[&'static str],
         ramp_suffixes: &[&'static str],
-    ) -> Result<Self> {
+    ) -> Result<(Self, Vec<String>)> {
         let mut builder = PanelCommonBuilder::default();
 
-        builder.formats(
-            remove_array_from_config("formats", table).map_or_else(
-                || {
-                    format_default
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                },
-                |arr| {
-                    arr.into_iter()
-                        .filter_map(|v| v.into_string().ok())
-                        .collect::<Vec<_>>()
-                },
-            ),
+        let formats = remove_array_from_config("formats", table).map_or_else(
+            || {
+                format_default
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            },
+            |arr| {
+                arr.into_iter()
+                    .filter_map(|v| v.into_string().ok())
+                    .collect::<Vec<_>>()
+            },
         );
-        log::debug!("got formats: {:?}", builder.formats);
+        log::debug!("got formats: {:?}", formats);
 
         builder.dependence(
             match remove_string_from_config("dependence", table)
@@ -293,6 +289,38 @@ impl PanelCommon {
         builder
             .visible(remove_bool_from_config("visible", table).unwrap_or(true));
 
-        Ok(builder.build()?)
+        Ok((builder.build()?, formats))
     }
+}
+
+/// Defines a struct to hold format strings, along with a constructor.
+///
+/// The constructor has the following function signature:
+/// ```rust
+/// fn new(value: Vec<String>) -> Self
+/// ```
+/// `value` must have the same number of elements as `args` passed to this
+/// macro, and `new` will panic otherwise.
+#[macro_export]
+macro_rules! format_struct {
+    ($name:ident, $($args:ident),+) => {
+        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        struct $name {
+            $(
+                $args: &'static str,
+            )+
+        }
+
+        impl $name {
+            fn new(value: Vec<String>) -> Self {
+                let mut value = value.into_iter().map(|s| s.leak());
+
+                Self {
+                    $(
+                        $args: value.next().unwrap(),
+                    )+
+                }
+            }
+        }
+    };
 }

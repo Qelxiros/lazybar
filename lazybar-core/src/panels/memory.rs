@@ -35,6 +35,7 @@ pub struct Memory {
     #[builder(default = r#"String::from("/proc/meminfo")"#)]
     path: String,
     formatter: AhoCorasick,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -90,7 +91,7 @@ impl Memory {
 
         let mut text = String::new();
         self.formatter.replace_all_with(
-            self.common.formats[0].as_str(),
+            self.format,
             &mut text,
             |_, content, dst| match content {
                 "%gb_used%" => {
@@ -251,13 +252,18 @@ impl PanelConfig for Memory {
         if let Some(path) = remove_string_from_config("path", table) {
             builder.path(path);
         }
-        builder.common(PanelCommon::parse(
+
+        let (common, formats) = PanelCommon::parse(
             table,
             &[""],
             &["RAM: %percentage_used%%"],
             &[""],
             &[""],
-        )?);
+        )?;
+
+        builder.common(common);
+
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         builder.formatter(AhoCorasick::new([
             "%gb_total%",

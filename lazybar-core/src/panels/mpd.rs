@@ -31,6 +31,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
     common::PanelCommon,
+    format_struct,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
@@ -50,6 +51,26 @@ enum EventType {
     Progress,
     Action,
 }
+
+format_struct!(
+    MpdFormats,
+    playing,
+    paused,
+    stopped,
+    main,
+    next,
+    prev,
+    play,
+    pause,
+    toggle_playing,
+    toggle_paused,
+    toggle_stopped,
+    shuffle,
+    repeat,
+    random,
+    single,
+    consume
+);
 
 /// Displays information about music currently playing through
 /// [MPD](https://musicpd.org)
@@ -79,6 +100,7 @@ pub struct Mpd {
     last_layout: Rc<Mutex<Option<(Layout, String)>>>,
     index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
     formatter: AhoCorasick,
+    formats: MpdFormats,
     common: PanelCommon,
 }
 
@@ -91,16 +113,15 @@ impl Mpd {
     ) -> Result<PanelDrawInfo> {
         let conn = self.noidle_conn.clone();
         let status = conn.lock().unwrap().status()?;
-        let format = self.common.formats[match status.state {
-            State::Play => 0,
-            State::Pause => 1,
-            State::Stop => 2,
-        }]
-        .as_str();
+        let format = match status.state {
+            State::Play => self.formats.playing,
+            State::Pause => self.formats.paused,
+            State::Stop => self.formats.stopped,
+        };
 
         let mut main = String::new();
         self.formatter.replace_all_with(
-            self.common.formats[3].as_str(),
+            self.formats.main,
             &mut main,
             |_, content, dst| self.replace(content, dst, &status),
         );
@@ -372,30 +393,30 @@ impl Mpd {
                 true
             }
             "%next%" => {
-                let next = self.common.formats[4].as_str();
+                let next = self.formats.next;
                 dst.push_str(next);
                 true
             }
             "%prev%" => {
-                let prev = self.common.formats[5].as_str();
+                let prev = self.formats.prev;
                 dst.push_str(prev);
                 true
             }
             "%play%" => {
-                let play = self.common.formats[6].as_str();
+                let play = self.formats.play;
                 dst.push_str(play);
                 true
             }
             "%pause%" => {
-                let pause = self.common.formats[7].as_str();
+                let pause = self.formats.pause;
                 dst.push_str(pause);
                 true
             }
             "%toggle%" => {
                 let toggle = match status.state {
-                    State::Play => self.common.formats[8].as_str(),
-                    State::Pause => self.common.formats[9].as_str(),
-                    State::Stop => self.common.formats[10].as_str(),
+                    State::Play => self.formats.toggle_playing,
+                    State::Pause => self.formats.toggle_paused,
+                    State::Stop => self.formats.toggle_stopped,
                 };
                 dst.push_str(toggle);
                 true
@@ -405,27 +426,27 @@ impl Mpd {
                 true
             }
             "%shuffle%" => {
-                let shuffle = self.common.formats[11].as_str();
+                let shuffle = self.formats.shuffle;
                 dst.push_str(shuffle);
                 true
             }
             "%repeat%" => {
-                let repeat = self.common.formats[12].as_str();
+                let repeat = self.formats.repeat;
                 dst.push_str(repeat);
                 true
             }
             "%random%" => {
-                let random = self.common.formats[13].as_str();
+                let random = self.formats.random;
                 dst.push_str(random);
                 true
             }
             "%single%" => {
-                let single = self.common.formats[14].as_str();
+                let single = self.formats.single;
                 dst.push_str(single);
                 true
             }
             "%consume%" => {
-                let consume = self.common.formats[15].as_str();
+                let consume = self.formats.consume;
                 dst.push_str(consume);
                 true
             }
@@ -497,7 +518,7 @@ impl Mpd {
                 true
             }
             "%next%" => {
-                let next = self.common.formats[4].as_str();
+                let next = self.formats.next;
                 dst.push_str(next);
                 let length = pango::parse_markup(next, '\0')
                     .map_or_else(|_| next.len(), |l| l.1.len());
@@ -510,7 +531,7 @@ impl Mpd {
                 true
             }
             "%prev%" => {
-                let prev = self.common.formats[5].as_str();
+                let prev = self.formats.prev;
                 dst.push_str(prev);
                 let length = pango::parse_markup(prev, '\0')
                     .map_or_else(|_| prev.len(), |l| l.1.len());
@@ -523,7 +544,7 @@ impl Mpd {
                 true
             }
             "%play%" => {
-                let play = self.common.formats[6].as_str();
+                let play = self.formats.play;
                 dst.push_str(play);
                 let length = pango::parse_markup(play, '\0')
                     .map_or_else(|_| play.len(), |l| l.1.len());
@@ -536,7 +557,7 @@ impl Mpd {
                 true
             }
             "%pause%" => {
-                let pause = self.common.formats[7].as_str();
+                let pause = self.formats.pause;
                 dst.push_str(pause);
                 let length = pango::parse_markup(pause, '\0')
                     .map_or_else(|_| pause.len(), |l| l.1.len());
@@ -550,9 +571,9 @@ impl Mpd {
             }
             "%toggle%" => {
                 let toggle = match status.state {
-                    State::Play => self.common.formats[8].as_str(),
-                    State::Pause => self.common.formats[9].as_str(),
-                    State::Stop => self.common.formats[10].as_str(),
+                    State::Play => self.formats.toggle_playing,
+                    State::Pause => self.formats.toggle_paused,
+                    State::Stop => self.formats.toggle_stopped,
                 };
                 dst.push_str(toggle);
                 let length = pango::parse_markup(toggle, '\0')
@@ -577,7 +598,7 @@ impl Mpd {
                 true
             }
             "%shuffle%" => {
-                let shuffle = self.common.formats[11].as_str();
+                let shuffle = self.formats.shuffle;
                 dst.push_str(shuffle);
                 let length = pango::parse_markup(shuffle, '\0')
                     .map_or_else(|_| shuffle.len(), |l| l.1.len());
@@ -590,7 +611,7 @@ impl Mpd {
                 true
             }
             "%repeat%" => {
-                let repeat = self.common.formats[12].as_str();
+                let repeat = self.formats.repeat;
                 dst.push_str(repeat);
                 let length = pango::parse_markup(repeat, '\0')
                     .map_or_else(|_| repeat.len(), |l| l.1.len());
@@ -603,7 +624,7 @@ impl Mpd {
                 true
             }
             "%random%" => {
-                let random = self.common.formats[13].as_str();
+                let random = self.formats.random;
                 dst.push_str(random);
                 let length = pango::parse_markup(random, '\0')
                     .map_or_else(|_| random.len(), |l| l.1.len());
@@ -616,7 +637,7 @@ impl Mpd {
                 true
             }
             "%single%" => {
-                let single = self.common.formats[14].as_str();
+                let single = self.formats.single;
                 dst.push_str(single);
                 let length = pango::parse_markup(single, '\0')
                     .map_or_else(|_| single.len(), |l| l.1.len());
@@ -629,7 +650,7 @@ impl Mpd {
                 true
             }
             "%consume%" => {
-                let consume = self.common.formats[15].as_str();
+                let consume = self.formats.consume;
                 dst.push_str(consume);
                 let length = pango::parse_markup(consume, '\0')
                     .map_or_else(|_| consume.len(), |l| l.1.len());
@@ -915,7 +936,8 @@ impl PanelConfig for Mpd {
             "%single%",
             "%consume%",
         ])?);
-        builder.common(PanelCommon::parse(
+
+        let (common, formats) = PanelCommon::parse(
             table,
             &[
                 "_playing",
@@ -954,7 +976,11 @@ impl PanelConfig for Mpd {
             ],
             &[""],
             &[],
-        )?);
+        )?;
+
+        builder.common(common);
+
+        builder.formats(MpdFormats::new(formats));
 
         Ok(builder.build()?)
     }

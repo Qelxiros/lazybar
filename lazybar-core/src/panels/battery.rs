@@ -12,6 +12,7 @@ use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
+    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream,
@@ -30,6 +31,7 @@ pub struct Battery {
     adapter: String,
     #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
+    formats: BatteryFormats,
     common: PanelCommon,
 }
 
@@ -53,26 +55,34 @@ impl Battery {
         let mut status = String::new();
         status_f.read_to_string(&mut status)?;
 
-        let text =
-            match status.trim() {
-                "Charging" => self.common.formats[0]
-                    .replace("%percentage%", capacity.trim()),
-                "Discharging" => self.common.formats[1]
-                    .replace("%percentage%", capacity.trim()),
-                "Not charging" => self.common.formats[2]
-                    .replace("%percentage%", capacity.trim()),
-                "Full" => self.common.formats[3]
-                    .replace("%percentage%", capacity.trim()),
-                "Unknown" => self.common.formats[4]
-                    .replace("%percentage%", capacity.trim()),
-                _ => String::from("Unknown battery state"),
+        let text = match status.trim() {
+            "Charging" => self
+                .formats
+                .charging
+                .replace("%percentage%", capacity.trim()),
+            "Discharging" => self
+                .formats
+                .discharging
+                .replace("%percentage%", capacity.trim()),
+            "Not charging" => self
+                .formats
+                .not_charging
+                .replace("%percentage%", capacity.trim()),
+            "Full" => {
+                self.formats.full.replace("%percentage%", capacity.trim())
             }
-            .replace(
-                "%ramp%",
-                self.common.ramps[0]
-                    .choose(capacity.trim().parse::<u32>()?, 0, 100)
-                    .as_str(),
-            );
+            "Unknown" => self
+                .formats
+                .unknown
+                .replace("%percentage%", capacity.trim()),
+            _ => String::from("Unknown battery state"),
+        }
+        .replace(
+            "%ramp%",
+            self.common.ramps[0]
+                .choose(capacity.trim().parse::<u32>()?, 0, 100)
+                .as_str(),
+        );
 
         draw_common(
             cr,
@@ -147,7 +157,7 @@ impl PanelConfig for Battery {
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
         }
-        builder.common(PanelCommon::parse(
+        let (common, formats) = PanelCommon::parse(
             table,
             &[
                 "_charging",
@@ -165,7 +175,11 @@ impl PanelConfig for Battery {
             ],
             &[""],
             &[""],
-        )?);
+        )?;
+
+        builder.formats(BatteryFormats::new(formats));
+
+        builder.common(common);
 
         Ok(builder.build()?)
     }
@@ -199,3 +213,12 @@ impl PanelConfig for Battery {
         Ok((Box::pin(map.map(move |_| self.draw(&cr, height))), None))
     }
 }
+
+format_struct!(
+    BatteryFormats,
+    charging,
+    discharging,
+    not_charging,
+    full,
+    unknown
+);

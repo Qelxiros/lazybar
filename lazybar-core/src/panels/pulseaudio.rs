@@ -38,11 +38,14 @@ use crate::{
     actions::Actions,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
     common::{draw_common, PanelCommon},
+    format_struct,
     image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream, Ramp,
 };
+
+format_struct!(PulseaudioFormats, unmuted, muted);
 
 /// Displays the current volume and mute status of a given sink.
 #[derive(Builder, Debug)]
@@ -60,6 +63,7 @@ pub struct Pulseaudio {
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
     #[builder(default, setter(skip))]
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
+    formats: PulseaudioFormats,
     common: PanelCommon,
 }
 
@@ -100,8 +104,8 @@ impl Pulseaudio {
         cr: &Rc<cairo::Context>,
         data: Result<Option<(Volume, bool)>>,
         last_data: &Arc<Mutex<(Volume, bool)>>,
-        format_unmuted: &String,
-        format_muted: &String,
+        format_unmuted: &str,
+        format_muted: &str,
         ramp: &Ramp,
         ramp_muted: &Ramp,
         attrs: &Attrs,
@@ -354,13 +358,17 @@ impl PanelConfig for Pulseaudio {
         let (send, recv) = channel();
         builder.send(send);
         builder.recv(Arc::new(Mutex::new(recv)));
-        builder.common(PanelCommon::parse(
+
+        let (common, formats) = PanelCommon::parse(
             table,
             &["_unmuted", "_muted"],
             &["%ramp%%volume%", "%ramp%%volume%"],
             &[""],
             &["", "_muted"],
-        )?);
+        )?;
+
+        builder.common(common);
+        builder.formats(PulseaudioFormats::new(formats));
 
         Ok(builder.build()?)
     }
@@ -486,8 +494,8 @@ impl PanelConfig for Pulseaudio {
         }
         let ramp = self.common.ramps[0].clone();
         let ramp_muted = self.common.ramps[1].clone();
-        let format_unmuted = self.common.formats[0].clone();
-        let format_muted = self.common.formats[1].clone();
+        let format_unmuted = self.formats.unmuted;
+        let format_muted = self.formats.muted;
         let attrs = self.common.attrs[0].clone();
         let dependence = self.common.dependence;
         let images = self.common.images.clone();
@@ -536,8 +544,8 @@ impl PanelConfig for Pulseaudio {
                     &cr,
                     data,
                     &last_data,
-                    &format_unmuted,
-                    &format_muted,
+                    format_unmuted,
+                    format_muted,
                     &ramp,
                     &ramp_muted,
                     &attrs,

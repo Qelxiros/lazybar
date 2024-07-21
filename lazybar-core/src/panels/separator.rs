@@ -18,6 +18,7 @@ use crate::{
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Separator {
     name: &'static str,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -36,13 +37,17 @@ impl PanelConfig for Separator {
         let mut builder = SeparatorBuilder::default();
 
         builder.name(name);
-        builder.common(PanelCommon::parse(
+
+        let (common, formats) = PanelCommon::parse(
             table,
             &[""],
             &[" <span foreground='#666'>|</span> "],
             &[""],
             &[],
-        )?);
+        )?;
+
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         Ok(builder.build()?)
     }
@@ -65,7 +70,7 @@ impl PanelConfig for Separator {
         Ok((
             Box::pin(tokio_stream::once(draw_common(
                 &cr,
-                self.common.formats[0].as_str(),
+                self.format,
                 &self.common.attrs[0],
                 self.common.dependence,
                 self.common.images.clone(),

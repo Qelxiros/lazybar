@@ -89,37 +89,6 @@ impl Precision for Seconds {
     }
 }
 
-#[derive(Debug)]
-struct ClockStream {
-    get_duration: fn() -> Duration,
-    interval: Interval,
-}
-
-impl ClockStream {
-    fn new(get_duration: fn() -> Duration) -> Self {
-        Self {
-            get_duration,
-            interval: interval(get_duration()),
-        }
-    }
-}
-
-impl Stream for ClockStream {
-    type Item = Instant;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Instant>> {
-        let ret = self.interval.poll_tick(cx).map(Some);
-        if ret.is_ready() {
-            let duration = (self.get_duration)();
-            self.interval.reset_after(duration);
-        }
-        ret
-    }
-}
-
 /// Displays the current time, updating at a given precision.
 ///
 /// Uses an [`Interval`] to update as close to the unit boundaries as possible.
@@ -131,8 +100,9 @@ impl Stream for ClockStream {
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Clock<P: Clone + Precision> {
     name: &'static str,
-    common: PanelCommon,
     format_idx: Arc<Mutex<(usize, usize)>>,
+    formats: Vec<String>,
+    common: PanelCommon,
     #[builder(default)]
     phantom: PhantomData<P>,
 }
@@ -147,7 +117,7 @@ impl<P: Precision + Clone> Clock<P> {
         data?;
         let now = chrono::Local::now();
         let text = now
-            .format(&self.common.formats[self.format_idx.lock().unwrap().0])
+            .format(&self.formats[self.format_idx.lock().unwrap().0])
             .to_string();
 
         draw_common(
@@ -237,16 +207,11 @@ where
         let mut builder = ClockBuilder::default();
 
         builder.name(name);
-        builder.common(PanelCommon::parse_variadic(
-            table,
-            &["%Y-%m-%d %T"],
-            &[""],
-            &[],
-        )?);
-        builder.format_idx(Arc::new(Mutex::new((
-            0,
-            builder.common.as_ref().unwrap().formats.len(),
-        ))));
+        let (common, formats) =
+            PanelCommon::parse_variadic(table, &["%Y-%m-%d %T"], &[""], &[])?;
+        builder.common(common);
+        builder.format_idx(Arc::new(Mutex::new((0, formats.len()))));
+        builder.formats(formats);
 
         Ok(builder.build()?)
     }
@@ -287,5 +252,36 @@ where
             Box::pin(map.map(move |(_, data)| self.draw(&cr, data, height))),
             Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
+    }
+}
+
+#[derive(Debug)]
+struct ClockStream {
+    get_duration: fn() -> Duration,
+    interval: Interval,
+}
+
+impl ClockStream {
+    fn new(get_duration: fn() -> Duration) -> Self {
+        Self {
+            get_duration,
+            interval: interval(get_duration()),
+        }
+    }
+}
+
+impl Stream for ClockStream {
+    type Item = Instant;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Instant>> {
+        let ret = self.interval.poll_tick(cx).map(Some);
+        if ret.is_ready() {
+            let duration = (self.get_duration)();
+            self.interval.reset_after(duration);
+        }
+        ret
     }
 }

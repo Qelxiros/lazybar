@@ -32,6 +32,7 @@ pub struct Cpu {
     #[builder(default = r#"String::from("/proc/stat")"#)]
     path: String,
     last_load: Load,
+    format: &'static str,
     common: PanelCommon,
 }
 
@@ -49,7 +50,8 @@ impl Cpu {
             / diff as f64
             * 100.0;
 
-        let text = self.common.formats[0]
+        let text = self
+            .format
             .replace("%percentage%", format!("{percentage:.0}").as_str())
             .replace(
                 "%ramp%",
@@ -103,13 +105,15 @@ impl PanelConfig for Cpu {
         } else {
             builder.last_load(read_current_load("/proc/stat")?);
         }
-        builder.common(PanelCommon::parse(
+        let (common, formats) = PanelCommon::parse(
             table,
             &[""],
             &["CPU: %percentage%%"],
             &[""],
             &[""],
-        )?);
+        )?;
+        builder.common(common);
+        builder.format(formats.into_iter().next().unwrap().leak());
 
         Ok(builder.build()?)
     }
