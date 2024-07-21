@@ -259,7 +259,6 @@ impl Mpd {
             layout.index_to_pos(bar_start_idx + bar_max_width_idx).x() as f64
                 / pango::SCALE as f64
                 - bar_start;
-
         *self.index_cache.lock().unwrap() = Some(
             index_cache
                 .into_iter()
@@ -274,11 +273,7 @@ impl Mpd {
                 / status.duration.unwrap().as_secs_f64()
                 * bar_max_width;
             let char_width = bar_max_width
-                / pango::parse_markup(main.as_str(), '\0')
-                    .map_or(main, |r| r.1.to_string())
-                    .graphemes(true)
-                    .count()
-                    .min(self.max_width) as f64;
+                / main.graphemes(true).count().min(self.max_width) as f64;
             self.last_progress_width =
                 (self.last_progress_width / char_width).round() * char_width;
         }
@@ -572,9 +567,7 @@ impl Mpd {
             }
             "%main%" => {
                 dst.push_str(content);
-                let length = pango::parse_markup(main, '\0')
-                    .map_or_else(|_| content.len(), |l| l.1.len())
-                    .min(self.max_width);
+                let length = main.len().min(self.max_width);
                 index_cache.push((
                     "main",
                     (mat.start() as isize + *offset) as usize,
