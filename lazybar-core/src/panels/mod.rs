@@ -24,6 +24,8 @@ mod ping;
 mod pulseaudio;
 #[cfg(feature = "separator")]
 mod separator;
+#[cfg(feature = "systray")]
+mod systray;
 #[cfg(feature = "temp")]
 mod temp;
 #[cfg(feature = "xwindow")]
@@ -57,6 +59,8 @@ pub use ping::Ping;
 pub use pulseaudio::Pulseaudio;
 #[cfg(feature = "separator")]
 pub use separator::Separator;
+#[cfg(feature = "systray")]
+pub use systray::Systray;
 #[cfg(feature = "temp")]
 pub use temp::Temp;
 #[cfg(feature = "xwindow")]
@@ -92,6 +96,8 @@ pub mod builders {
     pub use super::pulseaudio::{PulseaudioBuilder, PulseaudioBuilderError};
     #[cfg(feature = "separator")]
     pub use super::separator::{SeparatorBuilder, SeparatorBuilderError};
+    #[cfg(feature = "systray")]
+    pub use super::systray::{SystrayBuilder, SystrayBuilderError};
     #[cfg(feature = "temp")]
     pub use super::temp::{TempBuilder, TempBuilderError};
     #[cfg(feature = "xwindow")]

@@ -307,7 +307,7 @@ impl Mpd {
         Ok(PanelDrawInfo::new(
             (size.0, height),
             self.common.dependence,
-            Box::new(move |cr| {
+            Box::new(move |cr, _, _| {
                 cr.save()?;
 
                 let offset = if let Some(bg) = &attrs.bg {
@@ -346,6 +346,10 @@ impl Mpd {
                 cr.restore()?;
                 Ok(())
             }),
+            // TODO: maybe do things here?
+            Box::new(|| Ok(())),
+            Box::new(|| Ok(())),
+            None,
         ))
     }
 

@@ -44,7 +44,7 @@ pub fn draw_common(
     Ok(PanelDrawInfo::new(
         bg.adjust_dims(dims, height),
         dependence,
-        Box::new(move |cr| {
+        Box::new(move |cr, _, _| {
             let offset =
                 bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
 
@@ -66,6 +66,9 @@ pub fn draw_common(
             cr.restore()?;
             Ok(())
         }),
+        Box::new(|| Ok(())),
+        Box::new(|| Ok(())),
+        None,
     ))
 }
 

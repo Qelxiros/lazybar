@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use config::{Config, File, FileFormat, Value};
+use futures::executor;
 use lazy_static::lazy_static;
 use tokio::sync::OnceCell;
 
@@ -29,6 +30,8 @@ use crate::panels::Ping;
 use crate::panels::Pulseaudio;
 #[cfg(feature = "separator")]
 use crate::panels::Separator;
+#[cfg(feature = "systray")]
+use crate::panels::Systray;
 #[cfg(feature = "temp")]
 use crate::panels::Temp;
 #[cfg(feature = "xwindow")]
@@ -84,7 +87,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             File::new(
                 config.to_str().unwrap_or_else(|| {
                     log::error!("Invalid config path");
-                    cleanup::exit(None, 101)
+                    executor::block_on(cleanup::exit(None, false, 101))
                 }),
                 FileFormat::Toml,
             )
@@ -93,7 +96,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
         .build()
         .unwrap_or_else(|e| {
             log::error!("Error parsing config file: {e}");
-            cleanup::exit(None, 101)
+            executor::block_on(cleanup::exit(None, false, 101))
         });
     log::info!("Read config file");
 
@@ -408,6 +411,11 @@ fn parse_panel(
                 #[cfg(feature = "separator")]
                 "separator" => Separator::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "systray")]
+                "systray" => {
+                    Systray::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
                 #[cfg(feature = "temp")]
                 "temp" => {
                     Temp::parse(p, &mut table, config)

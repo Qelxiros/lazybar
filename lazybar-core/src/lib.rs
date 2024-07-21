@@ -103,8 +103,21 @@ use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, map_window, set_wm_properties};
 
-/// A function that can be called repeatedly to draw the panel.
-pub type PanelDrawFn = Box<dyn Fn(&cairo::Context) -> Result<()>>;
+/// A function that can be called repeatedly to draw the panel. The
+/// [`cairo::Context`] will have its current point set to the top left corner of
+/// the panel. The second and third parameters are the x and y coordinates of
+/// that point relative to the top left corner of the bar.
+pub type PanelDrawFn = Box<dyn Fn(&cairo::Context, f64, f64) -> Result<()>>;
+/// A function that will be called whenever the panel is shown. Use this to
+/// resume polling, remap a child window, or make any other state changes that
+/// can be cheaply reversed.
+pub type PanelShowFn = Box<dyn Fn() -> Result<()>>;
+/// A function that will be called whenever the panel is hidden. Use this to
+/// pause polling, unmap a child window, or make any other state changes that
+/// can be cheaply reversed.
+pub type PanelHideFn = Box<dyn Fn() -> Result<()>>;
+/// A function that is called for each panel before the bar shuts down.
+pub type PanelShutdownFn = Box<dyn FnOnce()>;
 /// A stream that produces panel changes when the underlying data source
 /// changes.
 pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
@@ -211,6 +224,7 @@ pub mod builders {
 
     use anyhow::Result;
     use derive_builder::Builder;
+    use futures::executor;
     use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
     use tokio::{
         runtime::Runtime,
@@ -411,10 +425,31 @@ pub mod builders {
 
             let mut signals = Signals::new(TERM_SIGNALS)?;
             let name = bar.name.clone();
+
+            let (send1, recv2) = unbounded_channel();
+            let (send2, recv1) = unbounded_channel();
+            let mut endpoint1 = ChannelEndpoint::new(send1, recv1);
+            let endpoint2 = ChannelEndpoint::new(send2, recv2);
+            unsafe { cleanup::ENDPOINT.set(endpoint2).unwrap() };
             thread::spawn(move || loop {
                 if let Some(signal) = signals.wait().next() {
                     log::info!("Received signal {signal} - shutting down");
-                    cleanup::exit(Some((name.as_str(), self.ipc)), 0);
+                    if let Ok(rt) = Runtime::new() {
+                        rt.block_on(async {
+                            cleanup::exit(
+                                Some((name.as_str(), self.ipc)),
+                                true,
+                                0,
+                            )
+                            .await
+                        });
+                    } else {
+                        executor::block_on(cleanup::exit(
+                            Some((name.as_str(), self.ipc)),
+                            false,
+                            0,
+                        ));
+                    }
                 }
             });
             log::debug!("Set up signal listener");
@@ -430,7 +465,7 @@ pub mod builders {
                                 log::warn!("X event caused an error: {e}");
                                 // close when X server does
                                 // this could cause problems, maybe only exit under certain circumstances?
-                                cleanup::exit(Some((bar.name.as_str(), self.ipc)), 0);
+                                cleanup::exit(Some((bar.name.as_str(), self.ipc)), true, 0).await;
                             } else {
                                 log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
                             }
@@ -462,7 +497,7 @@ pub mod builders {
 
                         if let Some(message) = message {
                             match bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
-                                Ok(true) => cleanup::exit(Some((bar.name.as_str(), bar.ipc)), 0),
+                                Ok(true) => cleanup::exit(Some((bar.name.as_str(), bar.ipc)), true, 0).await,
                                 Err(e) => log::warn!("Sending message {message} generated an error: {e}"),
                                 _ => {}
                             }
@@ -471,6 +506,16 @@ pub mod builders {
                     // maybe not strictly necessary, but ensures that the ipc futures get polled
                     Some(_) = ipc_set.join_next() => {
                         log::debug!("ipc future completed");
+                    }
+                    Some(_) = endpoint1.recv.recv() => {
+                        bar.shutdown();
+                        let _ = endpoint1.send.send(());
+                        // this message will never arrive, but it avoids a race condition with the
+                        // break statement.
+                        let _ = endpoint1.recv.recv().await;
+                        // this is necessary to satisfy the borrow checker, even though it will
+                        // never run.
+                        break;
                     }
                 }
             } }).await?;

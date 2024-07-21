@@ -11,7 +11,11 @@ use csscolorparser::Color;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tokio::{net::UnixStream, sync::mpsc::UnboundedSender, task::JoinSet};
+use tokio::{
+    net::UnixStream,
+    sync::{mpsc::UnboundedSender, OnceCell},
+    task::JoinSet,
+};
 use tokio_stream::{Stream, StreamMap};
 use xcb::x;
 
@@ -19,12 +23,31 @@ use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
     map_window, set_wm_properties, Alignment, Margins, PanelDrawFn,
-    PanelStream, Position,
+    PanelHideFn, PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
 
 lazy_static! {
     static ref REGEX: Regex =
         Regex::new(r"(?<region>[lcr])(?<idx>\d+).(?<message>.+)").unwrap();
+    #[allow(missing_docs)]
+    pub static ref BAR_INFO: OnceCell<BarInfo> = OnceCell::new();
+}
+
+/// Information about the bar, usually for use in building panels.
+#[derive(Debug, Clone)]
+pub struct BarInfo {
+    /// The X resource id of the bar window
+    pub window: x::Window,
+    /// The X visual that the bar uses
+    pub visual: x::Visualtype,
+    /// The width of the bar in pixels
+    pub width: u16,
+    /// The height of the bar in pixels
+    pub height: u16,
+    /// Whether the bar supports transparency
+    pub transparent: bool,
+    /// The background color of the bar
+    pub bg: Color,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -79,6 +102,12 @@ pub struct PanelDrawInfo {
     /// (0, 0). Translating the Context is the responsibility of functions in
     /// this module.
     pub draw_fn: PanelDrawFn,
+    /// The function to be run when the panel is shown
+    pub show_fn: PanelShowFn,
+    /// The function to be run when the panel is hidden
+    pub hide_fn: PanelHideFn,
+    /// The function to be run before the panel is destroyed
+    pub shutdown: Option<PanelShutdownFn>,
 }
 
 impl PanelDrawInfo {
@@ -88,12 +117,18 @@ impl PanelDrawInfo {
         dims: (i32, i32),
         dependence: Dependence,
         draw_fn: PanelDrawFn,
+        show_fn: PanelShowFn,
+        hide_fn: PanelHideFn,
+        shutdown: Option<PanelShutdownFn>,
     ) -> Self {
         Self {
             width: dims.0,
             height: dims.1,
             dependence,
             draw_fn,
+            show_fn,
+            hide_fn,
+            shutdown,
         }
     }
 }
@@ -229,6 +264,8 @@ pub struct Panel {
     /// Whether the panel is visible. To set this value on startup, see
     /// [`PanelCommon`][crate::common::PanelCommon].
     pub visible: bool,
+    // true if PanelStatus::Shown, false otherwise
+    last_status: bool,
     endpoint: Option<Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>>,
 }
 
@@ -247,6 +284,7 @@ impl Panel {
             y: 0.0,
             name,
             visible,
+            last_status: false,
             endpoint: endpoint.map(|e| Arc::new(Mutex::new(e))),
         }
     }
@@ -304,6 +342,17 @@ impl Bar {
     )> {
         let (conn, screen, window, width, visual, mon_name) =
             create_window(position, height, transparent, &bg, monitor)?;
+
+        BAR_INFO
+            .set(BarInfo {
+                window,
+                visual,
+                width,
+                height,
+                transparent,
+                bg: bg.clone(),
+            })
+            .unwrap();
 
         let (result, name) = ipc::init(ipc, name, mon_name.as_str());
         let ipc_stream: Pin<
@@ -370,6 +419,17 @@ impl Bar {
         ))
     }
 
+    /// Calls each panel's shutdown function
+    pub fn shutdown(self) {
+        self.left
+            .into_iter()
+            .chain(self.center.into_iter())
+            .chain(self.right.into_iter())
+            .filter_map(|panel| panel.draw_info)
+            .filter_map(|draw_info| draw_info.shutdown)
+            .for_each(|shutdown| shutdown());
+    }
+
     fn apply_dependence(panels: &[Panel]) -> Vec<PanelStatus> {
         (0..panels.len())
             .map(|idx| match PanelStatus::from(&panels[idx]) {
@@ -392,6 +452,39 @@ impl Bar {
                 PanelStatus::Dependent(Dependence::None) => unreachable!(),
             })
             .collect()
+    }
+
+    fn process_show_hide_events(
+        panels: &mut [Panel],
+        statuses: &[PanelStatus],
+    ) {
+        assert_eq!(panels.len(), statuses.len());
+        let mut hidden = Vec::new();
+        let mut shown = Vec::new();
+        panels
+            .iter_mut()
+            .zip(statuses.iter())
+            .for_each(|(panel, &status)| {
+                if panel.draw_info.is_some()
+                    && panel.last_status
+                    && status != PanelStatus::Shown
+                {
+                    hidden.push(panel.draw_info.as_ref().unwrap());
+                }
+                if panel.draw_info.is_some()
+                    && !panel.last_status
+                    && status == PanelStatus::Shown
+                {
+                    shown.push(panel.draw_info.as_ref().unwrap());
+                }
+                panel.last_status = status == PanelStatus::Shown;
+            });
+        hidden.iter().for_each(|draw_info| {
+            let _ = (draw_info.hide_fn)();
+        });
+        shown.iter().for_each(|draw_info| {
+            let _ = (draw_info.show_fn)();
+        });
     }
 
     /// Handle an event from the X server.
@@ -761,7 +854,7 @@ impl Bar {
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
                     self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr)?;
+                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
                 }
 
                 self.surface.flush();
@@ -788,7 +881,7 @@ impl Bar {
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
                     self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr)?;
+                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
                 }
 
                 self.surface.flush();
@@ -815,7 +908,7 @@ impl Bar {
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
                     self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr)?;
+                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
                 }
 
                 self.surface.flush();
@@ -854,6 +947,11 @@ impl Bar {
 
         let statuses = Self::apply_dependence(self.left.as_slice());
 
+        Self::process_show_hide_events(
+            self.left.as_mut_slice(),
+            statuses.as_slice(),
+        );
+
         for panel in self
             .left
             .iter_mut()
@@ -871,7 +969,7 @@ impl Bar {
                 panel.x = x;
                 panel.y = y;
                 self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr)?;
+                (draw_info.draw_fn)(&self.cr, x, y)?;
                 self.extents.left += f64::from(draw_info.width);
                 self.cr.restore()?;
             }
@@ -891,6 +989,11 @@ impl Bar {
 
         let center_statuses = Self::apply_dependence(self.center.as_slice());
 
+        Self::process_show_hide_events(
+            self.center.as_mut_slice(),
+            center_statuses.as_slice(),
+        );
+
         let center_panels = self
             .center
             .iter_mut()
@@ -902,6 +1005,11 @@ impl Bar {
             .collect::<Vec<_>>();
 
         let right_statuses = Self::apply_dependence(self.right.as_slice());
+
+        Self::process_show_hide_events(
+            self.right.as_mut_slice(),
+            right_statuses.as_slice(),
+        );
 
         let right_panels = self
             .right
@@ -970,7 +1078,7 @@ impl Bar {
                 panel.x = x;
                 panel.y = y;
                 self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr)?;
+                (draw_info.draw_fn)(&self.cr, x, y)?;
                 self.extents.center.1 += f64::from(draw_info.width);
                 self.cr.restore()?;
             }
@@ -997,6 +1105,11 @@ impl Bar {
 
         let statuses = statuses
             .unwrap_or_else(|| Self::apply_dependence(self.right.as_slice()));
+
+        Self::process_show_hide_events(
+            self.right.as_mut_slice(),
+            statuses.as_slice(),
+        );
 
         let total_width = f64::from(
             self.right
@@ -1035,7 +1148,7 @@ impl Bar {
                 panel.x = x;
                 panel.y = y;
                 self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr)?;
+                (draw_info.draw_fn)(&self.cr, x, y)?;
                 temp += f64::from(draw_info.width);
                 self.cr.restore()?;
             }

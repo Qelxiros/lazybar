@@ -140,7 +140,7 @@ impl XWorkspaces {
         Ok(PanelDrawInfo::new(
             (width, height),
             self.common.dependence,
-            Box::new(move |cr| {
+            Box::new(move |cr, _, _| {
                 for image in &images {
                     image.draw(cr)?;
                 }
@@ -216,6 +216,10 @@ impl XWorkspaces {
                 }
                 Ok(())
             }),
+            // TODO: maybe do things here?
+            Box::new(|| Ok(())),
+            Box::new(|| Ok(())),
+            None,
         ))
     }
 
@@ -236,8 +240,8 @@ impl XWorkspaces {
                             propagate: false,
                             destination: x::SendEventDest::Window(root),
                             // probably a spec violation, but this guarantees
-                            // that the root window
-                            // gets the message and changes the workspace
+                            // that the root window gets the message and changes
+                            // the workspace
                             event_mask: x::EventMask::all(),
                             event: &x::ClientMessageEvent::new(
                                 root,
@@ -572,7 +576,7 @@ fn get_nonempty(
             }))
             .ok()
         })
-        .map(|r| r.value::<u32>()[0])
+        .filter_map(|r| r.value::<u32>().get(0).cloned())
         .collect())
 }
 
