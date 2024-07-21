@@ -973,6 +973,7 @@ impl PanelConfig for Mpd {
                 "",
                 "",
                 "",
+                "",
             ],
             &[""],
             &[],
