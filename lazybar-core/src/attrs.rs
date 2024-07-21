@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+#[cfg(doc)]
+use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pango::FontDescription;

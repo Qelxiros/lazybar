@@ -1,5 +1,8 @@
 use std::ops::Sub;
 
+#[cfg(doc)]
+use config::Config;
+
 use crate::{parser, remove_string_from_config};
 
 /// Utility data structure to display one of several strings based on a value in
