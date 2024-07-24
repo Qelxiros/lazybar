@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    ops::Deref,
     pin::Pin,
     rc::Rc,
     sync::{
@@ -185,7 +184,7 @@ impl Pulseaudio {
             Event::Action(ref value) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
-                introspector.deref().borrow_mut().get_sink_info_by_name(
+                introspector.borrow_mut().get_sink_info_by_name(
                     sink,
                     move |r| {
                         if let ListResult::Item(i) = r {
@@ -202,16 +201,13 @@ impl Pulseaudio {
                     mainloop.borrow_mut().lock();
                     let o = {
                         let ml_ref = Rc::clone(&mainloop);
-                        introspector
-                            .deref()
-                            .borrow_mut()
-                            .set_sink_volume_by_name(
-                                sink,
-                                &volume,
-                                Some(Box::new(move |_success| unsafe {
-                                    (*ml_ref.as_ptr()).signal(false);
-                                })),
-                            )
+                        introspector.borrow_mut().set_sink_volume_by_name(
+                            sink,
+                            &volume,
+                            Some(Box::new(move |_success| unsafe {
+                                (*ml_ref.as_ptr()).signal(false);
+                            })),
+                        )
                     };
 
                     while o.get_state() != operation::State::Done {
@@ -225,8 +221,8 @@ impl Pulseaudio {
             }
             Event::Action(ref value) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
-                mainloop.deref().borrow_mut().lock();
-                introspector.deref().borrow_mut().get_sink_info_by_name(
+                mainloop.borrow_mut().lock();
+                introspector.borrow_mut().get_sink_info_by_name(
                     sink,
                     move |r| {
                         if let ListResult::Item(i) = r {
@@ -234,15 +230,14 @@ impl Pulseaudio {
                         }
                     },
                 );
-                mainloop.deref().borrow_mut().unlock();
+                mainloop.borrow_mut().unlock();
                 let mute = recv.recv();
                 if let Ok(mute) = mute {
-                    mainloop.deref().borrow_mut().lock();
+                    mainloop.borrow_mut().lock();
                     introspector
-                        .deref()
                         .borrow_mut()
                         .set_sink_mute_by_name(sink, !mute, None);
-                    mainloop.deref().borrow_mut().unlock();
+                    mainloop.borrow_mut().unlock();
                 };
 
                 Ok(response_send.send(EventResponse::Ok)?)
@@ -253,53 +248,24 @@ impl Pulseaudio {
                     "Unknown event {value}",
                 )))?)
             }
-            Event::Mouse(event) => Ok(match event.button {
-                MouseButton::Left => Self::process_event(
-                    Event::Action(actions.left.clone()),
+            Event::Mouse(event) => {
+                let action = match event.button {
+                    MouseButton::Left => actions.left.clone(),
+                    MouseButton::Right => actions.right.clone(),
+                    MouseButton::Middle => actions.middle.clone(),
+                    MouseButton::ScrollUp => actions.up.clone(),
+                    MouseButton::ScrollDown => actions.down.clone(),
+                };
+                Ok(Self::process_event(
+                    Event::Action(action),
                     actions,
                     sink,
                     unit,
                     introspector,
                     mainloop,
                     response_send,
-                ),
-                MouseButton::Right => Self::process_event(
-                    Event::Action(actions.right.clone()),
-                    actions,
-                    sink,
-                    unit,
-                    introspector,
-                    mainloop,
-                    response_send,
-                ),
-                MouseButton::Middle => Self::process_event(
-                    Event::Action(actions.middle.clone()),
-                    actions,
-                    sink,
-                    unit,
-                    introspector,
-                    mainloop,
-                    response_send,
-                ),
-                MouseButton::ScrollUp => Self::process_event(
-                    Event::Action(actions.up.clone()),
-                    actions,
-                    sink,
-                    unit,
-                    introspector,
-                    mainloop,
-                    response_send,
-                ),
-                MouseButton::ScrollDown => Self::process_event(
-                    Event::Action(actions.down.clone()),
-                    actions,
-                    sink,
-                    unit,
-                    introspector,
-                    mainloop,
-                    response_send,
-                ),
-            }?),
+                )?)
+            }
         }
     }
 }
