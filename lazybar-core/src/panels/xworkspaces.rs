@@ -3,10 +3,10 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::{Arc, Mutex},
-    task::{Context, Poll},
+    task::Poll,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
@@ -18,7 +18,18 @@ use tokio::{
 use tokio_stream::{
     wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
 };
-use xcb::{x, XidNew};
+use x11rb::{
+    connection::Connection,
+    protocol::{
+        self,
+        xproto::{
+            Atom, AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent,
+            ConnectionExt, EventMask, Window,
+        },
+    },
+    rust_connection::RustConnection,
+    CURRENT_TIME,
+};
 
 use crate::{
     background::Bg,
@@ -45,8 +56,8 @@ enum WorkspaceState {
 #[builder_impl_attr(allow(missing_docs))]
 pub struct XWorkspaces {
     name: &'static str,
-    conn: Arc<xcb::Connection>,
-    screen: i32,
+    conn: Arc<RustConnection>,
+    screen: usize,
     #[builder(setter(strip_option))]
     highlight: Option<Highlight>,
     common: PanelCommon,
@@ -56,17 +67,17 @@ impl XWorkspaces {
     fn draw(
         &self,
         cr: &Rc<cairo::Context>,
-        root: x::Window,
+        root: Window,
         height: i32,
         width_cache: &Arc<Mutex<Vec<i32>>>,
-        number_atom: x::Atom,
-        names_atom: x::Atom,
-        utf8_atom: x::Atom,
-        current_atom: x::Atom,
-        client_atom: x::Atom,
-        type_atom: x::Atom,
-        normal_atom: x::Atom,
-        desktop_atom: x::Atom,
+        number_atom: Atom,
+        names_atom: Atom,
+        utf8_atom: Atom,
+        current_atom: Atom,
+        client_atom: Atom,
+        type_atom: Atom,
+        normal_atom: Atom,
+        desktop_atom: Atom,
     ) -> Result<PanelDrawInfo> {
         let workspaces = get_workspaces(
             &self.conn,
@@ -225,37 +236,31 @@ impl XWorkspaces {
 
     fn process_event(
         event: Event,
-        conn: Arc<xcb::Connection>,
-        root: x::Window,
+        conn: Arc<RustConnection>,
+        root: Window,
         width_cache: Arc<Mutex<Vec<i32>>>,
         names: &[String],
-        current_atom: x::Atom,
+        current_atom: Atom,
         send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
             Event::Action(event) => {
                 if let Some(idx) = names.iter().position(|s| *s == event) {
-                    conn.check_request(conn.send_request_checked(
-                        &x::SendEvent {
-                            propagate: false,
-                            destination: x::SendEventDest::Window(root),
-                            // probably a spec violation, but this guarantees
-                            // that the root window gets the message and changes
-                            // the workspace
-                            event_mask: x::EventMask::all(),
-                            event: &x::ClientMessageEvent::new(
-                                root,
-                                current_atom,
-                                x::ClientMessageData::Data32([
-                                    idx as u32,
-                                    chrono::Local::now().timestamp() as u32,
-                                    0,
-                                    0,
-                                    0,
-                                ]),
-                            ),
-                        },
-                    ))?;
+                    conn.send_event(
+                        false,
+                        root,
+                        // probably a spec violation, but this guarantees
+                        // that the root window gets the message and changes
+                        // the workspace
+                        EventMask::from(u32::MAX),
+                        ClientMessageEvent::new(
+                            32,
+                            root,
+                            current_atom,
+                            [idx as u32, CURRENT_TIME, 0, 0, 0],
+                        ),
+                    )?
+                    .check()?;
                     send.send(EventResponse::Ok)?;
                 } else {
                     send.send(EventResponse::Err(format!(
@@ -263,6 +268,7 @@ impl XWorkspaces {
                     )))?;
                 }
             }
+
             Event::Mouse(event) => match event.button {
                 MouseButton::Left
                 | MouseButton::Right
@@ -352,8 +358,7 @@ impl PanelConfig for XWorkspaces {
 
         builder.name(name);
         let screen = remove_string_from_config("screen", table);
-        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
-        {
+        if let Ok((conn, screen)) = RustConnection::connect(screen.as_deref()) {
             builder.conn(Arc::new(conn)).screen(screen);
         } else {
             log::error!("Failed to connect to X server");
@@ -399,17 +404,16 @@ impl PanelConfig for XWorkspaces {
 
         let root = self
             .conn
-            .get_setup()
-            .roots()
-            .nth(self.screen as usize)
+            .setup()
+            .roots
+            .get(self.screen as usize)
             .ok_or_else(|| anyhow!("Screen not found"))?
-            .root();
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::ChangeWindowAttributes {
-                window: root,
-                value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
-            },
-        ))?;
+            .root;
+        self.conn.change_window_attributes(
+            root,
+            &ChangeWindowAttributesAux::new()
+                .event_mask(EventMask::PROPERTY_CHANGE),
+        )?;
 
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
@@ -483,32 +487,24 @@ impl PanelConfig for XWorkspaces {
 }
 
 fn get_workspaces(
-    conn: &xcb::Connection,
-    root: x::Window,
-    number_atom: x::Atom,
-    names_atom: x::Atom,
-    utf8_atom: x::Atom,
+    conn: &RustConnection,
+    root: Window,
+    number_atom: Atom,
+    names_atom: Atom,
+    utf8_atom: Atom,
 ) -> Result<Vec<String>> {
     let number: u32 = conn
-        .wait_for_reply(conn.send_request(&x::GetProperty {
-            delete: false,
-            window: root,
-            property: number_atom,
-            r#type: x::ATOM_CARDINAL,
-            long_offset: 0,
-            long_length: 1,
-        }))?
-        .value()[0];
+        .get_property(false, root, number_atom, AtomEnum::CARDINAL, 0, 1)?
+        .reply()?
+        .value32()
+        .context("Invalid reply from X server")?
+        .next()
+        .context("Empty reply from X server")?;
 
-    let reply = conn.wait_for_reply(conn.send_request(&x::GetProperty {
-        delete: false,
-        window: root,
-        property: names_atom,
-        r#type: utf8_atom,
-        long_offset: 0,
-        long_length: number,
-    }))?;
-    let bytes: &[u8] = reply.value();
+    let bytes = conn
+        .get_property(false, root, names_atom, utf8_atom, 0, number)?
+        .reply()?
+        .value;
 
     let mut names: Vec<String> = bytes
         .split(|&b| b == 0)
@@ -524,86 +520,74 @@ fn get_workspaces(
 }
 
 fn get_current(
-    conn: &xcb::Connection,
-    root: x::Window,
-    current_atom: x::Atom,
+    conn: &RustConnection,
+    root: Window,
+    current_atom: Atom,
 ) -> Result<u32> {
     Ok(conn
-        .wait_for_reply(conn.send_request(&x::GetProperty {
-            delete: false,
-            window: root,
-            property: current_atom,
-            r#type: x::ATOM_CARDINAL,
-            long_offset: 0,
-            long_length: 1,
-        }))?
-        .value()[0])
+        .get_property(false, root, current_atom, AtomEnum::CARDINAL, 0, 1)?
+        .reply()?
+        .value32()
+        .context("Invalid reply from X server")?
+        .next()
+        .context("Empty reply from X server")?)
 }
 
 fn get_nonempty(
-    conn: &xcb::Connection,
-    root: x::Window,
-    client_atom: x::Atom,
-    type_atom: x::Atom,
-    normal_atom: x::Atom,
-    desktop_atom: x::Atom,
+    conn: &RustConnection,
+    root: Window,
+    client_atom: Atom,
+    type_atom: Atom,
+    normal_atom: Atom,
+    desktop_atom: Atom,
 ) -> Result<HashSet<u32>> {
     Ok(get_clients(conn, root, client_atom)?
         .iter()
         .filter(|&&w| {
-            conn.wait_for_reply(conn.send_request(&x::GetProperty {
-                delete: false,
-                window: w,
-                property: type_atom,
-                r#type: x::ATOM_ATOM,
-                long_offset: 0,
-                long_length: 1,
-            }))
-            .map_or(false, |r| {
-                r.value::<x::Atom>()
-                    .first()
-                    .map_or(false, |&v| v == normal_atom)
-            })
+            conn.get_property(false, w, type_atom, AtomEnum::ATOM, 0, 1)
+                .map_or(false, |c| {
+                    c.reply().map_or(false, |r| {
+                        r.value32().map_or(false, |mut iter| {
+                            iter.next().map_or(false, |v| v == normal_atom)
+                        })
+                    })
+                })
         })
         .filter_map(|&w| {
-            conn.wait_for_reply(conn.send_request(&x::GetProperty {
-                delete: false,
-                window: w,
-                property: desktop_atom,
-                r#type: x::ATOM_CARDINAL,
-                long_offset: 0,
-                long_length: 1,
-            }))
-            .ok()
+            conn.get_property(false, w, desktop_atom, AtomEnum::CARDINAL, 0, 1)
+                .ok()
+                .and_then(|c| c.reply().ok())
         })
-        .filter_map(|r| r.value::<u32>().get(0).cloned())
+        .filter_map(|r| r.value32().and_then(|mut val| val.next()))
         .collect())
 }
 
 fn get_clients(
-    conn: &xcb::Connection,
-    root: x::Window,
-    client_atom: x::Atom,
-) -> Result<Vec<x::Window>> {
+    conn: &RustConnection,
+    root: Window,
+    client_atom: Atom,
+) -> Result<Vec<Window>> {
     let mut windows = Vec::new();
 
     loop {
-        let reply =
-            conn.wait_for_reply(conn.send_request(&x::GetProperty {
-                delete: false,
-                window: root,
-                property: client_atom,
-                r#type: x::ATOM_WINDOW,
-                long_offset: windows.len() as u32,
-                long_length: 16,
-            }))?;
+        let reply = conn
+            .get_property(
+                false,
+                root,
+                client_atom,
+                AtomEnum::WINDOW,
+                windows.len() as u32,
+                16,
+            )?
+            .reply()?;
 
-        let wids: Vec<u32> = reply.value().to_vec();
-        windows.append(
-            &mut wids.iter().map(|&w| unsafe { x::Window::new(w) }).collect(),
-        );
+        let wids: Vec<u32> = reply
+            .value32()
+            .context("Invalid reply from X server")?
+            .collect();
+        windows.append(&mut wids.into_iter().collect());
 
-        if reply.bytes_after() == 0 {
+        if reply.bytes_after == 0 {
             break;
         }
     }
@@ -612,19 +596,19 @@ fn get_clients(
 }
 
 struct XStream {
-    conn: Arc<xcb::Connection>,
-    number_atom: x::Atom,
-    current_atom: x::Atom,
-    names_atom: x::Atom,
+    conn: Arc<RustConnection>,
+    number_atom: Atom,
+    current_atom: Atom,
+    names_atom: Atom,
     handle: Option<JoinHandle<()>>,
 }
 
 impl XStream {
     const fn new(
-        conn: Arc<xcb::Connection>,
-        number_atom: x::Atom,
-        current_atom: x::Atom,
-        names_atom: x::Atom,
+        conn: Arc<RustConnection>,
+        number_atom: Atom,
+        current_atom: Atom,
+        names_atom: Atom,
     ) -> Self {
         Self {
             conn,
@@ -641,7 +625,7 @@ impl Stream for XStream {
 
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &self.handle {
             if handle.is_finished() {
@@ -658,12 +642,10 @@ impl Stream for XStream {
             let names_atom = self.names_atom;
             self.handle = Some(task::spawn_blocking(move || loop {
                 let event = conn.wait_for_event();
-                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
-                    event
-                {
-                    if event.atom() == number_atom
-                        || event.atom() == current_atom
-                        || event.atom() == names_atom
+                if let Ok(protocol::Event::PropertyNotify(event)) = event {
+                    if event.atom == number_atom
+                        || event.atom == current_atom
+                        || event.atom == names_atom
                     {
                         waker.wake();
                         break;

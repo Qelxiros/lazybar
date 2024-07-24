@@ -3,16 +3,26 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::Arc,
-    task::{Context, Poll},
+    task::Poll,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
-use xcb::{x, XidNew};
+use x11rb::{
+    connection::Connection,
+    protocol::{
+        self,
+        xproto::{
+            Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt,
+            EventMask, Window,
+        },
+    },
+    rust_connection::RustConnection,
+};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
@@ -31,9 +41,9 @@ use crate::{
 #[builder_impl_attr(allow(missing_docs))]
 pub struct XWindow {
     name: &'static str,
-    conn: Arc<xcb::Connection>,
-    screen: i32,
-    windows: HashSet<x::Window>,
+    conn: Arc<RustConnection>,
+    screen: usize,
+    windows: HashSet<Window>,
     #[builder(setter(strip_option), default = "None")]
     max_width: Option<u32>,
     format: &'static str,
@@ -44,54 +54,41 @@ impl XWindow {
     fn draw(
         &mut self,
         cr: &Rc<cairo::Context>,
-        name_atom: x::Atom,
-        window_atom: x::Atom,
-        root: x::Window,
-        utf8_atom: x::Atom,
+        name_atom: Atom,
+        window_atom: Atom,
+        root: Window,
+        utf8_atom: Atom,
         height: i32,
     ) -> Result<PanelDrawInfo> {
         let active: u32 = self
             .conn
-            .wait_for_reply(self.conn.send_request(&x::GetProperty {
-                delete: false,
-                window: root,
-                property: window_atom,
-                r#type: x::ATOM_WINDOW,
-                long_offset: 0,
-                long_length: 1,
-            }))?
-            .value()[0];
+            .get_property(false, root, window_atom, AtomEnum::WINDOW, 0, 1)?
+            .reply()?
+            .value32()
+            .context("Invalid reply from X server")?
+            .next()
+            .context("Empty reply from X server")?;
         let name = if active == 0 {
             String::new()
         } else {
-            let window = unsafe { x::Window::new(active) };
-
-            if self.windows.insert(window) {
-                self.conn.check_request(self.conn.send_request_checked(
-                    &x::ChangeWindowAttributes {
-                        window,
-                        value_list: &[x::Cw::EventMask(
-                            x::EventMask::PROPERTY_CHANGE,
-                        )],
-                    },
-                ))?;
+            if self.windows.insert(active) {
+                self.conn
+                    .change_window_attributes(
+                        active,
+                        &ChangeWindowAttributesAux::new()
+                            .event_mask(EventMask::PROPERTY_CHANGE),
+                    )?
+                    .check()?;
             }
 
             if let Some(max_width) = self.max_width {
                 let bytes = self
                     .conn
-                    .wait_for_reply(self.conn.send_request(&x::GetProperty {
-                        delete: false,
-                        window,
-                        property: name_atom,
-                        r#type: utf8_atom,
-                        long_offset: 0,
-                        // characters can be up to four bytes, so we ask X for
-                        // the upper bound
-                        long_length: max_width,
-                    }))?
-                    .value()
-                    .to_vec();
+                    .get_property(
+                        false, active, name_atom, utf8_atom, 0, max_width,
+                    )?
+                    .reply()?
+                    .value;
 
                 unsafe { std::str::from_utf8_unchecked(bytes.as_slice()) }
                     .chars()
@@ -101,24 +98,18 @@ impl XWindow {
                 let mut offset = 0;
                 let mut title = String::new();
                 loop {
-                    let reply = self.conn.wait_for_reply(
-                        self.conn.send_request(&x::GetProperty {
-                            delete: false,
-                            window,
-                            property: name_atom,
-                            r#type: utf8_atom,
-                            long_offset: offset,
-                            // characters can be up to four bytes, so we ask X
-                            // for the upper bound
-                            long_length: 64,
-                        }),
-                    )?;
+                    let reply = self
+                        .conn
+                        .get_property(
+                            false, active, name_atom, utf8_atom, offset, 64,
+                        )?
+                        .reply()?;
 
                     title.push_str(unsafe {
-                        std::str::from_utf8_unchecked(reply.value())
+                        String::from_utf8_unchecked(reply.value).as_str()
                     });
 
-                    if reply.bytes_after() == 0 {
+                    if reply.bytes_after == 0 {
                         break;
                     }
 
@@ -168,8 +159,7 @@ impl PanelConfig for XWindow {
 
         builder.name(name);
         let screen = remove_string_from_config("screen", table);
-        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
-        {
+        if let Ok((conn, screen)) = RustConnection::connect(screen.as_deref()) {
             builder.conn(Arc::new(conn)).screen(screen);
         } else {
             log::error!("Failed to connect to X server");
@@ -205,17 +195,18 @@ impl PanelConfig for XWindow {
         let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
         let root = self
             .conn
-            .get_setup()
-            .roots()
-            .nth(self.screen as usize)
+            .setup()
+            .roots
+            .get(self.screen as usize)
             .ok_or_else(|| anyhow!("Screen not found"))?
-            .root();
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::ChangeWindowAttributes {
-                window: root,
-                value_list: &[x::Cw::EventMask(x::EventMask::PROPERTY_CHANGE)],
-            },
-        ))?;
+            .root;
+        self.conn
+            .change_window_attributes(
+                root,
+                &ChangeWindowAttributesAux::new()
+                    .event_mask(EventMask::PROPERTY_CHANGE),
+            )?
+            .check()?;
 
         for attr in &mut self.common.attrs {
             attr.apply_to(&global_attrs);
@@ -231,17 +222,17 @@ impl PanelConfig for XWindow {
 }
 
 struct XStream {
-    conn: Arc<xcb::Connection>,
-    name_atom: x::Atom,
-    window_atom: x::Atom,
+    conn: Arc<RustConnection>,
+    name_atom: Atom,
+    window_atom: Atom,
     handle: Option<JoinHandle<()>>,
 }
 
 impl XStream {
     const fn new(
-        conn: Arc<xcb::Connection>,
-        name_atom: x::Atom,
-        window_atom: x::Atom,
+        conn: Arc<RustConnection>,
+        name_atom: Atom,
+        window_atom: Atom,
     ) -> Self {
         Self {
             conn,
@@ -257,7 +248,7 @@ impl Stream for XStream {
 
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if let Some(handle) = &self.handle {
             if handle.is_finished() {
@@ -273,11 +264,8 @@ impl Stream for XStream {
             let window_atom = self.window_atom;
             self.handle = Some(task::spawn_blocking(move || loop {
                 let event = conn.wait_for_event();
-                if let Ok(xcb::Event::X(x::Event::PropertyNotify(event))) =
-                    event
-                {
-                    if event.atom() == name_atom || event.atom() == window_atom
-                    {
+                if let Ok(protocol::Event::PropertyNotify(event)) = event {
+                    if event.atom == name_atom || event.atom == window_atom {
                         waker.wake();
                         break;
                     }

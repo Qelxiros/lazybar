@@ -1,16 +1,23 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, ffi::CString, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use tokio_stream::StreamExt;
-use xcb::{
-    x::{
-        self, ClientMessageData, ClientMessageEvent, Cw, EventMask,
-        SendEventDest, ATOM_CARDINAL, ATOM_VISUALID,
+use x11rb::{
+    connection::Connection,
+    protocol::{
+        self,
+        xproto::{
+            Atom, AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent,
+            ConfigureWindowAux, ConnectionExt, CreateWindowAux, EventMask,
+            PropMode, Window, WindowClass,
+        },
     },
-    Raw, Xid, XidNew,
+    wrapper::ConnectionExt as _,
+    xcb_ffi::XCBConnection,
+    COPY_FROM_PARENT,
 };
 
 use crate::{
@@ -19,7 +26,7 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
-    x::{find_visual, intern_named_atom},
+    x::{create_surface, find_visual, intern_named_atom, XStream},
     PanelConfig, PanelStream,
 };
 
@@ -30,14 +37,14 @@ use crate::{
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Systray {
     name: &'static str,
-    conn: Arc<xcb::Connection>,
-    screen: i32,
+    conn: Arc<XCBConnection>,
+    screen: usize,
     #[builder(default)]
     time_start: u32,
     #[builder(default)]
     time_end: u32,
     #[builder(default)]
-    icons: Vec<x::Window>,
+    icons: Vec<Window>,
     #[builder(default = "1")]
     width: u16,
     #[builder(default)]
@@ -49,7 +56,7 @@ pub struct Systray {
     #[builder(default = "16")]
     icon_size: i16,
     #[builder(default)]
-    focused: Option<x::Window>,
+    focused: Option<Window>,
     #[builder(default)]
     surface: Option<cairo::XCBSurface>,
     #[builder(
@@ -62,9 +69,9 @@ pub struct Systray {
 impl Systray {
     fn draw(
         &self,
-        tray: x::Window,
-        selection: x::Window,
-        root: x::Window,
+        tray: Window,
+        selection: Window,
+        root: Window,
         bar_info: &bar::BarInfo,
     ) -> Result<PanelDrawInfo> {
         let config_conn = self.conn.clone();
@@ -94,80 +101,49 @@ impl Systray {
 
                 cr.fill()?;
 
-                config_conn.check_request(config_conn.send_request_checked(
-                    &x::ConfigureWindow {
-                        window: tray,
-                        value_list: &[
-                            x::ConfigWindow::X(x as i32),
-                            x::ConfigWindow::Y(y as i32),
-                        ],
-                    },
-                ))?;
+                config_conn
+                    .configure_window(
+                        tray,
+                        &ConfigureWindowAux::new().x(x as i32).y(y as i32),
+                    )?
+                    .check()?;
 
                 Ok(())
             }),
             Box::new(move || {
-                show_conn
-                    .check_request(show_conn.send_request_checked(
-                        &x::MapWindow { window: tray },
-                    ))?;
+                show_conn.map_window(tray)?.check()?;
                 Ok(())
             }),
             Box::new(move || {
-                hide_conn
-                    .check_request(hide_conn.send_request_checked(
-                        &x::UnmapWindow { window: tray },
-                    ))?;
+                hide_conn.unmap_window(tray)?.check()?;
                 Ok(())
             }),
             Some(Box::new(move || {
-                let len = icons.len();
                 for window in icons {
-                    let _ = shutdown_conn.check_request(
-                        shutdown_conn.send_request_checked(
-                            &x::ReparentWindow {
-                                window,
-                                parent: root,
-                                x: 0,
-                                y: 0,
-                            },
-                        ),
-                    );
+                    let _ = shutdown_conn
+                        .reparent_window(window, root, 0, 0)
+                        .and_then(|c| Ok(c.check()));
                 }
-                for _ in 0..len {
-                    loop {
-                        match shutdown_conn.wait_for_event() {
-                            Ok(xcb::Event::X(x::Event::ReparentNotify(_)))
-                            | Err(_) => break,
-                            _ => {}
-                        }
-                    }
-                }
-                let _ = shutdown_conn.check_request(
-                    shutdown_conn.send_request_checked(&x::DestroyWindow {
-                        window: selection,
-                    }),
-                );
+                let _ = shutdown_conn.destroy_window(selection);
             })),
         ))
     }
 
-    fn resize(
-        &mut self,
-        tray: x::Window,
-    ) -> std::result::Result<(), xcb::ProtocolError> {
+    fn resize(&mut self, tray: Window) -> Result<()> {
         let len = self.icons.len();
         self.width = ((len * self.icon_size as usize
             + (len - 1) * self.icon_padding as usize)
             as u16)
             .max(1);
 
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::ConfigureWindow {
-                window: tray,
-                value_list: &[x::ConfigWindow::Width(self.width as u32)],
-            },
-        ))
+        self.conn
+            .configure_window(
+                tray,
+                &ConfigureWindowAux::new().width(self.width as u32),
+            )?
+            .check()?;
+
+        Ok(())
     }
 }
 
@@ -182,8 +158,13 @@ impl PanelConfig for Systray {
 
         builder.name(name);
         let screen = remove_string_from_config("screen", table);
-        if let Ok((conn, screen)) = xcb::Connection::connect(screen.as_deref())
-        {
+        if let Ok((conn, screen)) = XCBConnection::connect(
+            screen
+                .as_ref()
+                .map(|s| CString::new(s.as_bytes()).ok())
+                .flatten()
+                .as_deref(),
+        ) {
             builder.conn(Arc::new(conn)).screen(screen);
         } else {
             log::error!("Failed to connect to X server");
@@ -237,98 +218,95 @@ impl PanelConfig for Systray {
 
         let screen = self
             .conn
-            .get_setup()
-            .roots()
-            .nth(self.screen as usize)
+            .setup()
+            .roots
+            .get(self.screen as usize)
             .context("Screen not found")?;
-        let root = screen.root();
+        let root = screen.root;
 
         let owner = self
             .conn
-            .wait_for_reply(self.conn.send_request(&x::GetSelectionOwner {
-                selection: tray_selection_atom,
-            }))?
-            .owner();
+            .get_selection_owner(tray_selection_atom)?
+            .reply()?
+            .owner;
 
-        if owner.resource_id() != 0 && !self.aggressive {
+        if owner != 0 && !self.aggressive {
             return Err(anyhow!(
                 "Systray on screen {} already managed",
                 self.screen
             ));
         }
 
-        let selection_wid: x::Window = self.conn.generate_id();
+        let selection_wid: Window = self.conn.generate_id()?;
 
-        self.conn.check_request(
-            self.conn.send_request_checked(&x::CreateWindow {
-                depth: 24,
-                wid: selection_wid,
-                parent: root,
-                x: -1,
-                y: -1,
-                width: 1,
-                height: 1,
-                border_width: 0,
-                class: x::WindowClass::InputOutput,
-                visual: find_visual(screen, 24)
-                    .context("couldn't find visual")?
-                    .visual_id(),
-                value_list: &[Cw::EventMask(EventMask::PROPERTY_CHANGE)],
-            }),
+        self.conn.create_window(
+            24,
+            selection_wid,
+            root,
+            -1,
+            -1,
+            1,
+            1,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            find_visual(screen, 24)
+                .context("couldn't find visual")?
+                .visual_id,
+            &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE),
         )?;
 
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::ChangeProperty::<u32> {
-                mode: x::PropMode::Replace,
-                window: selection_wid,
-                property: systray_orientation_atom,
-                r#type: ATOM_CARDINAL,
-                data: &[0],
-            },
-        ))?;
+        self.conn
+            .change_property32(
+                PropMode::REPLACE,
+                selection_wid,
+                systray_orientation_atom,
+                AtomEnum::CARDINAL,
+                &[0],
+            )?
+            .check()?;
 
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::ChangeProperty::<u32> {
-                mode: x::PropMode::Replace,
-                window: selection_wid,
-                property: systray_visual_atom,
-                r#type: ATOM_VISUALID,
-                data: &[bar_visual.visual_id()],
-            },
-        ))?;
+        self.conn
+            .change_property32(
+                PropMode::REPLACE,
+                selection_wid,
+                systray_visual_atom,
+                AtomEnum::VISUALID,
+                &[bar_visual.visual_id],
+            )?
+            .check()?;
 
-        let tray_wid: x::Window = self.conn.generate_id();
+        let tray_wid: Window = self.conn.generate_id()?;
         let depth = if bar_info.transparent { 32 } else { 24 };
         self.height = height as u16;
 
-        self.conn.check_request(self.conn.send_request_checked(
-            &x::CreateWindow {
+        self.conn
+            .create_window(
                 depth,
-                wid: tray_wid,
-                parent: bar_info.window,
-                x: 0,
-                y: 0,
-                width: 1,
-                height: self.height,
-                border_width: 0,
-                class: x::WindowClass::InputOutput,
-                visual: x::COPY_FROM_PARENT,
-                value_list: &[Cw::EventMask(
+                tray_wid,
+                bar_info.window,
+                0,
+                0,
+                1,
+                self.height,
+                0,
+                WindowClass::INPUT_OUTPUT,
+                COPY_FROM_PARENT,
+                &CreateWindowAux::new().event_mask(
                     EventMask::KEY_PRESS
                         | EventMask::KEY_RELEASE
                         | EventMask::PROPERTY_CHANGE
                         | EventMask::STRUCTURE_NOTIFY
                         | EventMask::SUBSTRUCTURE_NOTIFY,
-                )],
-            },
-        ))?;
+                ),
+            )?
+            .check()?;
 
-        let surface = crate::create_surface(
-            &self.conn,
+        let surface = create_surface(
             tray_wid,
             bar_visual,
             1,
             self.height as i32,
+            &*self.conn,
         )?;
         self.surface = Some(unsafe {
             cairo::XCBSurface::from_raw_none(surface.to_raw_none())?
@@ -338,23 +316,21 @@ impl PanelConfig for Systray {
         self.conn.flush()?;
 
         Ok((
-            Box::pin(crate::x::XStream::new(self.conn.clone()).map(
-                move |event| {
-                    if let Ok(xcb::Event::X(ref event)) = event {
-                        self.handle_tray_event(
-                            event,
-                            selection_wid,
-                            tray_wid,
-                            root,
-                            tray_selection_atom,
-                            info_atom,
-                            systray_opcode_atom,
-                            xembed_atom,
-                        )?;
-                    };
-                    self.draw(tray_wid, selection_wid, root, bar_info)
-                },
-            )),
+            Box::pin(XStream::new(self.conn.clone()).map(move |event| {
+                if let Ok(event) = event {
+                    self.handle_tray_event(
+                        &event,
+                        selection_wid,
+                        tray_wid,
+                        root,
+                        tray_selection_atom,
+                        info_atom,
+                        systray_opcode_atom,
+                        xembed_atom,
+                    )?;
+                };
+                self.draw(tray_wid, selection_wid, root, bar_info)
+            })),
             None,
         ))
     }
@@ -363,307 +339,239 @@ impl PanelConfig for Systray {
 impl Systray {
     fn handle_tray_event(
         &mut self,
-        event: &x::Event,
-        selection_wid: x::Window,
-        tray_wid: x::Window,
-        root: x::Window,
+        event: &protocol::Event,
+        selection_wid: Window,
+        tray_wid: Window,
+        root: Window,
         // _NET_SYSTEM_TRAY_S{screen}
-        tray_selection_atom: x::Atom,
+        tray_selection_atom: Atom,
         // _XEMBED_INFO
-        info_atom: x::Atom,
+        info_atom: Atom,
         // _NET_SYSTEM_TRAY_OPCODE
-        systray_opcode_atom: x::Atom,
+        systray_opcode_atom: Atom,
         // _XEMBED
-        xembed_atom: x::Atom,
+        xembed_atom: Atom,
     ) -> Result<()> {
         match event {
             // https://x.org/releases/X11R7.7/doc/xorg-docs/icccm/icccm.html#Acquiring_Selection_Ownership
-            x::Event::PropertyNotify(event) => {
+            protocol::Event::PropertyNotify(event) => {
                 if self.time_start == 0 {
-                    self.time_start = event.time();
-                    self.conn.check_request(self.conn.send_request_checked(
-                        &x::SetSelectionOwner {
-                            owner: selection_wid,
-                            selection: tray_selection_atom,
-                            time: self.time_start,
-                        },
-                    ))?;
+                    self.time_start = event.time;
+                    self.conn
+                        .set_selection_owner(
+                            selection_wid,
+                            tray_selection_atom,
+                            self.time_start,
+                        )?
+                        .check()?;
 
                     let manager_atom =
                         intern_named_atom(&self.conn, b"MANAGER")?;
 
-                    self.conn.check_request(self.conn.send_request_checked(
-                        &x::SendEvent {
-                            propagate: false,
-                            destination: SendEventDest::Window(root),
-                            event_mask: EventMask::STRUCTURE_NOTIFY,
-                            event: &ClientMessageEvent::new(
+                    self.conn
+                        .send_event(
+                            false,
+                            root,
+                            EventMask::STRUCTURE_NOTIFY,
+                            &ClientMessageEvent::new(
+                                32,
                                 root,
                                 manager_atom,
-                                ClientMessageData::Data32([
+                                [
                                     self.time_start,
-                                    tray_selection_atom.resource_id(),
-                                    selection_wid.resource_id(),
+                                    tray_selection_atom,
+                                    selection_wid,
                                     0,
                                     0,
-                                ]),
+                                ],
                             ),
-                        },
-                    ))?;
+                        )?
+                        .check()?;
                 } else {
-                    if event.atom() == info_atom {
-                        let window = event.window();
-                        let xembed_info = self.conn.wait_for_reply(
-                            self.conn.send_request(&x::GetProperty {
-                                delete: false,
-                                window,
-                                property: info_atom,
-                                r#type: info_atom,
-                                long_offset: 0,
-                                long_length: 64,
-                            }),
-                        );
-                        if let Ok(xembed_info) = xembed_info {
-                            if let Some(mapped) =
-                                xembed_info.value::<u32>().get(1)
-                            {
-                                if mapped | 0x1 == 1 {
-                                    self.conn.check_request(
-                                        self.conn.send_request_checked(
-                                            &x::MapWindow { window },
-                                        ),
-                                    )?;
-                                } else {
-                                    self.conn.check_request(
-                                        self.conn.send_request_checked(
-                                            &x::UnmapWindow { window },
-                                        ),
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            x::Event::ClientMessage(event) => {
-                let ty = event.r#type();
-                if ty == systray_opcode_atom {
-                    if let ClientMessageData::Data32(data) = event.data() {
-                        if data[1] != 0 {
-                            return Ok(());
-                        }
-                        let window = unsafe { x::Window::new(data[2]) };
-
-                        self.conn.check_request(
-                            self.conn.send_request_checked(
-                                &x::ConfigureWindow {
-                                    window: tray_wid,
-                                    value_list: &[x::ConfigWindow::Width(
-                                        (self.width as i16
-                                            + self.icon_size
-                                            + self.icon_padding)
-                                            as u32,
-                                    )],
-                                },
-                            ),
-                        )?;
-
-                        self.conn.check_request(
-                            self.conn.send_request_checked(
-                                &x::ConfigureWindow {
-                                    window,
-                                    value_list: &[
-                                        x::ConfigWindow::Width(
-                                            self.icon_size as u32,
-                                        ),
-                                        x::ConfigWindow::Height(
-                                            self.icon_size as u32,
-                                        ),
-                                    ],
-                                },
-                            ),
-                        )?;
-
-                        self.conn.check_request(
-                            self.conn.send_request_checked(
-                                &x::ChangeWindowAttributes {
-                                    window,
-                                    value_list: &[x::Cw::EventMask(
-                                        x::EventMask::PROPERTY_CHANGE,
-                                    )],
-                                },
-                            ),
-                        )?;
-
-                        self.conn.check_request(
-                            self.conn.send_request_checked(
-                                &x::ReparentWindow {
-                                    window,
-                                    parent: tray_wid,
-                                    x: self.width as i16
-                                        + self.icon_padding / 2,
-                                    y: (self.height as i16 - self.icon_size)
-                                        / 2,
-                                },
-                            ),
-                        )?;
-
-                        self.conn.check_request(
-                            self.conn.send_request_checked(
-                                &x::ConfigureWindow {
-                                    window,
-                                    value_list: &[x::ConfigWindow::StackMode(
-                                        x::StackMode::Above,
-                                    )],
-                                },
-                            ),
-                        )?;
-
-                        let xembed_info = self.conn.wait_for_reply(
-                            self.conn.send_request(&x::GetProperty {
-                                delete: false,
-                                window,
-                                property: info_atom,
-                                r#type: ATOM_CARDINAL,
-                                long_offset: 0,
-                                long_length: 2,
-                            }),
-                        )?;
-
-                        if !xembed_info
-                            .value::<u32>()
-                            .get(1)
-                            .is_some_and(|mapped| mapped | 0x1 == 0)
+                    if event.atom == info_atom {
+                        let window = event.window;
+                        let xembed_info = self
+                            .conn
+                            .get_property(
+                                false, window, info_atom, info_atom, 0, 64,
+                            )?
+                            .reply()?;
+                        if let Some(mapped) = xembed_info
+                            .value32()
+                            .context("Invalid reply from X server")?
+                            .nth(1)
                         {
-                            self.conn.check_request(
-                                self.conn.send_request_checked(&x::MapWindow {
-                                    window,
-                                }),
-                            )?;
-                        }
-
-                        self.icons.push(window);
-                        self.width +=
-                            (self.icon_size + self.icon_padding) as u16
-                    }
-                } else if ty == xembed_atom {
-                    if let ClientMessageData::Data32(data) = event.data() {
-                        let time = data[0];
-                        let major = data[1];
-                        match major {
-                            // request focus
-                            3 => {
-                                if let Some(focused) = self.focused {
-                                    self.conn.check_request(
-                                        self.conn.send_request_checked(
-                                            &x::SendEvent {
-                                                propagate: false,
-                                                destination:
-                                                    SendEventDest::Window(
-                                                        focused,
-                                                    ),
-                                                event_mask: EventMask::empty(),
-                                                event: &ClientMessageEvent::new(
-                                                    focused,
-                                                    xembed_atom,
-                                                    ClientMessageData::Data32(
-                                                        [time, 5, 0, 0, 0],
-                                                    ),
-                                                ),
-                                            },
-                                        ),
-                                    )?;
-                                }
-
-                                let window = event.window();
-                                self.conn.check_request(
-                                    self.conn.send_request_checked(
-                                        &x::SendEvent {
-                                            propagate: false,
-                                            destination: SendEventDest::Window(
-                                                window,
-                                            ),
-                                            event_mask: EventMask::empty(),
-                                            event: &ClientMessageEvent::new(
-                                                window,
-                                                xembed_atom,
-                                                ClientMessageData::Data32([
-                                                    time, 4, 0, 0, 0,
-                                                ]),
-                                            ),
-                                        },
-                                    ),
-                                )?;
+                            if mapped | 0x1 == 1 {
+                                self.conn.map_window(window)?.check()?;
+                            } else {
+                                self.conn.unmap_window(window)?.check()?;
                             }
-                            // focus next/prev
-                            6 | 7 => {
-                                if let Some(focused) = self.focused {
-                                    self.conn.check_request(
-                                        self.conn.send_request_checked(
-                                            &x::SendEvent {
-                                                propagate: false,
-                                                destination:
-                                                    SendEventDest::Window(
-                                                        focused,
-                                                    ),
-                                                event_mask: EventMask::empty(),
-                                                event: &ClientMessageEvent::new(
-                                                    focused,
-                                                    xembed_atom,
-                                                    ClientMessageData::Data32(
-                                                        [time, 5, 0, 0, 0],
-                                                    ),
-                                                ),
-                                            },
-                                        ),
-                                    )?;
-                                }
-                            }
-                            _ => {}
-                        }
+                        };
                     }
                 }
             }
-            x::Event::ReparentNotify(event) => {
-                if event.parent() != tray_wid {
-                    self.icons.retain(|&w| w != event.window());
+            protocol::Event::ClientMessage(event) => {
+                let ty = event.type_;
+                if ty == systray_opcode_atom {
+                    let data = event.data.as_data32();
+                    if data[1] != 0 {
+                        return Ok(());
+                    }
+                    let window = data[2];
+
+                    self.conn
+                        .configure_window(
+                            tray_wid,
+                            &ConfigureWindowAux::new().width(
+                                (self.width as i16
+                                    + self.icon_size
+                                    + self.icon_padding)
+                                    as u32,
+                            ),
+                        )?
+                        .check()?;
+
+                    self.conn
+                        .configure_window(
+                            window,
+                            &ConfigureWindowAux::new()
+                                .width(self.icon_size as u32)
+                                .height(self.icon_size as u32),
+                        )?
+                        .check()?;
+
+                    self.conn
+                        .change_window_attributes(
+                            window,
+                            &ChangeWindowAttributesAux::new()
+                                .event_mask(EventMask::PROPERTY_CHANGE),
+                        )?
+                        .check()?;
+
+                    self.conn
+                        .reparent_window(
+                            window,
+                            tray_wid,
+                            self.width as i16 + self.icon_padding / 2,
+                            (self.height as i16 - self.icon_size) / 2,
+                        )?
+                        .check()?;
+
+                    let xembed_info = self
+                        .conn
+                        .get_property(
+                            false,
+                            window,
+                            info_atom,
+                            AtomEnum::CARDINAL,
+                            0,
+                            2,
+                        )?
+                        .reply()?;
+
+                    if !xembed_info.value32().is_some_and(|mut val| {
+                        val.nth(1).is_some_and(|mapped| mapped | 0x1 == 0)
+                    }) {
+                        self.conn.map_window(window)?.check()?;
+                    }
+
+                    self.icons.push(window);
+                    self.width += (self.icon_size + self.icon_padding) as u16
+                } else if ty == xembed_atom {
+                    let data = event.data.as_data32();
+                    let time = data[0];
+                    let major = data[1];
+                    match major {
+                        // request focus
+                        3 => {
+                            if let Some(focused) = self.focused {
+                                self.conn
+                                    .send_event(
+                                        false,
+                                        focused,
+                                        EventMask::NO_EVENT,
+                                        ClientMessageEvent::new(
+                                            32,
+                                            focused,
+                                            xembed_atom,
+                                            [time, 5, 0, 0, 0],
+                                        ),
+                                    )?
+                                    .check()?;
+                            }
+
+                            let window = event.window;
+                            self.conn
+                                .send_event(
+                                    false,
+                                    window,
+                                    EventMask::NO_EVENT,
+                                    ClientMessageEvent::new(
+                                        32,
+                                        window,
+                                        xembed_atom,
+                                        [time, 4, 0, 0, 0],
+                                    ),
+                                )?
+                                .check()?;
+                        }
+                        // focus next/prev
+                        6 | 7 => {
+                            if let Some(focused) = self.focused {
+                                self.conn
+                                    .send_event(
+                                        false,
+                                        focused,
+                                        EventMask::NO_EVENT,
+                                        ClientMessageEvent::new(
+                                            32,
+                                            focused,
+                                            xembed_atom,
+                                            [time, 5, 0, 0, 0],
+                                        ),
+                                    )?
+                                    .check()?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            protocol::Event::ReparentNotify(event) => {
+                if event.parent != tray_wid {
+                    self.icons.retain(|&w| w != event.window);
                     self.resize(tray_wid)?;
                 }
             }
-            x::Event::DestroyNotify(event) => {
-                self.icons.retain(|&w| w != event.window());
+            protocol::Event::DestroyNotify(event) => {
+                self.icons.retain(|&w| w != event.window);
                 self.resize(tray_wid)?;
             }
-            x::Event::ConfigureNotify(event) => {
-                if event.window() != tray_wid
-                    && (event.height() != self.icon_size as u16
-                        || event.width() != self.icon_size as u16)
+            protocol::Event::ConfigureNotify(event) => {
+                if event.window != tray_wid
+                    && (event.height != self.icon_size as u16
+                        || event.width != self.icon_size as u16)
                 {
-                    self.conn.check_request(self.conn.send_request_checked(
-                        &x::ConfigureWindow {
-                            window: event.window(),
-                            value_list: &[
-                                x::ConfigWindow::Width(self.icon_size as u32),
-                                x::ConfigWindow::Height(self.icon_size as u32),
-                            ],
-                        },
-                    ))?;
+                    self.conn
+                        .configure_window(
+                            event.window,
+                            &ConfigureWindowAux::new()
+                                .width(self.icon_size as u32)
+                                .height(self.icon_size as u32),
+                        )?
+                        .check()?;
                 }
             }
-            x::Event::SelectionClear(event) => self.time_end = event.time(),
-            x::Event::KeyPress(event) | x::Event::KeyRelease(event) => {
+            protocol::Event::SelectionClear(event) => {
+                self.time_end = event.time;
+            }
+            protocol::Event::KeyPress(mut event)
+            | protocol::Event::KeyRelease(mut event) => {
                 if let Some(focused) = self.focused {
-                    unsafe {
-                        *(event.as_raw().add(12usize) as *mut _) = focused;
-                    }
-                    self.conn.check_request(self.conn.send_request_checked(
-                        &x::SendEvent {
-                            propagate: false,
-                            destination: SendEventDest::Window(focused),
-                            event_mask: EventMask::empty(),
-                            event,
-                        },
-                    ))?;
+                    event.child = focused;
+                    self.conn
+                        .send_event(false, focused, EventMask::NO_EVENT, event)?
+                        .check()?;
                 }
             }
             _ => {}

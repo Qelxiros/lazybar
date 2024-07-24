@@ -17,13 +17,20 @@ use tokio::{
     task::JoinSet,
 };
 use tokio_stream::{Stream, StreamMap};
-use xcb::x;
+use x11rb::{
+    connection::Connection,
+    protocol::{
+        self,
+        xproto::{ConnectionExt, Visualtype, Window},
+    },
+    xcb_ffi::XCBConnection,
+};
 
 use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    map_window, set_wm_properties, Alignment, Margins, PanelDrawFn,
-    PanelHideFn, PanelShowFn, PanelShutdownFn, PanelStream, Position,
+    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelHideFn,
+    PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
 
 lazy_static! {
@@ -37,9 +44,9 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct BarInfo {
     /// The X resource id of the bar window
-    pub window: x::Window,
+    pub window: Window,
     /// The X visual that the bar uses
-    pub visual: x::Visualtype,
+    pub visual: Visualtype,
     /// The width of the bar in pixels
     pub width: u16,
     /// The height of the bar in pixels
@@ -297,9 +304,9 @@ impl Panel {
 pub struct Bar {
     pub(crate) name: String,
     position: Position,
-    pub(crate) conn: Arc<xcb::Connection>,
-    screen: i32,
-    window: x::Window,
+    pub(crate) conn: Arc<XCBConnection>,
+    screen: usize,
+    window: Window,
     surface: cairo::XCBSurface,
     pub(crate) cr: Rc<cairo::Context>,
     width: i32,
@@ -381,9 +388,9 @@ impl Bar {
             name.as_str(),
             mon_name.as_str(),
         );
-        map_window(&conn, window)?;
+        conn.map_window(window)?.check()?;
         let surface =
-            create_surface(&conn, window, visual, width.into(), height.into())?;
+            create_surface(window, visual, width.into(), height.into(), &conn)?;
         let cr = cairo::Context::new(&surface)?;
         surface.flush();
         conn.flush()?;
@@ -488,22 +495,21 @@ impl Bar {
     }
 
     /// Handle an event from the X server.
-    pub fn process_event(&mut self, event: &xcb::Event) -> Result<()> {
+    pub fn process_event(&mut self, event: &protocol::Event) -> Result<()> {
         match event {
-            xcb::Event::X(x::Event::Expose(_)) => {
+            protocol::Event::Expose(_) => {
                 log::info!(
                     "Received expose event from X server; redrawing entire bar"
                 );
                 self.redraw_bar()
             }
-            xcb::Event::X(x::Event::ButtonPress(event)) => match event.detail()
-            {
+            protocol::Event::ButtonPress(event) => match event.detail {
                 button @ 1..=5 => {
-                    let (x, y) = if event.same_screen() {
-                        (event.event_x(), event.event_y())
+                    let (x, y) = if event.same_screen {
+                        (event.event_x, event.event_y)
                     } else {
                         // TODO: make sure this works/is relevant
-                        (event.root_x(), event.root_y())
+                        (event.root_x, event.root_y)
                     };
                     let panel = self
                         .left
@@ -545,20 +551,12 @@ impl Bar {
             "quit" => Ok(true),
             "show" => {
                 self.mapped = true;
-                self.conn.check_request(self.conn.send_request_checked(
-                    &x::MapWindow {
-                        window: self.window,
-                    },
-                ))?;
+                self.conn.map_window(self.window)?.check()?;
                 Ok(false)
             }
             "hide" => {
                 self.mapped = true;
-                self.conn.check_request(self.conn.send_request_checked(
-                    &x::UnmapWindow {
-                        window: self.window,
-                    },
-                ))?;
+                self.conn.unmap_window(self.window)?.check()?;
                 Ok(false)
             }
             "toggle" => {

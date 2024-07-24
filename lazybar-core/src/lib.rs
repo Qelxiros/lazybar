@@ -101,7 +101,7 @@ use ipc::ChannelEndpoint;
 pub use ramp::Ramp;
 use tokio_stream::Stream;
 pub use utils::*;
-use x::{create_surface, create_window, map_window, set_wm_properties};
+use x::{create_surface, create_window, set_wm_properties};
 
 /// A function that can be called repeatedly to draw the panel. The
 /// [`cairo::Context`] will have its current point set to the top left corner of
@@ -232,6 +232,9 @@ pub mod builders {
         task::{self, JoinSet},
     };
     use tokio_stream::{StreamExt, StreamMap};
+    use x11rb::errors::{
+        ConnectionError, ParseError, ReplyError, ReplyOrIdError,
+    };
 
     use crate::{
         cleanup, ipc::ChannelEndpoint, x::XStream, Alignment, Attrs, Bar,
@@ -461,11 +464,17 @@ pub mod builders {
                     Some(Ok(event)) = x_stream.next() => {
                         log::trace!("X event: {event:?}");
                         if let Err(e) = bar.process_event(&event) {
-                            if let Some(e) = e.downcast_ref::<xcb::Error>() {
-                                log::warn!("X event caused an error: {e}");
+                            if let Some(e) = e.downcast_ref::<ConnectionError>() {
+                                log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
                                 // close when X server does
                                 // this could cause problems, maybe only exit under certain circumstances?
                                 cleanup::exit(Some((bar.name.as_str(), self.ipc)), true, 0).await;
+                            } else if let Some(e) = e.downcast_ref::<ParseError>() {
+                                log::warn!("Error parsing data from X server: {e}");
+                            } else if let Some(e) = e.downcast_ref::<ReplyError>() {
+                                log::warn!("Error produced by X server: {e}");
+                            } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
+                                log::warn!("Error produced by X server: {e}");
                             } else {
                                 log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
                             }
