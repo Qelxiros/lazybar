@@ -1,11 +1,13 @@
-use std::{fs::DirBuilder, path::PathBuf, pin::Pin};
+use std::{fs::DirBuilder, path::PathBuf};
 
 use anyhow::Result;
 use tokio::{
-    net::{UnixListener, UnixStream},
+    net::UnixListener,
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
-use tokio_stream::{wrappers::UnixListenerStream, Stream};
+use tokio_stream::wrappers::UnixListenerStream;
+
+use crate::IpcStream;
 
 const IPC_DIR: &str = "/tmp/lazybar-ipc/";
 
@@ -14,10 +16,7 @@ pub fn init(
     enabled: bool,
     bar_name: &str,
     mon_name: &str,
-) -> (
-    Result<Pin<Box<dyn Stream<Item = Result<UnixStream, std::io::Error>>>>>,
-    String,
-) {
+) -> (Result<IpcStream>, String) {
     let mut final_name = bar_name.to_string();
     (
         if enabled && DirBuilder::new().recursive(true).create(IPC_DIR).is_ok()

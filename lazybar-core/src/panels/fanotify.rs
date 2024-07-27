@@ -110,7 +110,7 @@ impl PanelConfig for Fanotify {
     {
         // FAN_REPORT_FID is required without CAP_SYS_ADMIN, but nix v0.29
         // doesn't know that it's real
-        let init_flags = InitFlags::from_bits_retain(0x00000200);
+        let init_flags = InitFlags::from_bits_retain(0x0000_0200);
         let event_f_flags = EventFFlags::O_RDONLY | EventFFlags::O_NOATIME;
         let fanotify = fanotify::Fanotify::init(init_flags, event_f_flags)?;
 

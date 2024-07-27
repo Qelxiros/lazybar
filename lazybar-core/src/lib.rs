@@ -53,6 +53,8 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_lossless)]
 #![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_arguments)]
 
 /// Configuration options for click/scroll events on panels.
 pub mod actions;
@@ -124,6 +126,14 @@ pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 
 /// The channel endpoint associated with a panel
 pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
+
+pub(crate) type IpcStream = Pin<
+    Box<
+        dyn tokio_stream::Stream<
+            Item = std::result::Result<tokio::net::UnixStream, std::io::Error>,
+        >,
+    >,
+>;
 
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
@@ -444,7 +454,7 @@ pub mod builders {
                                 true,
                                 0,
                             )
-                            .await
+                            .await;
                         });
                     } else {
                         executor::block_on(cleanup::exit(

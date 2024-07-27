@@ -406,7 +406,7 @@ impl PanelConfig for XWorkspaces {
             .conn
             .setup()
             .roots
-            .get(self.screen as usize)
+            .get(self.screen)
             .ok_or_else(|| anyhow!("Screen not found"))?
             .root;
         self.conn.change_window_attributes(
@@ -524,13 +524,12 @@ fn get_current(
     root: Window,
     current_atom: Atom,
 ) -> Result<u32> {
-    Ok(conn
-        .get_property(false, root, current_atom, AtomEnum::CARDINAL, 0, 1)?
+    conn.get_property(false, root, current_atom, AtomEnum::CARDINAL, 0, 1)?
         .reply()?
         .value32()
         .context("Invalid reply from X server")?
         .next()
-        .context("Empty reply from X server")?)
+        .context("Empty reply from X server")
 }
 
 fn get_nonempty(
@@ -581,11 +580,8 @@ fn get_clients(
             )?
             .reply()?;
 
-        let wids: Vec<u32> = reply
-            .value32()
-            .context("Invalid reply from X server")?
-            .collect();
-        windows.append(&mut wids.into_iter().collect());
+        let wids = reply.value32().context("Invalid reply from X server")?;
+        windows.append(&mut wids.collect());
 
         if reply.bytes_after == 0 {
             break;

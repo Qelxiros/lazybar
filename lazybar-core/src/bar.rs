@@ -29,7 +29,7 @@ use x11rb::{
 use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    set_wm_properties, Alignment, Margins, PanelDrawFn, PanelHideFn,
+    set_wm_properties, Alignment, IpcStream, Margins, PanelDrawFn, PanelHideFn,
     PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
 
@@ -337,16 +337,7 @@ impl Bar {
         reverse_scroll: bool,
         ipc: bool,
         monitor: Option<String>,
-    ) -> Result<(
-        Self,
-        Pin<
-            Box<
-                dyn tokio_stream::Stream<
-                    Item = std::result::Result<UnixStream, std::io::Error>,
-                >,
-            >,
-        >,
-    )> {
+    ) -> Result<(Self, IpcStream)> {
         let (conn, screen, window, width, visual, mon_name) =
             create_window(position, height, transparent, &bg, monitor)?;
 
@@ -430,8 +421,8 @@ impl Bar {
     pub fn shutdown(self) {
         self.left
             .into_iter()
-            .chain(self.center.into_iter())
-            .chain(self.right.into_iter())
+            .chain(self.center)
+            .chain(self.right)
             .filter_map(|panel| panel.draw_info)
             .filter_map(|draw_info| draw_info.shutdown)
             .for_each(|shutdown| shutdown());
@@ -486,12 +477,12 @@ impl Bar {
                 }
                 panel.last_status = status == PanelStatus::Shown;
             });
-        hidden.iter().for_each(|draw_info| {
+        for draw_info in hidden {
             let _ = (draw_info.hide_fn)();
-        });
-        shown.iter().for_each(|draw_info| {
+        }
+        for draw_info in shown {
             let _ = (draw_info.show_fn)();
-        });
+        }
     }
 
     /// Handle an event from the X server.

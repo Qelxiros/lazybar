@@ -133,7 +133,7 @@ impl Pulseaudio {
     }
 
     fn process_event(
-        event: Event,
+        event: &Event,
         actions: Actions,
         sink: &str,
         unit: u32,
@@ -257,7 +257,7 @@ impl Pulseaudio {
                     MouseButton::ScrollDown => actions.down.clone(),
                 };
                 Ok(Self::process_event(
-                    Event::Action(action),
+                    &Event::Action(action),
                     actions,
                     sink,
                     unit,
@@ -490,7 +490,7 @@ impl PanelConfig for Pulseaudio {
             1,
             Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
-                    s,
+                    &s,
                     actions.clone(),
                     sink.as_str(),
                     unit,

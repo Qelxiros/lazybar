@@ -96,7 +96,7 @@ pub fn create_window(
     let (conn, screen_idx) = XCBConnection::connect(None)?;
     let window: Window = conn.generate_id()?;
     let colormap: Colormap = conn.generate_id()?;
-    let screen = conn.setup().roots.get(screen_idx as usize).unwrap();
+    let screen = conn.setup().roots.get(screen_idx).unwrap();
 
     let monitors = conn.randr_get_monitors(screen.root, true)?.reply()?;
     let mut iter = monitors.monitors.iter();
@@ -263,7 +263,7 @@ pub fn set_wm_properties(
             window,
             desktop_atom,
             AtomEnum::CARDINAL,
-            &[0xFFFFFFFFu32],
+            &[0xFFFF_FFFF_u32],
         );
     }
 
@@ -299,8 +299,8 @@ pub struct xcb_visualtype_t {
 }
 
 impl From<Visualtype> for xcb_visualtype_t {
-    fn from(value: Visualtype) -> xcb_visualtype_t {
-        xcb_visualtype_t {
+    fn from(value: Visualtype) -> Self {
+        Self {
             visual_id: value.visual_id,
             class: value.class.into(),
             bits_per_rgb_value: value.bits_per_rgb_value,
@@ -323,14 +323,14 @@ pub fn create_surface(
     Ok(XCBSurface::create(
         unsafe {
             &cairo::XCBConnection::from_raw_none(
-                conn.get_raw_xcb_connection() as _
+                conn.get_raw_xcb_connection().cast(),
             )
         },
         &cairo::XCBDrawable(window),
         unsafe {
-            &cairo::XCBVisualType::from_raw_none(&mut xcb_visualtype_t::from(
-                visual,
-            ) as *mut _ as _)
+            &cairo::XCBVisualType::from_raw_none(
+                std::ptr::from_mut(&mut xcb_visualtype_t::from(visual)).cast(),
+            )
         },
         width,
         height,

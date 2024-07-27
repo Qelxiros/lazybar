@@ -7,6 +7,7 @@ use derive_builder::Builder;
 use tokio_stream::StreamExt;
 use x11rb::{
     connection::Connection,
+    cookie::VoidCookie,
     protocol::{
         self,
         render::{
@@ -73,7 +74,7 @@ impl Systray {
         selection: Window,
         root: Window,
         bar_info: &bar::BarInfo,
-    ) -> Result<PanelDrawInfo> {
+    ) -> PanelDrawInfo {
         let config_conn = self.conn.clone();
         let show_conn = self.conn.clone();
         let hide_conn = self.conn.clone();
@@ -89,7 +90,7 @@ impl Systray {
         let width = self.width;
         let height = self.height;
 
-        Ok(PanelDrawInfo::new(
+        PanelDrawInfo::new(
             (self.width as i32, self.height as i32),
             self.common.dependence,
             Box::new(move |_, x, y| {
@@ -126,11 +127,11 @@ impl Systray {
                 for window in icons {
                     let _ = shutdown_conn
                         .reparent_window(window, root, 0, 0)
-                        .and_then(|c| Ok(c.check()));
+                        .map(VoidCookie::check);
                 }
                 let _ = shutdown_conn.destroy_window(selection);
             })),
-        ))
+        )
     }
 
     fn resize(&mut self, tray: Window) -> Result<()> {
@@ -165,8 +166,7 @@ impl PanelConfig for Systray {
         if let Ok((conn, screen)) = XCBConnection::connect(
             screen
                 .as_ref()
-                .map(|s| CString::new(s.as_bytes()).ok())
-                .flatten()
+                .and_then(|s| CString::new(s.as_bytes()).ok())
                 .as_deref(),
         ) {
             builder.conn(Arc::new(conn)).screen(screen);
@@ -224,7 +224,7 @@ impl PanelConfig for Systray {
             .conn
             .setup()
             .roots
-            .get(self.screen as usize)
+            .get(self.screen)
             .context("Screen not found")?;
         let root = screen.root;
 
@@ -347,7 +347,7 @@ impl PanelConfig for Systray {
                         xembed_atom,
                     )?;
                 };
-                self.draw(tray_wid, selection_wid, root, bar_info)
+                Ok(self.draw(tray_wid, selection_wid, root, bar_info))
             })),
             None,
         ))
@@ -391,7 +391,7 @@ impl Systray {
                             false,
                             root,
                             EventMask::STRUCTURE_NOTIFY,
-                            &ClientMessageEvent::new(
+                            ClientMessageEvent::new(
                                 32,
                                 root,
                                 manager_atom,
@@ -405,27 +405,25 @@ impl Systray {
                             ),
                         )?
                         .check()?;
-                } else {
-                    if event.atom == info_atom {
-                        let window = event.window;
-                        let xembed_info = self
-                            .conn
-                            .get_property(
-                                false, window, info_atom, info_atom, 0, 64,
-                            )?
-                            .reply()?;
-                        if let Some(mapped) = xembed_info
-                            .value32()
-                            .context("Invalid reply from X server")?
-                            .nth(1)
-                        {
-                            if mapped | 0x1 == 1 {
-                                self.conn.map_window(window)?.check()?;
-                            } else {
-                                self.conn.unmap_window(window)?.check()?;
-                            }
-                        };
-                    }
+                } else if event.atom == info_atom {
+                    let window = event.window;
+                    let xembed_info = self
+                        .conn
+                        .get_property(
+                            false, window, info_atom, info_atom, 0, 64,
+                        )?
+                        .reply()?;
+                    if let Some(mapped) = xembed_info
+                        .value32()
+                        .context("Invalid reply from X server")?
+                        .nth(1)
+                    {
+                        if mapped & 0x1 == 1 {
+                            self.conn.map_window(window)?.check()?;
+                        } else {
+                            self.conn.unmap_window(window)?.check()?;
+                        }
+                    };
                 }
             }
             protocol::Event::ClientMessage(event) => {
@@ -488,13 +486,13 @@ impl Systray {
                         .reply()?;
 
                     if !xembed_info.value32().is_some_and(|mut val| {
-                        val.nth(1).is_some_and(|mapped| mapped | 0x1 == 0)
+                        val.nth(1).is_some_and(|mapped| mapped & 0x1 == 0)
                     }) {
                         self.conn.map_window(window)?.check()?;
                     }
 
                     self.icons.push(window);
-                    self.width += (self.icon_size + self.icon_padding) as u16
+                    self.width += (self.icon_size + self.icon_padding) as u16;
                 } else if ty == xembed_atom {
                     let data = event.data.as_data32();
                     let time = data[0];

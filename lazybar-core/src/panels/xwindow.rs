@@ -197,7 +197,7 @@ impl PanelConfig for XWindow {
             .conn
             .setup()
             .roots
-            .get(self.screen as usize)
+            .get(self.screen)
             .ok_or_else(|| anyhow!("Screen not found"))?
             .root;
         self.conn
