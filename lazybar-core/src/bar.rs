@@ -315,9 +315,9 @@ pub struct Bar {
     margins: Margins,
     extents: Extents,
     reverse_scroll: bool,
-    pub(crate) left: Vec<Panel>,
-    pub(crate) center: Vec<Panel>,
-    pub(crate) right: Vec<Panel>,
+    pub(crate) left_panels: Vec<Panel>,
+    pub(crate) center_panels: Vec<Panel>,
+    pub(crate) right_panels: Vec<Panel>,
     pub(crate) streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
     pub(crate) ipc: bool,
     mapped: bool,
@@ -405,9 +405,9 @@ impl Bar {
                     right: width.into(),
                 },
                 reverse_scroll,
-                left: Vec::new(),
-                center: Vec::new(),
-                right: Vec::new(),
+                left_panels: Vec::new(),
+                center_panels: Vec::new(),
+                right_panels: Vec::new(),
                 streams: StreamMap::new(),
                 ipc,
                 mapped: true,
@@ -419,10 +419,10 @@ impl Bar {
 
     /// Calls each panel's shutdown function
     pub fn shutdown(self) {
-        self.left
+        self.left_panels
             .into_iter()
-            .chain(self.center)
-            .chain(self.right)
+            .chain(self.center_panels)
+            .chain(self.right_panels)
             .filter_map(|panel| panel.draw_info)
             .filter_map(|draw_info| draw_info.shutdown)
             .for_each(|shutdown| shutdown());
@@ -502,11 +502,12 @@ impl Bar {
                         // TODO: make sure this works/is relevant
                         (event.root_x, event.root_y)
                     };
+
                     let panel = self
-                        .left
+                        .left_panels
                         .iter()
-                        .chain(self.center.iter())
-                        .chain(self.right.iter())
+                        .chain(self.center_panels.iter())
+                        .chain(self.right_panels.iter())
                         .filter(|p| p.draw_info.is_some())
                         .find(|p| {
                             p.x <= x as f64
@@ -567,9 +568,9 @@ impl Bar {
             let idx = caps["idx"].parse::<usize>()?;
 
             if let Some(target) = match region {
-                "l" => self.left.get_mut(idx),
-                "c" => self.center.get_mut(idx),
-                "r" => self.right.get_mut(idx),
+                "l" => self.left_panels.get_mut(idx),
+                "c" => self.center_panels.get_mut(idx),
+                "r" => self.right_panels.get_mut(idx),
                 _ => unreachable!(),
             } {
                 match &caps["message"] {
@@ -610,10 +611,10 @@ impl Bar {
 
         if let Some(panel) = dest {
             let mut panels = self
-                .left
+                .left_panels
                 .iter()
-                .chain(self.center.iter())
-                .chain(self.right.iter())
+                .chain(self.center_panels.iter())
+                .chain(self.right_panels.iter())
                 .filter(|p| p.name == panel);
 
             let target = panels.next();
@@ -730,7 +731,7 @@ impl Bar {
         match alignment {
             Alignment::Left => {
                 let cur_width = f64::from(
-                    self.left
+                    self.left_panels
                         .get(idx)
                         .expect("one or more panels have vanished")
                         .draw_info
@@ -738,7 +739,7 @@ impl Bar {
                         .map_or(0, |i| i.width),
                 );
 
-                self.left
+                self.left_panels
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
                     .draw_info = Some(draw_info);
@@ -761,7 +762,7 @@ impl Bar {
             }
             Alignment::Center => {
                 let cur_width = f64::from(
-                    self.center
+                    self.center_panels
                         .get(idx)
                         .expect("one or more panels have vanished")
                         .draw_info
@@ -769,7 +770,7 @@ impl Bar {
                         .map_or(0, |i| i.width),
                 );
 
-                self.center
+                self.center_panels
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
                     .draw_info = Some(draw_info);
@@ -784,7 +785,7 @@ impl Bar {
             }
             Alignment::Right => {
                 let cur_width = f64::from(
-                    self.right
+                    self.right_panels
                         .get(idx)
                         .expect("one or more panels have vanished")
                         .draw_info
@@ -792,7 +793,7 @@ impl Bar {
                         .map_or(0, |i| i.width),
                 );
 
-                self.right
+                self.right_panels
                     .get_mut(idx)
                     .expect("one or more panels have vanished")
                     .draw_info = Some(draw_info);
@@ -834,7 +835,7 @@ impl Bar {
                 self.cr.save()?;
 
                 let panel = self
-                    .left
+                    .left_panels
                     .get(idx)
                     .expect("one or more panels have vanished");
                 if let Some(draw_info) = &panel.draw_info {
@@ -855,12 +856,12 @@ impl Bar {
             Alignment::Center => {
                 self.cr.save()?;
                 let panel = self
-                    .center
+                    .center_panels
                     .get(idx)
                     .expect("one or more panels have vanished");
 
                 if let Some(draw_info) = &self
-                    .center
+                    .center_panels
                     .get(idx)
                     .expect("one or more panels have vanished")
                     .draw_info
@@ -882,12 +883,12 @@ impl Bar {
             Alignment::Right => {
                 self.cr.save()?;
                 let panel = self
-                    .right
+                    .right_panels
                     .get(idx)
                     .expect("one or more panels have vanished");
 
                 if let Some(draw_info) = &self
-                    .right
+                    .right_panels
                     .get(idx)
                     .expect("one or more panels have vanished")
                     .draw_info
@@ -934,15 +935,15 @@ impl Bar {
 
         self.extents.left = self.margins.left;
 
-        let statuses = Self::apply_dependence(self.left.as_slice());
+        let statuses = Self::apply_dependence(self.left_panels.as_slice());
 
         Self::process_show_hide_events(
-            self.left.as_mut_slice(),
+            self.left_panels.as_mut_slice(),
             statuses.as_slice(),
         );
 
         for panel in self
-            .left
+            .left_panels
             .iter_mut()
             .enumerate()
             .filter(|(idx, _)| {
@@ -976,15 +977,16 @@ impl Bar {
             self.redraw_background(&Region::CenterRight)?;
         }
 
-        let center_statuses = Self::apply_dependence(self.center.as_slice());
+        let center_statuses =
+            Self::apply_dependence(self.center_panels.as_slice());
 
         Self::process_show_hide_events(
-            self.center.as_mut_slice(),
+            self.center_panels.as_mut_slice(),
             center_statuses.as_slice(),
         );
 
         let center_panels = self
-            .center
+            .center_panels
             .iter_mut()
             .enumerate()
             .filter(|(idx, _)| {
@@ -993,15 +995,16 @@ impl Bar {
             .map(|(_, panel)| panel)
             .collect::<Vec<_>>();
 
-        let right_statuses = Self::apply_dependence(self.right.as_slice());
+        let right_statuses =
+            Self::apply_dependence(self.right_panels.as_slice());
 
         Self::process_show_hide_events(
-            self.right.as_mut_slice(),
+            self.right_panels.as_mut_slice(),
             right_statuses.as_slice(),
         );
 
         let right_panels = self
-            .right
+            .right_panels
             .iter()
             .enumerate()
             .filter(|(idx, _)| {
@@ -1092,16 +1095,17 @@ impl Bar {
             self.redraw_background(&Region::Right)?;
         }
 
-        let statuses = statuses
-            .unwrap_or_else(|| Self::apply_dependence(self.right.as_slice()));
+        let statuses = statuses.unwrap_or_else(|| {
+            Self::apply_dependence(self.right_panels.as_slice())
+        });
 
         Self::process_show_hide_events(
-            self.right.as_mut_slice(),
+            self.right_panels.as_mut_slice(),
             statuses.as_slice(),
         );
 
         let total_width = f64::from(
-            self.right
+            self.right_panels
                 .iter()
                 .enumerate()
                 .filter(|(idx, _)| {
@@ -1121,7 +1125,7 @@ impl Bar {
         let mut temp = self.extents.right;
 
         for panel in self
-            .right
+            .right_panels
             .iter_mut()
             .enumerate()
             .filter(|(idx, _)| {

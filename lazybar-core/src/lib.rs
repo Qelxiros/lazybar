@@ -230,7 +230,7 @@ impl Margins {
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`] for panel builders.
 pub mod builders {
-    use std::thread;
+    use std::{mem::MaybeUninit, thread};
 
     use anyhow::Result;
     use derive_builder::Builder;
@@ -337,8 +337,10 @@ pub mod builders {
 
             let mut joinset = JoinSet::new();
 
-            let mut left_panels = StreamMap::with_capacity(self.left.len());
+            let mut left_stream = StreamMap::with_capacity(self.left.len());
+            let mut left_panels = Vec::new();
             for (idx, panel) in self.left.into_iter().enumerate() {
+                left_panels.push(None);
                 let cr = bar.cr.clone();
                 let attrs = self.attrs.clone();
                 joinset.spawn_local(async move {
@@ -357,8 +359,10 @@ pub mod builders {
                 });
             }
 
-            let mut center_panels = StreamMap::with_capacity(self.center.len());
+            let mut center_stream = StreamMap::with_capacity(self.center.len());
+            let mut center_panels = Vec::new();
             for (idx, panel) in self.center.into_iter().enumerate() {
+                center_panels.push(None);
                 let cr = bar.cr.clone();
                 let attrs = self.attrs.clone();
                 joinset.spawn_local(async move {
@@ -377,8 +381,10 @@ pub mod builders {
                 });
             }
 
-            let mut right_panels = StreamMap::with_capacity(self.right.len());
+            let mut right_stream = StreamMap::with_capacity(self.right.len());
+            let mut right_panels = Vec::new();
             for (idx, panel) in self.right.into_iter().enumerate() {
+                right_panels.push(None);
                 let cr = bar.cr.clone();
                 let attrs = self.attrs.clone();
                 joinset.spawn_local(async move {
@@ -407,31 +413,44 @@ pub mod builders {
                 {
                     match alignment {
                         Alignment::Left => {
-                            bar.left
-                                .push(Panel::new(None, name, sender, visible));
-                            left_panels.insert(idx, stream);
+                            left_panels[idx] =
+                                Some(Panel::new(None, name, sender, visible));
+                            left_stream.insert(idx, stream);
                         }
                         Alignment::Center => {
-                            bar.center
-                                .push(Panel::new(None, name, sender, visible));
-                            center_panels.insert(idx, stream);
+                            center_panels[idx] =
+                                Some(Panel::new(None, name, sender, visible));
+                            center_stream.insert(idx, stream);
                         }
                         Alignment::Right => {
-                            bar.right
-                                .push(Panel::new(None, name, sender, visible));
-                            right_panels.insert(idx, stream);
+                            right_panels[idx] =
+                                Some(Panel::new(None, name, sender, visible));
+                            right_stream.insert(idx, stream);
                         }
                     }
                 }
             }
 
-            bar.streams.insert(Alignment::Left, left_panels);
+            bar.left_panels = left_panels
+                .into_iter()
+                .map(|p| unsafe { p.unwrap_unchecked() })
+                .collect();
+            bar.center_panels = center_panels
+                .into_iter()
+                .map(|p| unsafe { p.unwrap_unchecked() })
+                .collect();
+            bar.right_panels = right_panels
+                .into_iter()
+                .map(|p| unsafe { p.unwrap_unchecked() })
+                .collect();
+
+            bar.streams.insert(Alignment::Left, left_stream);
             log::debug!("left panels running");
 
-            bar.streams.insert(Alignment::Center, center_panels);
+            bar.streams.insert(Alignment::Center, center_stream);
             log::debug!("center panels running");
 
-            bar.streams.insert(Alignment::Right, right_panels);
+            bar.streams.insert(Alignment::Right, right_stream);
             log::debug!("right panels running");
 
             let mut x_stream = XStream::new(bar.conn.clone());
