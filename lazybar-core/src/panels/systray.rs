@@ -9,10 +9,14 @@ use x11rb::{
     connection::Connection,
     protocol::{
         self,
+        render::{
+            Color, ConnectionExt as _, CreatePictureAux, PictOp, PictType,
+            Picture,
+        },
         xproto::{
             Atom, AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent,
             ConfigureWindowAux, ConnectionExt, CreateWindowAux, EventMask,
-            PropMode, Window, WindowClass,
+            PropMode, Rectangle, Window, WindowClass,
         },
     },
     wrapper::ConnectionExt as _,
@@ -26,7 +30,7 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
-    x::{create_surface, find_visual, intern_named_atom, XStream},
+    x::{find_visual, intern_named_atom, XStream},
     PanelConfig, PanelStream,
 };
 
@@ -58,11 +62,7 @@ pub struct Systray {
     #[builder(default)]
     focused: Option<Window>,
     #[builder(default)]
-    surface: Option<cairo::XCBSurface>,
-    #[builder(
-        default = "unsafe { cairo::Context::from_raw_none(0x0 as *mut _) }"
-    )]
-    cr: cairo::Context,
+    picture: Picture,
     common: PanelCommon,
 }
 
@@ -79,27 +79,31 @@ impl Systray {
         let hide_conn = self.conn.clone();
         let shutdown_conn = self.conn.clone();
         let icons = self.icons.clone();
-        let cr = self.cr.clone();
-        let bg = bar_info.bg.clone();
+        let picture = self.picture;
+        let bg = Color {
+            red: bar_info.bg.r as u16,
+            green: bar_info.bg.g as u16,
+            blue: bar_info.bg.b as u16,
+            alpha: bar_info.bg.a as u16,
+        };
         let width = self.width;
         let height = self.height;
-        let surface = self.surface.clone();
 
         Ok(PanelDrawInfo::new(
             (self.width as i32, self.height as i32),
             self.common.dependence,
             Box::new(move |_, x, y| {
-                let _ = surface
-                    .as_ref()
-                    .unwrap()
-                    .set_size(width as i32, height as i32);
-
-                cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
-                cr.set_operator(cairo::Operator::Source);
-
-                cr.rectangle(0.0, 0.0, width as f64, height as f64);
-
-                cr.fill()?;
+                config_conn.render_fill_rectangles(
+                    PictOp::SRC,
+                    picture,
+                    bg,
+                    &[Rectangle {
+                        x: 0,
+                        y: 0,
+                        width,
+                        height,
+                    }],
+                )?;
 
                 config_conn
                     .configure_window(
@@ -301,17 +305,31 @@ impl PanelConfig for Systray {
             )?
             .check()?;
 
-        let surface = create_surface(
-            tray_wid,
-            bar_visual,
-            1,
-            self.height as i32,
-            &*self.conn,
-        )?;
-        self.surface = Some(unsafe {
-            cairo::XCBSurface::from_raw_none(surface.to_raw_none())?
-        });
-        self.cr = cairo::Context::new(surface)?;
+        let pictformat = self
+            .conn
+            .render_query_pict_formats()?
+            .reply()?
+            .formats
+            .iter()
+            .find(|f| {
+                f.type_ == PictType::DIRECT
+                    && f.depth == if bar_info.transparent { 32 } else { 24 }
+            })
+            // it would be a spec violation for this to fail
+            // https://cgit.freedesktop.org/xorg/proto/renderproto/tree/renderproto.txt#n257
+            .unwrap()
+            .id;
+
+        self.picture = self.conn.generate_id()?;
+
+        self.conn
+            .render_create_picture(
+                self.picture,
+                tray_wid,
+                pictformat,
+                &CreatePictureAux::new(),
+            )?
+            .check()?;
 
         self.conn.flush()?;
 

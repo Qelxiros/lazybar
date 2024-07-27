@@ -60,4 +60,4 @@ signal-hook = { version = "0.3.17", features = ["iterator"] }
 tokio = { version = "1.38.0", features = ["rt", "net", "time", "macros", "rt-multi-thread", "fs", "io-util"] }
 tokio-stream = { version = "0.1.15", features = ["net"] }
 unicode-segmentation = { version = "1.11.0", optional = true }
-x11rb = { version = "0.13.1", features = ["allow-unsafe-code", "randr"] }
+x11rb = { version = "0.13.1", features = ["allow-unsafe-code", "randr", "render"] }
