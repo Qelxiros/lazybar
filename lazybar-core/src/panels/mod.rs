@@ -36,7 +36,7 @@ mod xworkspaces;
 #[cfg(feature = "battery")]
 pub use battery::Battery;
 #[cfg(feature = "clock")]
-pub use clock::{precision, Clock};
+pub use clock::Clock;
 #[cfg(feature = "cpu")]
 pub use cpu::Cpu;
 #[cfg(feature = "custom")]

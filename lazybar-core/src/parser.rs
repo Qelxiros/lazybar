@@ -8,6 +8,8 @@ use tokio::sync::OnceCell;
 
 #[cfg(feature = "battery")]
 use crate::panels::Battery;
+#[cfg(feature = "clock")]
+use crate::panels::Clock;
 #[cfg(feature = "cpu")]
 use crate::panels::Cpu;
 #[cfg(feature = "custom")]
@@ -38,11 +40,6 @@ use crate::panels::Temp;
 use crate::panels::XWindow;
 #[cfg(feature = "xworkspaces")]
 use crate::panels::XWorkspaces;
-#[cfg(feature = "clock")]
-use crate::panels::{
-    precision::{Days, Hours, Minutes, Seconds},
-    Clock,
-};
 use crate::{
     builders::BarConfigBuilder, cleanup, get_table_from_config,
     remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
@@ -322,47 +319,8 @@ fn parse_panel(
                 }
                 #[cfg(feature = "clock")]
                 "clock" => {
-                    if let Some(precision) = &mut table.remove("precision") {
-                        if let Ok(precision) = precision.clone().into_string() {
-                            match precision.as_str() {
-                                "days" => {
-                                    Clock::<Days>::parse(p, &mut table, config)
-                                        .map::<Box<dyn PanelConfig>, _>(|p| {
-                                        Box::new(p)
-                                    })
-                                }
-                                "hours" => {
-                                    Clock::<Hours>::parse(p, &mut table, config)
-                                        .map::<Box<dyn PanelConfig>, _>(|p| {
-                                            Box::new(p)
-                                        })
-                                }
-                                "minutes" => Clock::<Minutes>::parse(
-                                    p, &mut table, config,
-                                )
-                                .map::<Box<dyn PanelConfig>, _>(|p| {
-                                    Box::new(p)
-                                }),
-                                "seconds" | _ => Clock::<Seconds>::parse(
-                                    p, &mut table, config,
-                                )
-                                .map::<Box<dyn PanelConfig>, _>(|p| {
-                                    Box::new(p)
-                                }),
-                            }
-                        } else {
-                            log::warn!(
-                                "Ignoring non-string value {precision:?} \
-                                 (location attempt: {:?})",
-                                precision.origin()
-                            );
-                            Clock::<Seconds>::parse(p, &mut table, config)
-                                .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                        }
-                    } else {
-                        Clock::<Seconds>::parse(p, &mut table, config)
-                            .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                    }
+                    Clock::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 #[cfg(feature = "cpu")]
                 "cpu" => Cpu::parse(p, &mut table, config)
