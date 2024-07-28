@@ -72,6 +72,8 @@ format_struct!(
     consume
 );
 
+type MpdIndexCache = Option<Vec<(String, usize, usize)>>;
+
 /// Displays information about music currently playing through
 /// [MPD](https://musicpd.org)
 #[derive(Builder, Debug)]
@@ -98,7 +100,7 @@ pub struct Mpd {
     #[builder(default = "0")]
     max_width: usize,
     last_layout: Rc<Mutex<Option<(Layout, String)>>>,
-    index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
+    index_cache: Arc<Mutex<MpdIndexCache>>,
     formatter: AhoCorasick,
     formats: MpdFormats,
     common: PanelCommon,
@@ -674,7 +676,7 @@ impl Mpd {
         event: Event,
         conn: Arc<Mutex<Client>>,
         last_layout: Rc<Mutex<Option<(Layout, String)>>>,
-        index_cache: Arc<Mutex<Option<Vec<(String, usize, usize)>>>>,
+        index_cache: Arc<Mutex<MpdIndexCache>>,
         send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let ev = event.clone();
