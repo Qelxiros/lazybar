@@ -315,12 +315,12 @@ macro_rules! format_struct {
         }
 
         impl $name {
-            fn new(value: Vec<String>) -> Self {
-                let mut value = value.into_iter().map(|s| s.leak());
+            fn new(value: ::std::vec::Vec<::std::string::String>) -> Self {
+                let mut value = ::std::iter::Iterator::map(::std::iter::IntoIterator::into_iter(value), |s| ::std::string::String::leak(s));
 
                 Self {
                     $(
-                        $args: value.next().unwrap(),
+                        $args: ::std::iter::Iterator::next(&mut value).unwrap(),
                     )+
                 }
             }
