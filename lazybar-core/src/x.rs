@@ -1,7 +1,7 @@
 use std::{
     mem,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{self, Poll},
 };
 
@@ -9,6 +9,7 @@ use anyhow::{anyhow, Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
+use lazy_static::lazy_static;
 use nix::unistd::gethostname;
 use tokio::task::JoinHandle;
 use tokio_stream::Stream;
@@ -29,7 +30,10 @@ use x11rb::{
 
 use crate::{interned_atoms, Position};
 
-static mut ATOMS: InternedAtoms = InternedAtoms::new();
+lazy_static! {
+    static ref ATOMS: Arc<Mutex<InternedAtoms>> =
+        Arc::new(Mutex::new(InternedAtoms::new()));
+}
 
 interned_atoms!(
     InternedAtoms,

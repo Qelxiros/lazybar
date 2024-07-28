@@ -12,7 +12,7 @@ macro_rules! format_struct {
         #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         struct $name {
             $(
-                $args: &'static str,
+                $args: &'static ::std::primitive::str,
             )+
         }
 
@@ -50,46 +50,46 @@ macro_rules! interned_atoms {
         #[allow(non_snake_case)]
         pub struct $name {
             $(
-                $atoms: u32,
+                $atoms: ::std::primitive::u32,
             )+
         }
 
         impl $name {
             pub const fn new() -> Self {
-                unsafe { mem::zeroed() }
+                unsafe { ::std::mem::zeroed() }
             }
 
             fn get_inner(
                 &mut self,
-                conn: &impl Connection,
-                atom_name: &'static str,
-            ) -> Result<u32> {
+                conn: &impl ::x11rb::connection::Connection,
+                atom_name: &'static ::std::primitive::str,
+            ) -> Result<::std::primitive::u32> {
                 let atom = match atom_name {
                     $(
-                        stringify!($atoms) => Some(self.$atoms),
+                        stringify!($atoms) => ::std::option::Option::Some(self.$atoms),
                     )+
-                    _ => None,
+                    _ => ::std::option::Option::None,
                 };
 
                 match atom {
-                    None => Err(anyhow!("Invalid atom name")),
-                    Some(0) => {
+                    ::std::option::Option::None => ::std::result::Result::Err(::anyhow::anyhow!("Invalid atom name")),
+                    ::std::option::Option::Some(0) => {
                         let atom =
-                            conn.intern_atom(true, atom_name.as_bytes())?.reply()?.atom;
+                            $crate::x::intern_named_atom(conn, atom_name.as_bytes())?;
                         match atom_name {
                             $(
-                                stringify!($atoms) => self.$atoms = atom,
+                                ::std::stringify!($atoms) => self.$atoms = atom,
                             )+
-                            _ => unreachable!(),
+                            _ => ::std::unreachable!(),
                         };
-                        Ok(atom)
+                        ::std::result::Result::Ok(atom)
                     }
-                    Some(atom) => Ok(atom),
+                    ::std::option::Option::Some(atom) => ::std::result::Result::Ok(atom),
                 }
             }
 
             pub fn get(conn: &impl Connection, atom_name: &'static str) -> Result<u32> {
-                unsafe { $ref.get_inner(conn, atom_name) }
+                $name::get_inner(&mut *$ref.lock().unwrap(), conn, atom_name)
             }
         }
     };
