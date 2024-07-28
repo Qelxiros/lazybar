@@ -26,6 +26,30 @@ pub enum Bg {
         /// parsing options.
         color: Color,
     },
+    /// The panel's background will have curved corners on the left and sharp
+    /// corners on the right. This can be used to visually combine panels.
+    BubbleLeft {
+        /// `radius` describes how sharp the corners are. A radius of zero will
+        /// result in a rectangle being drawn.
+        radius: f64,
+        /// How far past the left and right edges the bubble will extend.
+        border: f64,
+        /// The color of the background. See [`csscolorparser::parse`] for
+        /// parsing options.
+        color: Color,
+    },
+    /// The panel's background will have curved corners on the right and sharp
+    /// corners on the left. This can be used to visually combine panels.
+    BubbleRight {
+        /// `radius` describes how sharp the corners are. A radius of zero will
+        /// result in a rectangle being drawn.
+        radius: f64,
+        /// How far past the left and right edges the bubble will extend.
+        border: f64,
+        /// The color of the background. See [`csscolorparser::parse`] for
+        /// parsing options.
+        color: Color,
+    },
     /// A bubble will be drawn around the panel. A proportional `border` will
     /// be inferred from the text height, which may not give the expected
     /// results (e.g. when using large fonts)
@@ -58,7 +82,9 @@ impl Bg {
             bgs_table.get(name.as_ref())?.clone().into_table().ok()?;
         remove_string_from_config("style", &mut bg_table).and_then(|style| {
             match style.as_str() {
-                "bubble" => {
+                which @ "bubble"
+                | which @ "bubble_left"
+                | which @ "bubble_right" => {
                     let radius =
                         remove_float_from_config("radius", &mut bg_table)
                             .unwrap_or_default();
@@ -68,10 +94,23 @@ impl Bg {
                     let color =
                         remove_color_from_config("color", &mut bg_table)
                             .unwrap_or_default();
-                    Some(Self::Bubble {
-                        radius,
-                        border,
-                        color,
+                    Some(match which {
+                        "bubble" => Self::Bubble {
+                            radius,
+                            border,
+                            color,
+                        },
+                        "bubble_left" => Self::BubbleLeft {
+                            radius,
+                            border,
+                            color,
+                        },
+                        "bubble_right" => Self::BubbleRight {
+                            radius,
+                            border,
+                            color,
+                        },
+                        _ => unreachable!(),
                     })
                 }
                 "bubble_prop" => {
@@ -130,6 +169,52 @@ impl Bg {
 
                 (border.max(0.0), true)
             }
+            Self::BubbleLeft {
+                radius,
+                border,
+                color,
+            } => {
+                let total_width = width + 2.0 * border;
+
+                cr.move_to(*radius, 0.0);
+                cr.rel_line_to(total_width - radius, 0.0);
+                cr.rel_line_to(0.0, max_height);
+                cr.rel_line_to(radius - total_width, 0.0);
+                cr.arc(*radius, max_height - radius, *radius, PI / 2.0, PI);
+                cr.rel_line_to(0.0, 2.0 * radius - max_height);
+                cr.arc(*radius, *radius, *radius, PI, -PI / 2.0);
+
+                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.fill()?;
+
+                (border.max(0.0), true)
+            }
+            Self::BubbleRight {
+                radius,
+                border,
+                color,
+            } => {
+                let total_width = width + 2.0 * border;
+
+                cr.move_to(0.0, 0.0);
+                cr.rel_line_to(total_width - radius, 0.0);
+                cr.arc(total_width - radius, *radius, *radius, -PI / 2.0, 0.0);
+                cr.rel_line_to(0.0, max_height - 2.0 * radius);
+                cr.arc(
+                    total_width - radius,
+                    max_height - radius,
+                    *radius,
+                    0.0,
+                    PI / 2.0,
+                );
+                cr.rel_line_to(radius - total_width, 0.0);
+                cr.rel_line_to(0.0, max_height);
+
+                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.fill()?;
+
+                (border.max(0.0), true)
+            }
             Self::BubbleProp { radius, color } => {
                 let border = (max_height - text_height) / 2.0;
                 let total_width = 2.0f64.mul_add(border, width);
@@ -170,6 +255,16 @@ impl Bg {
                 radius: _,
                 border,
                 color: _,
+            }
+            | Self::BubbleLeft {
+                radius: _,
+                border,
+                color: _,
+            }
+            | Self::BubbleRight {
+                radius: _,
+                border,
+                color: _,
             } => *border,
             Self::BubbleProp {
                 radius: _,
@@ -183,6 +278,16 @@ impl Bg {
         match self {
             Self::None => dims,
             Self::Bubble {
+                radius: _,
+                border,
+                color: _,
+            }
+            | Self::BubbleLeft {
+                radius: _,
+                border,
+                color: _,
+            }
+            | Self::BubbleRight {
                 radius: _,
                 border,
                 color: _,
