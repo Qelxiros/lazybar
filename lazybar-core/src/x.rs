@@ -1,13 +1,15 @@
 use std::{
+    mem,
     pin::Pin,
     sync::Arc,
     task::{self, Poll},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
+use nix::unistd::gethostname;
 use tokio::task::JoinHandle;
 use tokio_stream::Stream;
 use x11rb::{
@@ -25,7 +27,40 @@ use x11rb::{
     xcb_ffi::XCBConnection,
 };
 
-use crate::Position;
+use crate::{interned_atoms, Position};
+
+static mut ATOMS: InternedAtoms = InternedAtoms::new();
+
+interned_atoms!(
+    InternedAtoms,
+    ATOMS,
+    MANAGER,
+    _XEMBED,
+    UTF8_STRING,
+    _NET_WM_PID,
+    _XEMBED_INFO,
+    _NET_WM_NAME,
+    _NET_WM_STATE,
+    _NET_WM_STRUT,
+    _NET_WM_DESKTOP,
+    _NET_CLIENT_LIST,
+    _NET_ACTIVE_WINDOW,
+    _NET_DESKTOP_NAMES,
+    _NET_WM_WINDOW_TYPE,
+    _NET_WM_STATE_STICKY,
+    _NET_CURRENT_DESKTOP,
+    _NET_WM_STRUT_PARTIAL,
+    _NET_SYSTEM_TRAY_OPCODE,
+    _NET_SYSTEM_TRAY_VISUAL,
+    _NET_NUMBER_OF_DESKTOPS,
+    _NET_WM_WINDOW_TYPE_DOCK,
+    _NET_WM_WINDOW_TYPE_NORMAL,
+    _NET_SYSTEM_TRAY_ORIENTATION,
+);
+
+pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
+    Ok(conn.intern_atom(true, atom)?.reply()?.atom)
+}
 
 pub struct XStream {
     conn: Arc<XCBConnection>,
@@ -62,10 +97,6 @@ impl Stream for XStream {
             Poll::Pending
         }
     }
-}
-
-pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
-    Ok(conn.intern_atom(true, atom)?.reply()?.atom)
 }
 
 pub fn find_visual(screen: &Screen, depth: u8) -> Option<&Visualtype> {
@@ -178,10 +209,10 @@ pub fn set_wm_properties(
     mon: &MonitorInfo,
 ) {
     if let Ok(window_type_atom) =
-        intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")
+        InternedAtoms::get(conn, "_NET_WM_WINDOW_TYPE")
     {
         if let Ok(window_type_dock_atom) =
-            intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE_DOCK")
+            InternedAtoms::get(conn, "_NET_WM_WINDOW_TYPE_DOCK")
         {
             let _ = conn.change_property32(
                 PropMode::REPLACE,
@@ -199,7 +230,7 @@ pub fn set_wm_properties(
         &[0, 0, 0, height, 0, 0, 0, 0, 0, 0, 0, width - 1]
     };
     if let Ok(strut_partial_atom) =
-        intern_named_atom(conn, b"_NET_WM_STRUT_PARTIAL")
+        InternedAtoms::get(conn, "_NET_WM_STRUT_PARTIAL")
     {
         let _ = conn.change_property32(
             PropMode::REPLACE,
@@ -209,7 +240,7 @@ pub fn set_wm_properties(
             strut,
         );
     }
-    if let Ok(strut_atom) = intern_named_atom(conn, b"_NET_WM_STRUT") {
+    if let Ok(strut_atom) = InternedAtoms::get(conn, "_NET_WM_STRUT") {
         let _ = conn.change_property32(
             PropMode::REPLACE,
             window,
@@ -219,9 +250,9 @@ pub fn set_wm_properties(
         );
     }
 
-    if let Ok(wm_state_atom) = intern_named_atom(conn, b"_NET_WM_STATE") {
+    if let Ok(wm_state_atom) = InternedAtoms::get(conn, "_NET_WM_STATE") {
         if let Ok(wm_state_sticky_atom) =
-            intern_named_atom(conn, b"_NET_WM_STATE_STICKY")
+            InternedAtoms::get(conn, "_NET_WM_STATE_STICKY")
         {
             let _ = conn.change_property32(
                 PropMode::REPLACE,
@@ -261,7 +292,7 @@ pub fn set_wm_properties(
         ],
     );
 
-    if let Ok(pid_atom) = intern_named_atom(conn, b"_NET_WM_PID") {
+    if let Ok(pid_atom) = InternedAtoms::get(conn, "_NET_WM_PID") {
         let _ = conn.change_property32(
             PropMode::REPLACE,
             window,
@@ -271,7 +302,17 @@ pub fn set_wm_properties(
         );
     }
 
-    if let Ok(desktop_atom) = intern_named_atom(conn, b"_NET_WM_DESKTOP") {
+    if let Ok(hostname) = gethostname() {
+        let _ = conn.change_property8(
+            PropMode::REPLACE,
+            window,
+            AtomEnum::WM_CLIENT_MACHINE,
+            AtomEnum::STRING,
+            hostname.as_encoded_bytes(),
+        );
+    }
+
+    if let Ok(desktop_atom) = InternedAtoms::get(conn, "_NET_WM_DESKTOP") {
         let _ = conn.change_property32(
             PropMode::REPLACE,
             window,
@@ -359,8 +400,8 @@ pub fn get_window_name(
         .get_property(
             false,
             window,
-            intern_named_atom(conn, b"_NET_WM_NAME")?,
-            intern_named_atom(conn, b"UTF8_STRING")?,
+            InternedAtoms::get(conn, "_NET_WM_NAME")?,
+            InternedAtoms::get(conn, "UTF8_STRING")?,
             0,
             64,
         )

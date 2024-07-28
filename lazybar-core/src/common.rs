@@ -295,35 +295,3 @@ impl PanelCommon {
         Ok((builder.build()?, formats))
     }
 }
-
-/// Defines a struct to hold format strings, along with a constructor.
-///
-/// The constructor has the following function signature:
-/// ```rust
-/// fn new(value: Vec<String>) -> Self
-/// ```
-/// `value` must have the same number of elements as `args` passed to this
-/// macro, and `new` will panic otherwise.
-#[macro_export]
-macro_rules! format_struct {
-    ($name:ident, $($args:ident),+) => {
-        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        struct $name {
-            $(
-                $args: &'static str,
-            )+
-        }
-
-        impl $name {
-            fn new(value: ::std::vec::Vec<::std::string::String>) -> Self {
-                let mut value = ::std::iter::Iterator::map(::std::iter::IntoIterator::into_iter(value), |s| ::std::string::String::leak(s));
-
-                Self {
-                    $(
-                        $args: ::std::iter::Iterator::next(&mut value).unwrap(),
-                    )+
-                }
-            }
-        }
-    };
-}

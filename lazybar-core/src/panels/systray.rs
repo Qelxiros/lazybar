@@ -33,7 +33,9 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
-    x::{find_visual, get_window_name, intern_named_atom, XStream},
+    x::{
+        find_visual, get_window_name, intern_named_atom, InternedAtoms, XStream,
+    },
     PanelConfig, PanelStream,
 };
 
@@ -287,14 +289,14 @@ impl PanelConfig for Systray {
             &self.conn,
             format!("_NET_SYSTEM_TRAY_S{}", self.screen).as_bytes(),
         )?;
-        let info_atom = intern_named_atom(&self.conn, b"_XEMBED_INFO")?;
+        let info_atom = InternedAtoms::get(&self.conn, "_XEMBED_INFO")?;
         let systray_opcode_atom =
-            intern_named_atom(&self.conn, b"_NET_SYSTEM_TRAY_OPCODE")?;
+            InternedAtoms::get(&self.conn, "_NET_SYSTEM_TRAY_OPCODE")?;
         let systray_orientation_atom =
-            intern_named_atom(&self.conn, b"_NET_SYSTEM_TRAY_ORIENTATION")?;
+            InternedAtoms::get(&self.conn, "_NET_SYSTEM_TRAY_ORIENTATION")?;
         let systray_visual_atom =
-            intern_named_atom(&self.conn, b"_NET_SYSTEM_TRAY_VISUAL")?;
-        let xembed_atom = intern_named_atom(&self.conn, b"_XEMBED")?;
+            InternedAtoms::get(&self.conn, "_NET_SYSTEM_TRAY_VISUAL")?;
+        let xembed_atom = InternedAtoms::get(&self.conn, "_XEMBED")?;
 
         let bar_info = bar::BAR_INFO.get().unwrap();
         let bar_visual = bar_info.visual;
@@ -463,7 +465,7 @@ impl Systray {
                         .check()?;
 
                     let manager_atom =
-                        intern_named_atom(&self.conn, b"MANAGER")?;
+                        InternedAtoms::get(&self.conn, "MANAGER")?;
 
                     self.conn
                         .send_event(

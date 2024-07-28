@@ -37,7 +37,7 @@ use crate::{
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
-    x::intern_named_atom,
+    x::InternedAtoms,
     Attrs, Highlight, PanelConfig, PanelStream,
 };
 
@@ -391,16 +391,16 @@ impl PanelConfig for XWorkspaces {
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
         let number_atom =
-            intern_named_atom(&self.conn, b"_NET_NUMBER_OF_DESKTOPS")?;
-        let names_atom = intern_named_atom(&self.conn, b"_NET_DESKTOP_NAMES")?;
-        let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
+            InternedAtoms::get(&self.conn, "_NET_NUMBER_OF_DESKTOPS")?;
+        let names_atom = InternedAtoms::get(&self.conn, "_NET_DESKTOP_NAMES")?;
+        let utf8_atom = InternedAtoms::get(&self.conn, "UTF8_STRING")?;
         let current_atom =
-            intern_named_atom(&self.conn, b"_NET_CURRENT_DESKTOP")?;
-        let client_atom = intern_named_atom(&self.conn, b"_NET_CLIENT_LIST")?;
-        let type_atom = intern_named_atom(&self.conn, b"_NET_WM_WINDOW_TYPE")?;
+            InternedAtoms::get(&self.conn, "_NET_CURRENT_DESKTOP")?;
+        let client_atom = InternedAtoms::get(&self.conn, "_NET_CLIENT_LIST")?;
+        let type_atom = InternedAtoms::get(&self.conn, "_NET_WM_WINDOW_TYPE")?;
         let normal_atom =
-            intern_named_atom(&self.conn, b"_NET_WM_WINDOW_TYPE_NORMAL")?;
-        let desktop_atom = intern_named_atom(&self.conn, b"_NET_WM_DESKTOP")?;
+            InternedAtoms::get(&self.conn, "_NET_WM_WINDOW_TYPE_NORMAL")?;
+        let desktop_atom = InternedAtoms::get(&self.conn, "_NET_WM_DESKTOP")?;
 
         let root = self
             .conn

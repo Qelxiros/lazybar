@@ -29,7 +29,7 @@ use crate::{
     common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
-    x::intern_named_atom,
+    x::InternedAtoms,
     Attrs, PanelConfig, PanelStream,
 };
 
@@ -190,9 +190,9 @@ impl PanelConfig for XWindow {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        let name_atom = intern_named_atom(&self.conn, b"_NET_WM_NAME")?;
-        let window_atom = intern_named_atom(&self.conn, b"_NET_ACTIVE_WINDOW")?;
-        let utf8_atom = intern_named_atom(&self.conn, b"UTF8_STRING")?;
+        let name_atom = InternedAtoms::get(&self.conn, "_NET_WM_NAME")?;
+        let window_atom = InternedAtoms::get(&self.conn, "_NET_ACTIVE_WINDOW")?;
+        let utf8_atom = InternedAtoms::get(&self.conn, "UTF8_STRING")?;
         let root = self
             .conn
             .setup()

@@ -73,6 +73,8 @@ pub mod image;
 /// Support for inter-process communication, like that provided by the
 /// `lazybar-msg` crate.
 pub mod ipc;
+/// Macros used internally which may be of use to other developers.
+pub mod macros;
 /// Panels that can be added to the bar. A new panel must implement
 /// [`PanelConfig`].
 pub mod panels;
