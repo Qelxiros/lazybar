@@ -29,8 +29,7 @@ impl UnixStreamWrapper {
         Self { inner, endpoint }
     }
 
-    /// Reads from the inner [`UnixStream`] until an error is encountered or the
-    /// program terminates.
+    /// Reads a message from the inner [`UnixStream`] and returns a response
     pub async fn run(mut self) -> Result<()> {
         let mut data = [0; 1024];
         self.inner.readable().await?;

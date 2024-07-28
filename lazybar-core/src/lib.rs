@@ -55,6 +55,7 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::too_many_arguments)]
+#![feature(never_type)]
 
 /// Configuration options for click/scroll events on panels.
 pub mod actions;
@@ -230,7 +231,7 @@ impl Margins {
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`] for panel builders.
 pub mod builders {
-    use std::{mem::MaybeUninit, thread};
+    use std::thread;
 
     use anyhow::Result;
     use derive_builder::Builder;
@@ -487,6 +488,7 @@ pub mod builders {
             log::debug!("Set up signal listener");
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
+            let mut shutdown_set = JoinSet::<!>::new();
 
             task::spawn_local(async move { loop {
                 tokio::select! {
@@ -531,11 +533,13 @@ pub mod builders {
                         log::trace!("wrapper running");
 
                         let message = local_recv.recv().await;
-                        log::trace!("message received");
+                        log::trace!("message received: {message:?}");
 
                         if let Some(message) = message {
                             match bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
-                                Ok(true) => cleanup::exit(Some((bar.name.as_str(), bar.ipc)), true, 0).await,
+                                Ok(true) => {
+                                    shutdown_set.spawn_local(cleanup::exit(Some((bar.name.clone().leak(), self.ipc)), true, 0));
+                                }
                                 Err(e) => log::warn!("Sending message {message} generated an error: {e}"),
                                 _ => {}
                             }
@@ -544,6 +548,9 @@ pub mod builders {
                     // maybe not strictly necessary, but ensures that the ipc futures get polled
                     Some(_) = ipc_set.join_next() => {
                         log::debug!("ipc future completed");
+                    }
+                    Some(_) = shutdown_set.join_next() => {
+                        log::debug!("shutdown complete (you should never see this)");
                     }
                     Some(_) = endpoint1.recv.recv() => {
                         bar.shutdown();

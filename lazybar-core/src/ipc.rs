@@ -12,19 +12,15 @@ use crate::IpcStream;
 const IPC_DIR: &str = "/tmp/lazybar-ipc/";
 
 /// Initialize IPC for a given bar
-pub fn init(
-    enabled: bool,
-    bar_name: &str,
-    mon_name: &str,
-) -> (Result<IpcStream>, String) {
+pub fn init(enabled: bool, bar_name: &str) -> (Result<IpcStream>, String) {
     let mut final_name = bar_name.to_string();
     (
         if enabled && DirBuilder::new().recursive(true).create(IPC_DIR).is_ok()
         {
-            let (path, idx) = find_path(bar_name, mon_name);
+            let (path, idx) = find_path(bar_name);
 
             if idx > 0 {
-                final_name = format!("{bar_name}_{mon_name}({idx})");
+                final_name = format!("{bar_name}({idx})");
             }
 
             // map_or_else is invalid here due to type coercion issues
@@ -43,13 +39,13 @@ pub fn init(
     )
 }
 
-fn find_path(bar_name: &str, mon_name: &str) -> (PathBuf, i32) {
-    let mut fmt = format!("{IPC_DIR}{bar_name}_{mon_name}");
+fn find_path(bar_name: &str) -> (PathBuf, i32) {
+    let mut fmt = format!("{IPC_DIR}{bar_name}");
     let mut path = PathBuf::from(fmt);
     let mut idx = 0;
     while path.exists() {
         idx += 1;
-        fmt = format!("{IPC_DIR}{bar_name}_{mon_name}({idx})");
+        fmt = format!("{IPC_DIR}{bar_name}({idx})");
         path = PathBuf::from(fmt.as_str());
     }
 

@@ -338,7 +338,7 @@ impl Bar {
         ipc: bool,
         monitor: Option<String>,
     ) -> Result<(Self, IpcStream)> {
-        let (conn, screen, window, width, visual, mon_name) =
+        let (conn, screen, window, width, visual, mon) =
             create_window(position, height, transparent, &bg, monitor)?;
 
         BAR_INFO
@@ -352,7 +352,7 @@ impl Bar {
             })
             .unwrap();
 
-        let (result, name) = ipc::init(ipc, name, mon_name.as_str());
+        let (result, name) = ipc::init(ipc, name);
         let ipc_stream: Pin<
             Box<
                 dyn Stream<
@@ -377,7 +377,7 @@ impl Bar {
             width.into(),
             height.into(),
             name.as_str(),
-            mon_name.as_str(),
+            &mon,
         );
         conn.map_window(window)?.check()?;
         let surface =
@@ -593,7 +593,7 @@ impl Bar {
         Ok(false)
     }
 
-    /// Given a message, find the endpoint of the panel it's addressed to.
+    /// Sends a message to the appropriate panel.
     pub fn send_message(
         &mut self,
         message: &str,

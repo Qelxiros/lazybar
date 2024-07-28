@@ -13,7 +13,7 @@ use tokio_stream::Stream;
 use x11rb::{
     connection::Connection,
     protocol::{
-        randr::ConnectionExt as _,
+        randr::{ConnectionExt as _, MonitorInfo},
         xproto::{
             Atom, AtomEnum, Colormap, ColormapAlloc, ConnectionExt,
             CreateWindowAux, EventMask, PropMode, Screen, VisualClass,
@@ -92,7 +92,7 @@ pub fn create_window(
     transparent: bool,
     background: &Color,
     monitor: Option<String>,
-) -> Result<(XCBConnection, usize, Window, u16, Visualtype, String)> {
+) -> Result<(XCBConnection, usize, Window, u16, Visualtype, MonitorInfo)> {
     let (conn, screen_idx) = XCBConnection::connect(None)?;
     let window: Window = conn.generate_id()?;
     let colormap: Colormap = conn.generate_id()?;
@@ -113,9 +113,6 @@ pub fn create_window(
         iter.find(|info| info.primary)
             .context("No primary monitor found")?
     };
-
-    let mon_name =
-        String::from_utf8(conn.get_atom_name(mon.name)?.reply()?.name)?;
 
     let width = mon.width;
 
@@ -145,6 +142,9 @@ pub fn create_window(
             .mul_add(256.0, background.b) as u32
     };
 
+    println!("{},{}", mon.x, mon.y);
+    println!("{}", screen.width_in_pixels);
+
     conn.create_window(
         depth,
         window,
@@ -168,7 +168,7 @@ pub fn create_window(
     )?
     .check()?;
 
-    Ok((conn, screen_idx, window, width, visual, mon_name))
+    Ok((conn, screen_idx, window, width, visual, mon.clone()))
 }
 
 pub fn set_wm_properties(
@@ -178,7 +178,7 @@ pub fn set_wm_properties(
     width: u32,
     height: u32,
     bar_name: &str,
-    mon_name: &str,
+    mon: &MonitorInfo,
 ) {
     if let Ok(window_type_atom) =
         intern_named_atom(conn, b"_NET_WM_WINDOW_TYPE")
@@ -242,8 +242,25 @@ pub fn set_wm_properties(
         AtomEnum::WM_NORMAL_HINTS,
         AtomEnum::WM_SIZE_HINTS,
         &[
-            0x3c, 0, 0, width, height, width, height, width, height, 0, 0, 0,
-            0, width, height,
+            0x3c,
+            mon.x as u32,
+            if position == Position::Top {
+                mon.y as u32
+            } else {
+                mon.y as u32 + mon.height as u32 - height
+            },
+            width,
+            height,
+            width,
+            height,
+            width,
+            height,
+            0,
+            0,
+            0,
+            0,
+            width,
+            height,
         ],
     );
 
@@ -272,7 +289,7 @@ pub fn set_wm_properties(
         window,
         AtomEnum::WM_NAME,
         AtomEnum::STRING,
-        format!("lazybar_{bar_name}_{mon_name}").as_bytes(),
+        format!("lazybar_{bar_name}").as_bytes(),
     );
 
     let _ = conn.change_property8(
