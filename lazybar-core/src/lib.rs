@@ -433,18 +433,12 @@ pub mod builders {
                 }
             }
 
-            bar.left_panels = left_panels
-                .into_iter()
-                .map(|p| unsafe { p.unwrap_unchecked() })
-                .collect();
-            bar.center_panels = center_panels
-                .into_iter()
-                .map(|p| unsafe { p.unwrap_unchecked() })
-                .collect();
-            bar.right_panels = right_panels
-                .into_iter()
-                .map(|p| unsafe { p.unwrap_unchecked() })
-                .collect();
+            bar.left_panels =
+                left_panels.into_iter().filter_map(|p| p).collect();
+            bar.center_panels =
+                center_panels.into_iter().filter_map(|p| p).collect();
+            bar.right_panels =
+                right_panels.into_iter().filter_map(|p| p).collect();
 
             bar.streams.insert(Alignment::Left, left_stream);
             log::debug!("left panels running");
