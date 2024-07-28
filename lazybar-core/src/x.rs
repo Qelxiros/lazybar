@@ -334,6 +334,18 @@ pub fn set_wm_properties(
         format!("lazybar_{bar_name}").as_bytes(),
     );
 
+    if let Ok(utf8_atom) = InternedAtoms::get(conn, "UTF8_STRING") {
+        if let Ok(name_atom) = InternedAtoms::get(conn, "_NET_WM_NAME") {
+            let _ = conn.change_property8(
+                PropMode::REPLACE,
+                window,
+                name_atom,
+                utf8_atom,
+                format!("lazybar_{bar_name}").as_bytes(),
+            );
+        }
+    }
+
     let _ = conn.change_property8(
         PropMode::REPLACE,
         window,
