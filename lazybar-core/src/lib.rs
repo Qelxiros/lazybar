@@ -55,7 +55,6 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::too_many_arguments)]
-#![feature(never_type)]
 
 /// Configuration options for click/scroll events on panels.
 pub mod actions;
@@ -488,7 +487,6 @@ pub mod builders {
             log::debug!("Set up signal listener");
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
-            let mut shutdown_set = JoinSet::<!>::new();
 
             task::spawn_local(async move { loop {
                 tokio::select! {
@@ -538,7 +536,7 @@ pub mod builders {
                         if let Some(message) = message {
                             match bar.send_message(message.as_str(), &mut ipc_set, ipc_send) {
                                 Ok(true) => {
-                                    shutdown_set.spawn_local(cleanup::exit(Some((bar.name.clone().leak(), self.ipc)), true, 0));
+                                    task::spawn_local(cleanup::exit(Some((bar.name.clone().leak(), self.ipc)), true, 0));
                                 }
                                 Err(e) => log::warn!("Sending message {message} generated an error: {e}"),
                                 _ => {}
@@ -548,9 +546,6 @@ pub mod builders {
                     // maybe not strictly necessary, but ensures that the ipc futures get polled
                     Some(_) = ipc_set.join_next() => {
                         log::debug!("ipc future completed");
-                    }
-                    Some(_) = shutdown_set.join_next() => {
-                        log::debug!("shutdown complete (you should never see this)");
                     }
                     Some(_) = endpoint1.recv.recv() => {
                         bar.shutdown();
