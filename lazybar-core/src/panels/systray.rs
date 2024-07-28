@@ -1,4 +1,6 @@
-use std::{collections::HashMap, ffi::CString, rc::Rc, sync::Arc};
+use std::{
+    cmp::Ordering, collections::HashMap, ffi::CString, rc::Rc, sync::Arc,
+};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -31,9 +33,26 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
-    x::{find_visual, intern_named_atom, XStream},
+    x::{find_visual, get_window_name, intern_named_atom, XStream},
     PanelConfig, PanelStream,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMethod {
+    Arrival(bool),
+    WindowName(bool),
+    WindowNameLower(bool),
+}
+
+impl SortMethod {
+    fn reverse(self) -> Self {
+        match self {
+            Self::Arrival(reversed) => Self::Arrival(!reversed),
+            Self::WindowName(reversed) => Self::WindowName(!reversed),
+            Self::WindowNameLower(reversed) => Self::WindowNameLower(!reversed),
+        }
+    }
+}
 
 /// Display icons from some applications. See
 /// <https://specifications.freedesktop.org/systemtray-spec/> for details.
@@ -60,6 +79,8 @@ pub struct Systray {
     icon_padding: i16,
     #[builder(default = "16")]
     icon_size: i16,
+    #[builder(default = "SortMethod::Arrival(false)")]
+    icon_sort: SortMethod,
     #[builder(default)]
     focused: Option<Icon>,
     #[builder(default)]
@@ -182,6 +203,24 @@ impl Systray {
 
 #[async_trait(?Send)]
 impl PanelConfig for Systray {
+    /// Configuration options:
+    ///
+    /// - `screen`: The X screen to run on. Only one systray can exist on each
+    ///   screen at any given time. Leaving this unset is probably what you
+    ///   want.
+    /// - `aggressive`: If this is true, lazybar will take ownership of the
+    ///   system tray for the given screen even if it is already owned. If it is
+    ///   later lost, lazybar will not attempt to reacquire it.
+    /// - `padding`: The number of pixels between two icons.
+    /// - `size`: The width and height in pixels of each icon.
+    /// - `sort`: One of `arrival`, `window_name`, and `window_name_lower`.
+    ///   Defaults to `arrival`. `arrival` will add each new panel on the right.
+    ///   `window_name` will sort the panels by their `_NET_WM_NAME` (failing
+    ///   that, `WM_NAME`) properties. `window_name_lower` will do the same, but
+    ///   convert the strings to lowercase first.
+    /// - `sort_reverse`: If this is true, the sorting method above will be
+    ///   reversed.
+    /// See [`PanelCommon::parse`]. This is used only for dependence.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -211,7 +250,19 @@ impl PanelConfig for Systray {
         }
 
         if let Some(size) = remove_uint_from_config("size", table) {
-            builder.icon_size(size as i16);
+            builder.icon_size(size.max(2) as i16);
+        }
+
+        if let Some(sort) = remove_string_from_config("sort", table) {
+            builder.icon_sort(match sort.as_str() {
+                "window_name" => SortMethod::WindowName(false),
+                "window_name_lower" => SortMethod::WindowNameLower(false),
+                _ => SortMethod::Arrival(false),
+            });
+        }
+
+        if let Some(true) = remove_bool_from_config("sort_reverse", table) {
+            builder.icon_sort = builder.icon_sort.map(|s| s.reverse());
         }
 
         let (common, _formats) = PanelCommon::parse(table, &[], &[], &[], &[])?;
@@ -522,12 +573,59 @@ impl Systray {
                         mapped = true;
                     }
 
+                    let idx = match self.icon_sort {
+                        SortMethod::Arrival(false) => self.icons.len(),
+                        SortMethod::Arrival(true) => {
+                            for icon in &mut self.icons {
+                                icon.idx += 1;
+                            }
+                            0
+                        }
+                        _ => 0,
+                    };
+
                     self.icons.push(Icon {
                         window,
                         mapped,
-                        idx: self.icons.len(),
+                        idx,
                     });
-                    self.width += (self.icon_size + self.icon_padding) as u16;
+
+                    if let SortMethod::WindowName(reversed)
+                    | SortMethod::WindowNameLower(reversed) = self.icon_sort
+                    {
+                        self.icons.sort_by(|a, b| {
+                            let mut a_name =
+                                get_window_name(&*self.conn, a.window);
+                            let mut b_name =
+                                get_window_name(&*self.conn, b.window);
+                            if let SortMethod::WindowNameLower(_) =
+                                self.icon_sort
+                            {
+                                a_name = a_name.map(|s| s.to_lowercase());
+                                b_name = b_name.map(|s| s.to_lowercase());
+                            }
+                            if a_name.is_err() || b_name.is_err() {
+                                Ordering::Equal
+                            } else if reversed {
+                                a_name.unwrap().cmp(&b_name.unwrap()).reverse()
+                            } else {
+                                a_name.unwrap().cmp(&b_name.unwrap())
+                            }
+                        });
+
+                        self.icons
+                            .iter_mut()
+                            .enumerate()
+                            .for_each(|(idx, icon)| icon.idx = idx);
+                    }
+
+                    if self.width == 1 {
+                        self.width =
+                            (self.icon_size + self.icon_padding) as u16;
+                    } else {
+                        self.width +=
+                            (self.icon_size + self.icon_padding) as u16;
+                    }
                 } else if ty == xembed_atom {
                     let data = event.data.as_data32();
                     let time = data[0];
@@ -600,6 +698,8 @@ impl Systray {
                         }
                     });
                     self.resize(tray_wid, removed)?;
+                } else {
+                    self.resize(tray_wid, None)?;
                 }
             }
             protocol::Event::DestroyNotify(event) => {
@@ -655,7 +755,7 @@ impl Systray {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Icon {
     window: Window,
     mapped: bool,

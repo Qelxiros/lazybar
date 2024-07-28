@@ -142,9 +142,6 @@ pub fn create_window(
             .mul_add(256.0, background.b) as u32
     };
 
-    println!("{},{}", mon.x, mon.y);
-    println!("{}", screen.width_in_pixels);
-
     conn.create_window(
         depth,
         window,
@@ -352,4 +349,43 @@ pub fn create_surface(
         width,
         height,
     )?)
+}
+
+pub fn get_window_name(
+    conn: &impl Connection,
+    window: Window,
+) -> Result<String> {
+    let ewmh_name = conn
+        .get_property(
+            false,
+            window,
+            intern_named_atom(conn, b"_NET_WM_NAME")?,
+            intern_named_atom(conn, b"UTF8_STRING")?,
+            0,
+            64,
+        )
+        .and_then(|c| {
+            Ok(c.reply().and_then(|r| {
+                Ok(String::from_utf8_lossy(r.value.as_slice()).to_string())
+            }))
+        });
+
+    if ewmh_name.is_ok() {
+        Ok(ewmh_name??)
+    } else {
+        Ok(String::from_utf8_lossy(
+            conn.get_property(
+                false,
+                window,
+                AtomEnum::WM_NAME,
+                AtomEnum::STRING,
+                0,
+                64,
+            )?
+            .reply()?
+            .value
+            .as_slice(),
+        )
+        .to_string())
+    }
 }
