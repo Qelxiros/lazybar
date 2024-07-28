@@ -49,7 +49,7 @@ pub struct Systray {
     #[builder(default)]
     time_end: u32,
     #[builder(default)]
-    icons: Vec<Window>,
+    icons: Vec<Icon>,
     #[builder(default = "1")]
     width: u16,
     #[builder(default)]
@@ -61,7 +61,7 @@ pub struct Systray {
     #[builder(default = "16")]
     icon_size: i16,
     #[builder(default)]
-    focused: Option<Window>,
+    focused: Option<Icon>,
     #[builder(default)]
     picture: Picture,
     common: PanelCommon,
@@ -124,9 +124,9 @@ impl Systray {
                 Ok(())
             }),
             Some(Box::new(move || {
-                for window in icons {
+                for icon in icons {
                     let _ = shutdown_conn
-                        .reparent_window(window, root, 0, 0)
+                        .reparent_window(icon.window, root, 0, 0)
                         .map(VoidCookie::check);
                 }
                 let _ = shutdown_conn.destroy_window(selection);
@@ -134,7 +134,7 @@ impl Systray {
         )
     }
 
-    fn resize(&mut self, tray: Window) -> Result<()> {
+    fn resize(&mut self, tray: Window, removed: Option<usize>) -> Result<()> {
         let len = self.icons.len();
         self.width = ((len * self.icon_size as usize
             + (len - 1) * self.icon_padding as usize)
@@ -145,6 +145,34 @@ impl Systray {
             .configure_window(
                 tray,
                 &ConfigureWindowAux::new().width(self.width as u32),
+            )?
+            .check()?;
+
+        if let Some(destroyed) = removed {
+            for icon in &mut self.icons {
+                if icon.idx > destroyed {
+                    icon.idx -= 1;
+                }
+            }
+        }
+
+        let icons = self.icons.clone();
+
+        for icon in icons {
+            self.reposition(icon)?;
+        }
+
+        Ok(())
+    }
+
+    fn reposition(&mut self, icon: Icon) -> Result<()> {
+        let x = icon.idx as i16 * (self.icon_size + self.icon_padding)
+            + self.icon_padding / 2;
+
+        self.conn
+            .configure_window(
+                icon.window,
+                &ConfigureWindowAux::new().x(x as i32),
             )?
             .check()?;
 
@@ -485,13 +513,20 @@ impl Systray {
                         )?
                         .reply()?;
 
+                    let mut mapped = false;
+
                     if !xembed_info.value32().is_some_and(|mut val| {
                         val.nth(1).is_some_and(|mapped| mapped & 0x1 == 0)
                     }) {
                         self.conn.map_window(window)?.check()?;
+                        mapped = true;
                     }
 
-                    self.icons.push(window);
+                    self.icons.push(Icon {
+                        window,
+                        mapped,
+                        idx: self.icons.len(),
+                    });
                     self.width += (self.icon_size + self.icon_padding) as u16;
                 } else if ty == xembed_atom {
                     let data = event.data.as_data32();
@@ -504,11 +539,11 @@ impl Systray {
                                 self.conn
                                     .send_event(
                                         false,
-                                        focused,
+                                        focused.window,
                                         EventMask::NO_EVENT,
                                         ClientMessageEvent::new(
                                             32,
-                                            focused,
+                                            focused.window,
                                             xembed_atom,
                                             [time, 5, 0, 0, 0],
                                         ),
@@ -537,11 +572,11 @@ impl Systray {
                                 self.conn
                                     .send_event(
                                         false,
-                                        focused,
+                                        focused.window,
                                         EventMask::NO_EVENT,
                                         ClientMessageEvent::new(
                                             32,
-                                            focused,
+                                            focused.window,
                                             xembed_atom,
                                             [time, 5, 0, 0, 0],
                                         ),
@@ -555,13 +590,29 @@ impl Systray {
             }
             protocol::Event::ReparentNotify(event) => {
                 if event.parent != tray_wid {
-                    self.icons.retain(|&w| w != event.window);
-                    self.resize(tray_wid)?;
+                    let mut removed = None;
+                    self.icons.retain(|&w| {
+                        if w.window == event.window {
+                            removed = Some(w.idx);
+                            false
+                        } else {
+                            true
+                        }
+                    });
+                    self.resize(tray_wid, removed)?;
                 }
             }
             protocol::Event::DestroyNotify(event) => {
-                self.icons.retain(|&w| w != event.window);
-                self.resize(tray_wid)?;
+                let mut destroyed = None;
+                self.icons.retain(|&w| {
+                    if w.window == event.window {
+                        destroyed = Some(w.idx);
+                        false
+                    } else {
+                        true
+                    }
+                });
+                self.resize(tray_wid, destroyed)?;
             }
             protocol::Event::ConfigureNotify(event) => {
                 if event.window != tray_wid
@@ -584,9 +635,14 @@ impl Systray {
             protocol::Event::KeyPress(mut event)
             | protocol::Event::KeyRelease(mut event) => {
                 if let Some(focused) = self.focused {
-                    event.child = focused;
+                    event.child = focused.window;
                     self.conn
-                        .send_event(false, focused, EventMask::NO_EVENT, event)?
+                        .send_event(
+                            false,
+                            focused.window,
+                            EventMask::NO_EVENT,
+                            event,
+                        )?
                         .check()?;
                 }
             }
@@ -597,4 +653,11 @@ impl Systray {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Icon {
+    window: Window,
+    mapped: bool,
+    idx: usize,
 }
