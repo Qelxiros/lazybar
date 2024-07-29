@@ -34,8 +34,8 @@ use crate::{
     format_struct,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
+    IndexCache, PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
@@ -72,8 +72,6 @@ format_struct!(
     consume
 );
 
-type MpdIndexCache = Option<Vec<(String, usize, usize)>>;
-
 /// Displays information about music currently playing through
 /// [MPD](https://musicpd.org)
 #[derive(Builder, Debug)]
@@ -100,7 +98,7 @@ pub struct Mpd {
     #[builder(default = "0")]
     max_width: usize,
     last_layout: Rc<Mutex<Option<(Layout, String)>>>,
-    index_cache: Arc<Mutex<MpdIndexCache>>,
+    index_cache: Arc<Mutex<Option<IndexCache>>>,
     formatter: AhoCorasick,
     formats: MpdFormats,
     common: PanelCommon,
@@ -176,92 +174,66 @@ impl Mpd {
                 if scrolling {
                     main.push_str(self.scroll_separator.as_str());
                 }
-                match (
-                    scrolling,
-                    self.scroll_idx
-                        > main.graphemes(true).count() - self.max_width,
-                ) {
-                    (false, _) => {
-                        layout.set_markup(
-                            text.replace(
-                                "%main%",
-                                glib::markup_escape_text(main.as_str())
-                                    .as_str(),
-                            )
-                            .as_str(),
-                        );
+                let at_end = self.scroll_idx
+                    > main.graphemes(true).count() - self.max_width;
+                let replacement_text = match scrolling {
+                    false => {
+                        glib::markup_escape_text(main.as_str()).to_string()
                     }
-                    (true, false) => {
-                        layout.set_markup(
-                            text.replace(
-                                "%main%",
-                                glib::markup_escape_text(
-                                    main.as_str()
-                                        .graphemes(true)
-                                        .skip(self.scroll_idx)
-                                        .take(self.max_width)
-                                        .collect::<String>()
-                                        .as_str(),
-                                )
+                    true => match at_end {
+                        false => glib::markup_escape_text(
+                            main.as_str()
+                                .graphemes(true)
+                                .skip(self.scroll_idx)
+                                .take(self.max_width)
+                                .collect::<String>()
                                 .as_str(),
+                        )
+                        .to_string(),
+                        true => format!(
+                            "{}{}",
+                            glib::markup_escape_text(
+                                main.as_str()
+                                    .graphemes(true)
+                                    .skip(self.scroll_idx)
+                                    .collect::<String>()
+                                    .as_str()
                             )
                             .as_str(),
-                        );
-                    }
-                    (true, true) => {
-                        layout.set_markup(
-                            text.replace(
-                                "%main%",
-                                format!(
-                                    "{}{}",
-                                    glib::markup_escape_text(
-                                        main.as_str()
-                                            .graphemes(true)
-                                            .skip(self.scroll_idx)
-                                            .collect::<String>()
-                                            .as_str()
+                            glib::markup_escape_text(
+                                main.as_str()
+                                    .graphemes(true)
+                                    .take(
+                                        self.max_width
+                                            - (main.graphemes(true).count()
+                                                - self.scroll_idx)
                                     )
-                                    .as_str(),
-                                    glib::markup_escape_text(
-                                        main.as_str()
-                                            .graphemes(true)
-                                            .take(
-                                                self.max_width
-                                                    - (main
-                                                        .graphemes(true)
-                                                        .count()
-                                                        - self.scroll_idx)
-                                            )
-                                            .collect::<String>()
-                                            .as_str()
-                                    )
-                                    .as_str(),
-                                )
-                                .as_str(),
+                                    .collect::<String>()
+                                    .as_str()
                             )
                             .as_str(),
-                        );
-                    }
-                }
+                        ),
+                    },
+                };
+                layout.set_markup(
+                    text.replace("%main%", replacement_text.as_str()).as_str(),
+                );
             }
             Strategy::Truncate => {
-                layout.set_markup(
-                    if self.max_width > 0 {
-                        text.replace(
-                            "%main%",
-                            glib::markup_escape_text(
-                                main.graphemes(true)
-                                    .take(self.max_width)
-                                    .collect::<String>()
-                                    .as_str(),
-                            )
+                let replacement_text = if self.max_width > 0 {
+                    glib::markup_escape_text(
+                        main.graphemes(true)
+                            .take(self.max_width)
+                            .collect::<String>()
                             .as_str(),
-                        )
-                    } else {
-                        text.replace("%main%", main.as_str())
-                    }
-                    .as_str(),
-                );
+                    )
+                    .to_string()
+                } else {
+                    main.clone()
+                };
+                let layout_text =
+                    text.replace("%main%", replacement_text.as_str());
+                layout.set_markup(layout_text.as_str());
             }
         };
 
@@ -270,24 +242,18 @@ impl Mpd {
         let size = layout.pixel_size();
         let (bar_start_idx, bar_max_width_idx) = index_cache
             .iter()
-            .find(|(name, _, _)| *name == "main")
+            .find(|index| index.name == "main")
             .map_or_else(
                 || (0, text.len() as i32),
-                |(_, start, width)| (*start as i32, *width as i32),
+                |index| (index.start as i32, index.length as i32),
             );
-
         let bar_start =
             layout.index_to_pos(bar_start_idx).x() as f64 / pango::SCALE as f64;
         let bar_max_width =
             layout.index_to_pos(bar_start_idx + bar_max_width_idx).x() as f64
                 / pango::SCALE as f64
                 - bar_start;
-        *self.index_cache.lock().unwrap() = Some(
-            index_cache
-                .into_iter()
-                .map(|(name, start, width)| (name.to_string(), start, width))
-                .collect(),
-        );
+        *self.index_cache.lock().unwrap() = Some(index_cache);
         *self.last_layout.lock().unwrap() =
             Some((layout.clone(), layout.text().to_string()));
 
@@ -355,109 +321,63 @@ impl Mpd {
         ))
     }
 
+    fn format_from_content(
+        &self,
+        content: &str,
+        status: &Status,
+    ) -> Option<String> {
+        match content {
+            "%title%" => Some(
+                self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                    |_| String::from("Unknown"),
+                    |s| {
+                        s.map_or_else(
+                            || String::from("Unknown"),
+                            |s| s.title.unwrap_or(String::from("Unknown")),
+                        )
+                    },
+                ),
+            ),
+            "%artist%" => Some(
+                self.noidle_conn.lock().unwrap().currentsong().map_or_else(
+                    |_| String::from("Unknown"),
+                    |s| {
+                        s.map_or_else(
+                            || String::from("Unknown"),
+                            |s| s.artist.unwrap_or(String::from("Unknown")),
+                        )
+                    },
+                ),
+            ),
+            "%next%" => Some(self.formats.next.to_owned()),
+            "%prev%" => Some(self.formats.prev.to_owned()),
+            "%play%" => Some(self.formats.play.to_owned()),
+            "%pause%" => Some(self.formats.pause.to_owned()),
+            "%toggle%" => Some(match status.state {
+                State::Play => self.formats.toggle_playing.to_owned(),
+                State::Pause => self.formats.toggle_paused.to_owned(),
+                State::Stop => self.formats.toggle_stopped.to_owned(),
+            }),
+            "%main%" => Some(content.to_owned()),
+            "%shuffle%" => Some(self.formats.shuffle.to_owned()),
+            "%repeat%" => Some(self.formats.repeat.to_owned()),
+            "%random%" => Some(self.formats.random.to_owned()),
+            "%single%" => Some(self.formats.single.to_owned()),
+            "%consume%" => Some(self.formats.consume.to_owned()),
+            _ => None,
+        }
+    }
+
     fn replace(
         &self,
         content: &str,
         dst: &mut String,
         status: &Status,
     ) -> bool {
-        match content {
-            "%title%" => {
-                let title =
-                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
-                        |_| String::from("Unknown"),
-                        |s| {
-                            s.map_or_else(
-                                || String::from("Unknown"),
-                                |s| {
-                                    s.title.unwrap_or_else(|| {
-                                        String::from("Unknown")
-                                    })
-                                },
-                            )
-                        },
-                    );
-                dst.push_str(title.as_str());
-                true
-            }
-            "%artist%" => {
-                let artist =
-                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
-                        |_| String::from("Unknown"),
-                        |s| {
-                            s.map_or_else(
-                                || String::from("Unknown"),
-                                |s| {
-                                    s.artist.unwrap_or_else(|| {
-                                        String::from("Unknown")
-                                    })
-                                },
-                            )
-                        },
-                    );
-                dst.push_str(artist.as_str());
-                true
-            }
-            "%next%" => {
-                let next = self.formats.next;
-                dst.push_str(next);
-                true
-            }
-            "%prev%" => {
-                let prev = self.formats.prev;
-                dst.push_str(prev);
-                true
-            }
-            "%play%" => {
-                let play = self.formats.play;
-                dst.push_str(play);
-                true
-            }
-            "%pause%" => {
-                let pause = self.formats.pause;
-                dst.push_str(pause);
-                true
-            }
-            "%toggle%" => {
-                let toggle = match status.state {
-                    State::Play => self.formats.toggle_playing,
-                    State::Pause => self.formats.toggle_paused,
-                    State::Stop => self.formats.toggle_stopped,
-                };
-                dst.push_str(toggle);
-                true
-            }
-            "%main%" => {
-                dst.push_str(content);
-                true
-            }
-            "%shuffle%" => {
-                let shuffle = self.formats.shuffle;
-                dst.push_str(shuffle);
-                true
-            }
-            "%repeat%" => {
-                let repeat = self.formats.repeat;
-                dst.push_str(repeat);
-                true
-            }
-            "%random%" => {
-                let random = self.formats.random;
-                dst.push_str(random);
-                true
-            }
-            "%single%" => {
-                let single = self.formats.single;
-                dst.push_str(single);
-                true
-            }
-            "%consume%" => {
-                let consume = self.formats.consume;
-                dst.push_str(consume);
-                true
-            }
-            _ => true,
+        if let Some(str_to_push) = self.format_from_content(content, status) {
+            dst.push_str(str_to_push.as_str());
         }
+        true
     }
 
     fn build_cache(
@@ -467,263 +387,71 @@ impl Mpd {
         dst: &mut String,
         main: &str,
         status: &Status,
-        index_cache: &mut Vec<(&str, usize, usize)>,
+        index_cache: &mut IndexCache,
         offset: &mut isize,
     ) -> bool {
-        match content {
-            "%title%" => {
-                let title =
-                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
-                        |_| String::from("Unknown"),
-                        |s| {
-                            s.map_or_else(
-                                || String::from("Unknown"),
-                                |s| {
-                                    s.title.unwrap_or_else(|| {
-                                        String::from("Unknown")
-                                    })
-                                },
-                            )
-                        },
-                    );
-                dst.push_str(title.as_str());
-                let length = pango::parse_markup(title.as_str(), '\0')
-                    .map_or_else(|_| title.len(), |l| l.1.len());
-                index_cache.push((
-                    "title",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%artist%" => {
-                let artist =
-                    self.noidle_conn.lock().unwrap().currentsong().map_or_else(
-                        |_| String::from("Unknown"),
-                        |s| {
-                            s.map_or_else(
-                                || String::from("Unknown"),
-                                |s| {
-                                    s.artist.unwrap_or_else(|| {
-                                        String::from("Unknown")
-                                    })
-                                },
-                            )
-                        },
-                    );
-                dst.push_str(artist.as_str());
-                let length = pango::parse_markup(artist.as_str(), '\0')
-                    .map_or_else(|_| artist.len(), |l| l.1.len());
-                index_cache.push((
-                    "artist",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%next%" => {
-                let next = self.formats.next;
-                dst.push_str(next);
-                let length = pango::parse_markup(next, '\0')
-                    .map_or_else(|_| next.len(), |l| l.1.len());
-                index_cache.push((
-                    "next",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%prev%" => {
-                let prev = self.formats.prev;
-                dst.push_str(prev);
-                let length = pango::parse_markup(prev, '\0')
-                    .map_or_else(|_| prev.len(), |l| l.1.len());
-                index_cache.push((
-                    "prev",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%play%" => {
-                let play = self.formats.play;
-                dst.push_str(play);
-                let length = pango::parse_markup(play, '\0')
-                    .map_or_else(|_| play.len(), |l| l.1.len());
-                index_cache.push((
-                    "play",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%pause%" => {
-                let pause = self.formats.pause;
-                dst.push_str(pause);
-                let length = pango::parse_markup(pause, '\0')
-                    .map_or_else(|_| pause.len(), |l| l.1.len());
-                index_cache.push((
-                    "pause",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%toggle%" => {
-                let toggle = match status.state {
-                    State::Play => self.formats.toggle_playing,
-                    State::Pause => self.formats.toggle_paused,
-                    State::Stop => self.formats.toggle_stopped,
-                };
-                dst.push_str(toggle);
-                let length = pango::parse_markup(toggle, '\0')
-                    .map_or_else(|_| toggle.len(), |l| l.1.len());
-                index_cache.push((
-                    "toggle",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%main%" => {
-                dst.push_str(content);
-                let length = main.len().min(self.max_width);
-                index_cache.push((
-                    "main",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%shuffle%" => {
-                let shuffle = self.formats.shuffle;
-                dst.push_str(shuffle);
-                let length = pango::parse_markup(shuffle, '\0')
-                    .map_or_else(|_| shuffle.len(), |l| l.1.len());
-                index_cache.push((
-                    "shuffle",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%repeat%" => {
-                let repeat = self.formats.repeat;
-                dst.push_str(repeat);
-                let length = pango::parse_markup(repeat, '\0')
-                    .map_or_else(|_| repeat.len(), |l| l.1.len());
-                index_cache.push((
-                    "repeat",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%random%" => {
-                let random = self.formats.random;
-                dst.push_str(random);
-                let length = pango::parse_markup(random, '\0')
-                    .map_or_else(|_| random.len(), |l| l.1.len());
-                index_cache.push((
-                    "random",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%single%" => {
-                let single = self.formats.single;
-                dst.push_str(single);
-                let length = pango::parse_markup(single, '\0')
-                    .map_or_else(|_| single.len(), |l| l.1.len());
-                index_cache.push((
-                    "single",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            "%consume%" => {
-                let consume = self.formats.consume;
-                dst.push_str(consume);
-                let length = pango::parse_markup(consume, '\0')
-                    .map_or_else(|_| consume.len(), |l| l.1.len());
-                index_cache.push((
-                    "consume",
-                    (mat.start() as isize + *offset) as usize,
-                    length,
-                ));
-                *offset += (length - content.len()) as isize;
-                true
-            }
-            _ => true,
+        if let Some(str_to_push) = self.format_from_content(content, status) {
+            let name = content.replace("%", "");
+            dst.push_str(str_to_push.as_str());
+            // main is special
+            let length = if content == "%main%" {
+                main.len().min(self.max_width)
+            } else {
+                pango::parse_markup(str_to_push.as_str(), '\0')
+                    .map_or_else(|_| str_to_push.len(), |l| l.1.len())
+            };
+            index_cache.push(ButtonIndex {
+                name,
+                start: (mat.start() as isize + *offset) as usize,
+                length,
+            });
+            *offset += (length - content.len()) as isize;
         }
+        true
     }
 
     fn process_event(
         event: Event,
         conn: Arc<Mutex<Client>>,
         last_layout: Rc<Mutex<Option<(Layout, String)>>>,
-        index_cache: Arc<Mutex<MpdIndexCache>>,
+        index_cache: Arc<Mutex<Option<IndexCache>>>,
         send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let ev = event.clone();
         let result = match event {
-            Event::Action(ref value) if value == "next" => {
-                conn.lock().unwrap().next()
-            }
-            Event::Action(ref value) if value == "prev" => {
-                conn.lock().unwrap().prev()
-            }
-            Event::Action(ref value) if value == "play" => {
-                conn.lock().unwrap().play()
-            }
-            Event::Action(ref value) if value == "pause" => {
-                conn.lock().unwrap().pause(true)
-            }
-            Event::Action(ref value) if value == "toggle" => {
-                conn.lock().unwrap().toggle_pause()
-            }
-            Event::Action(ref value) if value == "shuffle" => {
-                conn.lock().unwrap().shuffle(..)
-            }
-            Event::Action(ref value) if value == "repeat" => {
-                let mut conn = conn.lock().unwrap();
-                let repeat = conn.status()?.repeat;
-                conn.repeat(!repeat)
-            }
-            Event::Action(ref value) if value == "random" => {
-                let mut conn = conn.lock().unwrap();
-                let random = conn.status()?.random;
-                conn.random(!random)
-            }
-            Event::Action(ref value) if value == "single" => {
-                let mut conn = conn.lock().unwrap();
-                let single = conn.status()?.single;
-                conn.single(!single)
-            }
-            Event::Action(ref value) if value == "consume" => {
-                let mut conn = conn.lock().unwrap();
-                let consume = conn.status()?.consume;
-                conn.consume(!consume)
-            }
-            Event::Action(ref value) if value == "main" => Ok(()),
-            Event::Action(event) => {
-                log::warn!("Unknown event {event}");
-                Ok(())
-            }
+            Event::Action(ref value) => match value.as_str() {
+                "next" => conn.lock().unwrap().next(),
+                "prev" => conn.lock().unwrap().prev(),
+                "play" => conn.lock().unwrap().play(),
+                "pause" => conn.lock().unwrap().pause(true),
+                "toggle" => conn.lock().unwrap().toggle_pause(),
+                "shuffle" => conn.lock().unwrap().shuffle(..),
+                "repeat" => {
+                    let mut conn = conn.lock().unwrap();
+                    let repeat = conn.status()?.repeat;
+                    conn.repeat(!repeat)
+                }
+                "random" => {
+                    let mut conn = conn.lock().unwrap();
+                    let random = conn.status()?.random;
+                    conn.random(!random)
+                }
+                "single" => {
+                    let mut conn = conn.lock().unwrap();
+                    let single = conn.status()?.single;
+                    conn.single(!single)
+                }
+                "consume" => {
+                    let mut conn = conn.lock().unwrap();
+                    let consume = conn.status()?.consume;
+                    conn.consume(!consume)
+                }
+                "main" => Ok(()),
+                _ => {
+                    log::warn!("Unknown action event '{value}'");
+                    Ok(())
+                }
+            },
             Event::Mouse(event) => {
                 match event.button {
                     MouseButton::Left
@@ -745,12 +473,13 @@ impl Mpd {
                                     as usize;
                                 cache
                                     .iter()
-                                    .find(|(_, start, width)| {
-                                        *start <= idx && idx <= start + width
+                                    .find(|index| {
+                                        index.start <= idx
+                                            && idx <= index.start + index.length
                                     })
-                                    .map(|(event, _, _)| {
+                                    .map(|index| {
                                         Self::process_event(
-                                            Event::Action(event.to_owned()),
+                                            Event::Action(index.name.clone()),
                                             conn,
                                             last_layout,
                                             index_cache,
