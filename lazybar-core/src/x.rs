@@ -1,11 +1,10 @@
 use std::{
-    mem,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{self, Poll},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;

@@ -9,7 +9,8 @@ use tokio_stream::wrappers::UnixListenerStream;
 
 use crate::IpcStream;
 
-const IPC_DIR: &str = "/tmp/lazybar-ipc/";
+/// The directory in which IPC sockets are created
+pub const IPC_DIR: &str = "/tmp/lazybar-ipc/";
 
 /// Initialize IPC for a given bar
 pub fn init(enabled: bool, bar_name: &str) -> (Result<IpcStream>, String) {

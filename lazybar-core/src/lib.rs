@@ -64,7 +64,8 @@ pub mod attrs;
 pub mod background;
 /// The bar itself and bar-related utility structs and functions.
 pub mod bar;
-mod cleanup;
+/// Functions to ease a clean shutdown.
+pub mod cleanup;
 /// Common configuration for panels.
 pub mod common;
 mod highlight;

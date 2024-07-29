@@ -1,11 +1,36 @@
-use std::{fs::remove_file, sync::OnceLock, time::Duration};
+use std::{
+    fs::{read_dir, remove_file},
+    os::unix::fs::FileTypeExt,
+    sync::OnceLock,
+    time::Duration,
+};
 
-use tokio::time;
+use anyhow::Result;
+use tokio::{net::UnixStream, time};
 
-use crate::ipc::ChannelEndpoint;
+use crate::ipc::{self, ChannelEndpoint};
 
-pub static mut ENDPOINT: OnceLock<ChannelEndpoint<(), ()>> = OnceLock::new();
+pub(crate) static mut ENDPOINT: OnceLock<ChannelEndpoint<(), ()>> =
+    OnceLock::new();
 
+/// Removes any sockets in `/tmp/lazybar-ipc/` that can't be connected to.
+pub async fn cleanup() -> Result<()> {
+    let sockets = read_dir(ipc::IPC_DIR)?
+        .filter_map(Result::ok)
+        .filter(|f| f.file_type().is_ok_and(|t| t.is_socket()));
+    for socket in sockets {
+        let path = socket.path();
+
+        if let Err(_) = UnixStream::connect(path.as_path()).await {
+            let _ = remove_file(path);
+        }
+    }
+
+    Ok(())
+}
+
+/// Shutdown the bar as cleanly as possible. Short of SIGKILL, lazybar should
+/// never exit without calling this function.
 pub async fn exit(
     bar: Option<(&str, bool)>,
     in_runtime: bool,
