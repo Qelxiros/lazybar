@@ -128,7 +128,7 @@ pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 /// The channel endpoint associated with a panel.
 pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
 
-/// A cache for the position of clicable buttons.
+/// A cache for the position of clickable buttons.
 pub type IndexCache = Vec<ButtonIndex>;
 
 pub(crate) type IpcStream = Pin<
