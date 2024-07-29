@@ -249,10 +249,8 @@ impl XWorkspaces {
                     conn.send_event(
                         false,
                         root,
-                        // probably a spec violation, but this guarantees
-                        // that the root window gets the message and changes
-                        // the workspace
-                        EventMask::from(u32::MAX),
+                        EventMask::SUBSTRUCTURE_NOTIFY
+                            | EventMask::SUBSTRUCTURE_REDIRECT,
                         ClientMessageEvent::new(
                             32,
                             root,
@@ -269,41 +267,40 @@ impl XWorkspaces {
                 }
             }
 
-            Event::Mouse(event) => match event.button {
-                MouseButton::Left
-                | MouseButton::Right
-                | MouseButton::Middle => {
-                    let mut idx = 0;
-                    let cache = width_cache.lock().unwrap();
-                    if cache.is_empty() {
-                        return Ok(());
-                    }
-                    let mut x = cache[0];
-                    let len = cache.len();
-                    while x < event.x as i32 && idx < len {
-                        idx += 1;
-                        x += cache[idx];
-                    }
-                    drop(cache);
+            Event::Mouse(event) => {
+                let len = names.len();
+                let idx = match event.button {
+                    MouseButton::Left
+                    | MouseButton::Right
+                    | MouseButton::Middle => {
+                        let mut idx = 0;
+                        let cache = width_cache.lock().unwrap();
+                        if cache.is_empty() {
+                            return Ok(());
+                        }
+                        let mut x = cache[0];
+                        while x < event.x as i32 && idx < len {
+                            idx += 1;
+                            x += cache[idx];
+                        }
+                        drop(cache);
 
-                    if idx < len {
-                        Self::process_event(
-                            Event::Action(names[idx].clone()),
-                            conn,
-                            root,
-                            width_cache,
-                            names,
-                            current_atom,
-                            send,
-                        )?;
+                        idx
                     }
-                }
-                MouseButton::ScrollUp => {
-                    let current = get_current(&conn, root, current_atom)?;
-                    let new_idx = (current + 1) as usize % names.len();
+                    MouseButton::ScrollUp => {
+                        let current = get_current(&conn, root, current_atom)?;
+                        (current + 1) as usize % names.len()
+                    }
+                    MouseButton::ScrollDown => {
+                        let current = get_current(&conn, root, current_atom)?;
+                        let len = names.len();
+                        (current as usize + len - 1) % len
+                    }
+                };
 
+                if idx < len {
                     Self::process_event(
-                        Event::Action(names[new_idx].clone()),
+                        Event::Action(names[idx].clone()),
                         conn,
                         root,
                         width_cache,
@@ -312,22 +309,7 @@ impl XWorkspaces {
                         send,
                     )?;
                 }
-                MouseButton::ScrollDown => {
-                    let current = get_current(&conn, root, current_atom)?;
-                    let len = names.len();
-                    let new_idx = (current as usize + len - 1) % len;
-
-                    Self::process_event(
-                        Event::Action(names[new_idx].clone()),
-                        conn,
-                        root,
-                        width_cache,
-                        names,
-                        current_atom,
-                        send,
-                    )?;
-                }
-            },
+            }
         };
 
         Ok(())
