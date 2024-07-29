@@ -48,6 +48,9 @@ use crate::{
 
 lazy_static! {
     /// The `attrs` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
     pub static ref ATTRS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
     /// The `ramps` table from the global [`Config`].
@@ -76,8 +79,12 @@ lazy_static! {
 ///   `margin_internal`.
 /// - `reverse_scroll`: `true` or `false`. Whether to reverse scrolling.
 /// - `ipc`: `true` or `false`. Whether to enable inter-process communication.
-///
-/// See [`Attrs::parse`] for more parsing details.
+/// - `default_attrs`: The default attributes for panels. See [`Attrs::parse`]
+///   for more parsing details.
+/// - `monitor`: The name of the monitor on which the bar should display. You
+///   can use `xrandr --query` to find monitor names in most cases. However,
+///   discovering all monitors is a complicated problem and beyond the scope of
+///   this documentation.
 pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
     let config = Config::builder()
         .add_source(

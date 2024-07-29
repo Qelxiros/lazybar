@@ -6,8 +6,10 @@
 //! Linux's inotify to monitor the contents of a file.
 //!
 //! You're welcome to use this crate as a library if you want to expand on the
-//! functionality included herein, but its intentended use case is as a binary.
-//! It reads a configuration file located at
+//! functionality included herein, but its intentended use case is to hold most
+//! of the logic for [`lazybar`](https://docs.rs/lazybar).
+//!
+//! At runtime, it reads a configuration file located at
 //! `$XDG_CONFIG_HOME/lazybar/config.toml`, and this documentation will focus on
 //! accepted syntax for that file. See [`panels`] for panel-specific
 //! information.
@@ -30,11 +32,11 @@
 //! - `consts`: each value is a string that can be substituted into any other
 //!   string by using `%{key}`
 //!
-//! None of these tables need to be declared explicitly, as they hold no values
-//! of their own. `[bars.example]` is sufficient to define a bar named
-//! `example`. Any values in these top level tables will be ignored, along with
-//! any top level table with a different name. See <https://toml.io/> for more
-//! information.
+//! Other than `images` and `consts`, none of these tables need to be declared
+//! explicitly, as they hold no values of their own. `[bars.example]` is
+//! sufficient to define a bar named `example`. Any values in these top level
+//! tables will be ignored, along with any top level table with a different
+//! name. See <https://toml.io/> for more information.
 //!
 //! Note: types are pretty flexible, and [`config`] will try its best to
 //! figure out what you mean, but if you have issues, make sure that your types
