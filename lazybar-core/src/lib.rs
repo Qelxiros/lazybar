@@ -125,8 +125,11 @@ pub type PanelShutdownFn = Box<dyn FnOnce()>;
 /// changes.
 pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 
-/// The channel endpoint associated with a panel
+/// The channel endpoint associated with a panel.
 pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
+
+/// A cache for the position of clicable buttons.
+pub type IndexCache = Vec<ButtonIndex>;
 
 pub(crate) type IpcStream = Pin<
     Box<
@@ -198,6 +201,19 @@ impl Display for Alignment {
             Self::Right => f.write_str("right"),
         }
     }
+}
+
+/// Describes the position and size of a clickable button.
+#[derive(Debug)]
+pub struct ButtonIndex {
+    /// The name of the button.
+    pub name: String,
+    /// The start of the button in bytes. Gets converted to pixel coordinates
+    /// with [`pango::Layout::xy_to_index()`]
+    pub start: usize,
+    /// The length of the button in bytes. Gets converted to pixel coordinates
+    /// with [`pango::Layout::xy_to_index()`]
+    pub length: usize,
 }
 
 /// Describes the minimum width of gaps around panel groups.
