@@ -4,7 +4,7 @@ use std::{
     rc::Rc,
     str::FromStr,
     sync::{Arc, Mutex},
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 
@@ -30,36 +30,36 @@ use crate::{
     PanelStream,
 };
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Precision {
-    Days,
-    Hours,
-    Minutes,
     #[default]
     Seconds,
+    Minutes,
+    Hours,
+    Days,
 }
 
 impl Precision {
     fn tick(self) -> Duration {
         match self {
+            Self::Seconds => Duration::from_nanos(
+                1_000_000_000
+                    - u64::from(Local::now().nanosecond() % 1_000_000_000),
+            ),
+            Self::Minutes => {
+                let now = Local::now();
+                Duration::from_secs(u64::from(60 - now.second()))
+            }
+            Self::Hours => {
+                let now = Local::now();
+                Duration::from_secs(u64::from(60 * (60 - now.minute())))
+            }
             Self::Days => {
                 let now = Local::now();
                 Duration::from_secs(u64::from(
                     60 * (60 * (24 - now.hour()) + 60 - now.minute()),
                 ))
             }
-            Self::Hours => {
-                let now = Local::now();
-                Duration::from_secs(u64::from(60 * (60 - now.minute())))
-            }
-            Self::Minutes => {
-                let now = Local::now();
-                Duration::from_secs(u64::from(60 - now.second()))
-            }
-            Self::Seconds => Duration::from_nanos(
-                1_000_000_000
-                    - u64::from(Local::now().nanosecond() % 1_000_000_000),
-            ),
         }
     }
 }
@@ -95,6 +95,8 @@ pub struct Clock {
     common: PanelCommon,
     #[builder(default)]
     precision: Arc<Mutex<Precision>>,
+    #[builder(default)]
+    waker: Arc<Mutex<Option<Waker>>>,
 }
 
 impl Clock {
@@ -127,21 +129,29 @@ impl Clock {
         precision: Arc<Mutex<Precision>>,
         precisions: &[Precision],
         send: UnboundedSender<EventResponse>,
+        waker: &Arc<Mutex<Option<Waker>>>,
     ) -> Result<()> {
         match event {
-            Event::Action(ref value) if value == "cycle" => {
+            Event::Action(value) => {
                 let mut idx = idx.lock().unwrap();
-                let new_idx = (idx.0 + 1) % idx.1;
+                let new_idx = match value.as_str() {
+                    "cycle" => (idx.0 + 1) % idx.1,
+                    "cycle_back" => (idx.0 + idx.1 - 1) % idx.1,
+                    e => {
+                        send.send(EventResponse::Err(format!(
+                            "Unknown event {e}"
+                        )))?;
+                        return Ok(());
+                    }
+                };
                 *idx = (new_idx, idx.1);
-                *precision.lock().unwrap() = precisions[new_idx];
-                drop(idx);
-                send.send(EventResponse::Ok)?;
-            }
-            Event::Action(ref value) if value == "cycle_back" => {
-                let mut idx = idx.lock().unwrap();
-                let new_idx = (idx.0 + idx.1 - 1) % idx.1;
-                *idx = (new_idx, idx.1);
-                *precision.lock().unwrap() = precisions[new_idx];
+                let mut precision = precision.lock().unwrap();
+                let old_precision = *precision;
+                let new_precision = precisions[new_idx];
+                *precision = new_precision;
+                if new_precision < old_precision {
+                    waker.lock().unwrap().as_ref().map(|w| w.wake_by_ref());
+                }
                 drop(idx);
                 send.send(EventResponse::Ok)?;
             }
@@ -160,10 +170,8 @@ impl Clock {
                     precision,
                     precisions,
                     send,
+                    waker,
                 )?;
-            }
-            Event::Action(e) => {
-                send.send(EventResponse::Err(format!("Unknown event {e}")))?;
             }
         }
 
@@ -233,6 +241,7 @@ impl PanelConfig for Clock {
         let actions = self.common.actions.clone();
         let precision = self.precision.clone();
         let precisions = self.precisions.clone();
+        let waker = self.waker.clone();
         let (event_send, event_recv) = unbounded_channel();
         let (response_send, response_recv) = unbounded_channel();
         let mut map =
@@ -250,14 +259,19 @@ impl PanelConfig for Clock {
                     precision.clone(),
                     &precisions,
                     send,
+                    &waker,
                 )
             })),
         );
         map.insert(
             1,
             Box::pin(
-                ClockStream::new(Precision::tick, self.precision.clone())
-                    .map(|_| Ok(())),
+                ClockStream::new(
+                    Precision::tick,
+                    self.precision.clone(),
+                    self.waker.clone(),
+                )
+                .map(|_| Ok(())),
             ),
         );
 
@@ -271,7 +285,9 @@ impl PanelConfig for Clock {
 #[derive(Debug)]
 struct ClockStream {
     get_duration: fn(Precision) -> Duration,
-    precision: Arc<Mutex<Precision>>,
+    shared_precision: Arc<Mutex<Precision>>,
+    local_precision: Precision,
+    waker: Arc<Mutex<Option<Waker>>>,
     interval: Interval,
 }
 
@@ -279,13 +295,24 @@ impl ClockStream {
     fn new(
         get_duration: fn(Precision) -> Duration,
         precision: Arc<Mutex<Precision>>,
+        waker: Arc<Mutex<Option<Waker>>>,
     ) -> Self {
-        let interval = interval(get_duration(*precision.lock().unwrap()));
+        let local_precision = *precision.lock().unwrap();
+        let interval = interval(get_duration(local_precision));
         Self {
             get_duration,
-            precision,
+            shared_precision: precision,
+            local_precision,
+            waker,
             interval,
         }
+    }
+
+    fn reset(&mut self) {
+        let shared = *self.shared_precision.lock().unwrap();
+        self.local_precision = shared;
+        let duration = (self.get_duration)(shared);
+        self.interval.reset_after(duration);
     }
 }
 
@@ -296,10 +323,14 @@ impl Stream for ClockStream {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Instant>> {
+        if *self.shared_precision.lock().unwrap() != self.local_precision {
+            self.reset();
+        }
         let ret = self.interval.poll_tick(cx).map(Some);
         if ret.is_ready() {
-            let duration = (self.get_duration)(*self.precision.lock().unwrap());
-            self.interval.reset_after(duration);
+            self.reset();
+        } else {
+            *self.waker.lock().unwrap() = Some(cx.waker().clone());
         }
         ret
     }
