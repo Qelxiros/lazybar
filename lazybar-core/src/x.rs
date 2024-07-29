@@ -228,9 +228,35 @@ pub fn set_wm_properties(
     }
 
     let strut = if position == Position::Top {
-        &[0, 0, height, 0, 0, 0, 0, 0, 0, width - 1, 0, 0]
+        &[
+            0,
+            0,
+            height,
+            0,
+            0,
+            0,
+            0,
+            0,
+            mon.x as u32,
+            mon.x as u32 + width - 1,
+            0,
+            0,
+        ]
     } else {
-        &[0, 0, 0, height, 0, 0, 0, 0, 0, 0, 0, width - 1]
+        &[
+            0,
+            0,
+            0,
+            height,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            mon.x as u32,
+            mon.x as u32 + width - 1,
+        ]
     };
     if let Ok(strut_partial_atom) =
         InternedAtoms::get(conn, "_NET_WM_STRUT_PARTIAL")
