@@ -397,7 +397,10 @@ fn parse_panel(
                 s => Err(anyhow!("Unknown panel type {s}")),
             }
             .map_err(|e| {
-                log::error!("{e}");
+                log::error!(
+                    "Error encountered while parsing panel {p} (of type {s}): \
+                     {e}"
+                );
                 e
             })
             .ok();
