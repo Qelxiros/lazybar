@@ -425,14 +425,13 @@ pub mod builders {
             }
 
             while !joinset.is_empty() {
-                if let Some(Ok((
-                    alignment,
-                    idx,
-                    (name, visible),
-                    Ok((stream, sender)),
-                ))) = joinset.join_next().await
-                {
-                    match alignment {
+                match joinset.join_next().await {
+                    Some(Ok((
+                        alignment,
+                        idx,
+                        (name, visible),
+                        Ok((stream, sender)),
+                    ))) => match alignment {
                         Alignment::Left => {
                             left_panels[idx] =
                                 Some(Panel::new(None, name, sender, visible));
@@ -448,7 +447,19 @@ pub mod builders {
                                 Some(Panel::new(None, name, sender, visible));
                             right_stream.insert(idx, stream);
                         }
+                    },
+                    Some(Ok((alignment, idx, (name, _), Err(e)))) => {
+                        log::error!(
+                            "Error encountered while starting {name} \
+                             ({alignment} panel at index {idx}): {e}"
+                        );
                     }
+                    Some(Err(e)) => {
+                        log::warn!(
+                            "Join error encountered while starting panels: {e}"
+                        );
+                    }
+                    None => unreachable!(),
                 }
             }
 
