@@ -5,8 +5,8 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
-use tokio::{net::UnixStream, time};
+use anyhow::{anyhow, Result};
+use tokio::{io::AsyncWriteExt, net::UnixStream, time};
 
 use crate::ipc::{self, ChannelEndpoint};
 
@@ -21,8 +21,33 @@ pub async fn cleanup() -> Result<()> {
     for socket in sockets {
         let path = socket.path();
 
-        if let Err(_) = UnixStream::connect(path.as_path()).await {
-            let _ = remove_file(path);
+        let stream = UnixStream::connect(path.as_path()).await;
+        match stream {
+            Ok(mut stream) => {
+                match time::timeout(Duration::from_secs(1), async {
+                    let mut buf = [0; 16];
+                    stream.writable().await?;
+                    stream.try_write(b"ping")?;
+                    stream.readable().await?;
+                    let bytes = stream.try_read(&mut buf)?;
+                    stream.shutdown().await?;
+
+                    match bytes {
+                        0 => Err(anyhow!("Failed to read from stream")),
+                        _ => Ok::<_, anyhow::Error>(()),
+                    }
+                })
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(_)) | Err(_) => {
+                        let _ = remove_file(path);
+                    }
+                }
+            }
+            Err(_) => {
+                let _ = remove_file(path);
+            }
         }
     }
 

@@ -503,6 +503,9 @@ pub mod builders {
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
 
+            let mut cleanup = Box::pin(cleanup::cleanup());
+            let mut cleanup_done = false;
+
             task::spawn_local(async move { loop {
                 tokio::select! {
                     Some(Ok(event)) = x_stream.next() => {
@@ -571,6 +574,17 @@ pub mod builders {
                         // this is necessary to satisfy the borrow checker, even though it will
                         // never run.
                         break;
+                    }
+                    res = &mut cleanup, if !cleanup_done => {
+                        match res {
+                            Ok(()) => {
+                                log::info!("IPC dir cleanup finished");
+                            }
+                            Err(_) => {
+                                log::warn!("IPC dir cleanup failed");
+                            }
+                        }
+                        cleanup_done = true;
                     }
                 }
             } }).await?;
