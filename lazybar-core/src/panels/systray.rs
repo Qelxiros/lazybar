@@ -47,7 +47,7 @@ pub enum SortMethod {
 }
 
 impl SortMethod {
-    fn reverse(self) -> Self {
+    const fn reverse(self) -> Self {
         match self {
             Self::Arrival(reversed) => Self::Arrival(!reversed),
             Self::WindowName(reversed) => Self::WindowName(!reversed),
@@ -188,7 +188,7 @@ impl Systray {
         Ok(())
     }
 
-    fn reposition(&mut self, icon: Icon) -> Result<()> {
+    fn reposition(&self, icon: Icon) -> Result<()> {
         let x = icon.idx as i16 * (self.icon_size + self.icon_padding)
             + self.icon_padding / 2;
 
@@ -263,8 +263,8 @@ impl PanelConfig for Systray {
             });
         }
 
-        if let Some(true) = remove_bool_from_config("sort_reverse", table) {
-            builder.icon_sort = builder.icon_sort.map(|s| s.reverse());
+        if remove_bool_from_config("sort_reverse", table) == Some(true) {
+            builder.icon_sort = builder.icon_sort.map(SortMethod::reverse);
         }
 
         let common = PanelCommon::parse_common(table)?;
@@ -566,14 +566,15 @@ impl Systray {
                         )?
                         .reply()?;
 
-                    let mut mapped = false;
-
-                    if !xembed_info.value32().is_some_and(|mut val| {
-                        val.nth(1).is_some_and(|mapped| mapped & 0x1 == 0)
-                    }) {
-                        self.conn.map_window(window)?.check()?;
-                        mapped = true;
-                    }
+                    let mapped =
+                        if xembed_info.value32().is_some_and(|mut val| {
+                            val.nth(1).is_some_and(|mapped| mapped & 0x1 == 0)
+                        }) {
+                            false
+                        } else {
+                            self.conn.map_window(window)?.check()?;
+                            true
+                        };
 
                     let idx = match self.icon_sort {
                         SortMethod::Arrival(false) => self.icons.len(),
@@ -606,12 +607,18 @@ impl Systray {
                                 a_name = a_name.map(|s| s.to_lowercase());
                                 b_name = b_name.map(|s| s.to_lowercase());
                             }
-                            if a_name.is_err() || b_name.is_err() {
-                                Ordering::Equal
-                            } else if reversed {
-                                a_name.unwrap().cmp(&b_name.unwrap()).reverse()
-                            } else {
-                                a_name.unwrap().cmp(&b_name.unwrap())
+                            match (|| {
+                                Ok::<_, anyhow::Error>((a_name?, b_name?))
+                            })() {
+                                Err(_) => Ordering::Equal,
+                                Ok((a, b)) => {
+                                    let ordering = a.cmp(&b);
+                                    if reversed {
+                                        ordering.reverse()
+                                    } else {
+                                        ordering
+                                    }
+                                }
                             }
                         });
 
@@ -689,7 +696,9 @@ impl Systray {
                 }
             }
             protocol::Event::ReparentNotify(event) => {
-                if event.parent != tray_wid {
+                if event.parent == tray_wid {
+                    self.resize(tray_wid, None)?;
+                } else {
                     let mut removed = None;
                     self.icons.retain(|&w| {
                         if w.window == event.window {
@@ -700,8 +709,6 @@ impl Systray {
                         }
                     });
                     self.resize(tray_wid, removed)?;
-                } else {
-                    self.resize(tray_wid, None)?;
                 }
             }
             protocol::Event::DestroyNotify(event) => {

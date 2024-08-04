@@ -177,21 +177,9 @@ impl Mpd {
                 }
                 let at_end = self.scroll_idx
                     > main.graphemes(true).count() - self.max_width;
-                let replacement_text = match scrolling {
-                    false => {
-                        glib::markup_escape_text(main.as_str()).to_string()
-                    }
-                    true => match at_end {
-                        false => glib::markup_escape_text(
-                            main.as_str()
-                                .graphemes(true)
-                                .skip(self.scroll_idx)
-                                .take(self.max_width)
-                                .collect::<String>()
-                                .as_str(),
-                        )
-                        .to_string(),
-                        true => format!(
+                let replacement_text = if scrolling {
+                    if at_end {
+                        format!(
                             "{}{}",
                             glib::markup_escape_text(
                                 main.as_str()
@@ -213,8 +201,20 @@ impl Mpd {
                                     .as_str()
                             )
                             .as_str(),
-                        ),
-                    },
+                        )
+                    } else {
+                        glib::markup_escape_text(
+                            main.as_str()
+                                .graphemes(true)
+                                .skip(self.scroll_idx)
+                                .take(self.max_width)
+                                .collect::<String>()
+                                .as_str(),
+                        )
+                        .to_string()
+                    }
+                } else {
+                    glib::markup_escape_text(main.as_str()).to_string()
                 };
                 layout.set_markup(
                     text.replace("%main%", replacement_text.as_str()).as_str(),
@@ -334,7 +334,10 @@ impl Mpd {
                     |s| {
                         s.map_or_else(
                             || String::from("Unknown"),
-                            |s| s.title.unwrap_or(String::from("Unknown")),
+                            |s| {
+                                s.title
+                                    .unwrap_or_else(|| String::from("Unknown"))
+                            },
                         )
                     },
                 ),
@@ -345,26 +348,29 @@ impl Mpd {
                     |s| {
                         s.map_or_else(
                             || String::from("Unknown"),
-                            |s| s.artist.unwrap_or(String::from("Unknown")),
+                            |s| {
+                                s.artist
+                                    .unwrap_or_else(|| String::from("Unknown"))
+                            },
                         )
                     },
                 ),
             ),
-            "%next%" => Some(self.formats.next.to_owned()),
-            "%prev%" => Some(self.formats.prev.to_owned()),
-            "%play%" => Some(self.formats.play.to_owned()),
-            "%pause%" => Some(self.formats.pause.to_owned()),
+            "%next%" => Some(self.formats.next.clone()),
+            "%prev%" => Some(self.formats.prev.clone()),
+            "%play%" => Some(self.formats.play.clone()),
+            "%pause%" => Some(self.formats.pause.clone()),
             "%toggle%" => Some(match status.state {
-                State::Play => self.formats.toggle_playing.to_owned(),
-                State::Pause => self.formats.toggle_paused.to_owned(),
-                State::Stop => self.formats.toggle_stopped.to_owned(),
+                State::Play => self.formats.toggle_playing.clone(),
+                State::Pause => self.formats.toggle_paused.clone(),
+                State::Stop => self.formats.toggle_stopped.clone(),
             }),
             "%main%" => Some(content.to_owned()),
-            "%shuffle%" => Some(self.formats.shuffle.to_owned()),
-            "%repeat%" => Some(self.formats.repeat.to_owned()),
-            "%random%" => Some(self.formats.random.to_owned()),
-            "%single%" => Some(self.formats.single.to_owned()),
-            "%consume%" => Some(self.formats.consume.to_owned()),
+            "%shuffle%" => Some(self.formats.shuffle.clone()),
+            "%repeat%" => Some(self.formats.repeat.clone()),
+            "%random%" => Some(self.formats.random.clone()),
+            "%single%" => Some(self.formats.single.clone()),
+            "%consume%" => Some(self.formats.consume.clone()),
             _ => None,
         }
     }
@@ -392,7 +398,7 @@ impl Mpd {
         offset: &mut isize,
     ) -> bool {
         if let Some(str_to_push) = self.format_from_content(content, status) {
-            let name = content.replace("%", "");
+            let name = content.replace('%', "");
             dst.push_str(str_to_push.as_str());
             // main is special
             let length = if content == "%main%" {
@@ -412,13 +418,12 @@ impl Mpd {
     }
 
     fn process_event(
-        event: Event,
+        event: &Event,
         conn: Arc<Mutex<Client>>,
         last_layout: Rc<Mutex<Option<(Layout, String)>>>,
         index_cache: Arc<Mutex<Option<IndexCache>>>,
         send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
-        let ev = event.clone();
         let result = match event {
             Event::Action(ref value) => match value.as_str() {
                 "next" => conn.lock().unwrap().next(),
@@ -480,7 +485,7 @@ impl Mpd {
                                     })
                                     .map(|index| {
                                         Self::process_event(
-                                            Event::Action(index.name.clone()),
+                                            &Event::Action(index.name.clone()),
                                             conn,
                                             last_layout,
                                             index_cache,
@@ -498,7 +503,7 @@ impl Mpd {
         .map_or_else(
             |e| {
                 EventResponse::Err(format!(
-                    "Event {ev:?} produced an error: {e}",
+                    "Event {event:?} produced an error: {e}",
                 ))
             },
             |_| EventResponse::Ok,
@@ -781,7 +786,7 @@ impl PanelConfig for Mpd {
             EventType::Action,
             Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
                 Self::process_event(
-                    s,
+                    &s,
                     conn.clone(),
                     last_layout.clone(),
                     index_cache.clone(),

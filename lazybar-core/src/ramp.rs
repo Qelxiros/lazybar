@@ -14,6 +14,7 @@ impl Ramp {
     ///
     /// When [`Ramp::choose`] is called on an empty ramp, it will always return
     /// an empty string.
+    #[must_use]
     pub const fn empty() -> Self {
         Self { icons: Vec::new() }
     }
@@ -25,7 +26,7 @@ impl Ramp {
         f64: From<T>,
     {
         // prevent division by zero
-        if self.icons.len() == 0 {
+        if self.icons.is_empty() {
             return String::new();
         }
         let min = f64::from(min);

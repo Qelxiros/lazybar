@@ -442,10 +442,10 @@ pub fn get_window_name(
             0,
             64,
         )
-        .and_then(|c| {
-            Ok(c.reply().and_then(|r| {
-                Ok(String::from_utf8_lossy(r.value.as_slice()).to_string())
-            }))
+        .map(|c| {
+            c.reply().map(|r| {
+                String::from_utf8_lossy(r.value.as_slice()).to_string()
+            })
         });
 
     if ewmh_name.is_ok() {

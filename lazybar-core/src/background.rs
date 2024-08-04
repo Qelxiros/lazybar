@@ -82,9 +82,7 @@ impl Bg {
             bgs_table.get(name.as_ref())?.clone().into_table().ok()?;
         remove_string_from_config("style", &mut bg_table).and_then(|style| {
             match style.as_str() {
-                which @ "bubble"
-                | which @ "bubble_left"
-                | which @ "bubble_right" => {
+                which @ ("bubble" | "bubble_left" | "bubble_right") => {
                     let radius =
                         remove_float_from_config("radius", &mut bg_table)
                             .unwrap_or_default();
@@ -248,6 +246,7 @@ impl Bg {
 
     /// Gets the offset in the x direction from where the background was drawn
     /// to where the text should start.
+    #[must_use]
     pub fn get_offset(&self, text_height: f64, max_height: f64) -> f64 {
         match self {
             Self::None => 0.0,
@@ -274,6 +273,7 @@ impl Bg {
     }
 
     /// Adjusts the dimensions of a panel to account for the background.
+    #[must_use]
     pub fn adjust_dims(&self, dims: (i32, i32), max_height: i32) -> (i32, i32) {
         match self {
             Self::None => dims,

@@ -25,6 +25,7 @@ impl Attrs {
     ///
     /// This creates the same [`Attrs`] as [`Attrs::default`], but this is a
     /// const function.
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             font: None,

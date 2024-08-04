@@ -150,8 +150,11 @@ impl Clock {
                 let old_precision = *precision;
                 let new_precision = precisions[new_idx];
                 *precision = new_precision;
+                drop(precision);
                 if new_precision < old_precision {
-                    waker.lock().unwrap().as_ref().map(|w| w.wake_by_ref());
+                    if let Some(w) = waker.lock().unwrap().as_ref() {
+                        w.wake_by_ref();
+                    }
                 }
                 drop(idx);
                 send.send(EventResponse::Ok)?;
@@ -220,11 +223,10 @@ impl PanelConfig for Clock {
             .map(|v| {
                 v.into_iter()
                     .map(|p| {
-                        match p.into_string().ok().and_then(|s| s.parse().ok())
-                        {
-                            Some(p) => p,
-                            None => Precision::Seconds,
-                        }
+                        p.into_string()
+                            .ok()
+                            .and_then(|s| s.parse().ok())
+                            .map_or(Precision::Seconds, |p| p)
                     })
                     .collect::<Vec<_>>()
             })
@@ -236,21 +238,16 @@ impl PanelConfig for Clock {
             remove_string_from_config("precision", table)
                 .and_then(|s| s.parse().ok())
         {
-            builder
-                .precisions(vec![precision; formats_len].try_into().unwrap());
+            builder.precisions(vec![precision; formats_len]);
         }
 
         if let Some(attrs) = remove_array_from_config("attrs", table).map(|v| {
             v.into_iter()
                 .map(|a| {
-                    match a
-                        .into_string()
+                    a.into_string()
                         .ok()
                         .and_then(|s| Attrs::parse(s).ok())
-                    {
-                        Some(a) => a,
-                        None => Attrs::default(),
-                    }
+                        .unwrap_or_default()
                 })
                 .collect::<Vec<_>>()
         }) {

@@ -16,6 +16,7 @@ impl Highlight {
     ///
     /// This creates the same [`Highlight`] as [`Highlight::default`], but this
     /// is a const function.
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             height: 0.0,
