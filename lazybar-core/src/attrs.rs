@@ -1,6 +1,4 @@
 use anyhow::{Context, Result};
-#[cfg(doc)]
-use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
 use pango::FontDescription;
@@ -23,8 +21,20 @@ pub struct Attrs {
 }
 
 impl Attrs {
+    /// Creates an empty instance (all fields set to [`None`]).
+    ///
+    /// This creates the same [`Attrs`] as [`Attrs::default`], but this is a
+    /// const function.
+    pub const fn empty() -> Self {
+        Self {
+            font: None,
+            fg: None,
+            bg: None,
+        }
+    }
+
     /// Parses an instance of this type from a subset of the global
-    /// [`Config`].
+    /// [`Config`][config::Config].
     ///
     /// This function first looks for a top-level table called `attrs` and then
     /// a subtable of the given name. These options are contained within the
@@ -72,11 +82,10 @@ impl Attrs {
     }
 
     /// Parses an instance of this type from a subset of the global
-    /// [`Config`].
-    /// enforcing default colors. This ensures that the foreground and
-    /// background colors always exist. No default font is set because
-    /// [pango] will choose a reasonable font from those that exist on the host
-    /// system.
+    /// [`Config`][config::Config], enforcing default colors. This ensures that
+    /// the foreground and background colors always exist. No default font
+    /// is set because [pango] will choose a reasonable font from those that
+    /// exist on the host system.
     pub fn parse_global(name: impl AsRef<str>) -> Self {
         Self::parse(name).unwrap_or_default()
     }

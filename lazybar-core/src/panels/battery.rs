@@ -10,12 +10,12 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
 
 use crate::{
+    array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
-    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    PanelStream, Ramp,
 };
 
 /// Shows the current battery level.
@@ -31,7 +31,9 @@ pub struct Battery {
     adapter: String,
     #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
-    formats: BatteryFormats,
+    formats: BatteryFormats<String>,
+    attrs: Attrs,
+    ramp: Ramp,
     common: PanelCommon,
 }
 
@@ -79,7 +81,7 @@ impl Battery {
         }
         .replace(
             "%ramp%",
-            self.common.ramps[0]
+            self.ramp
                 .choose(capacity.trim().parse::<u32>()?, 0, 100)
                 .as_str(),
         );
@@ -87,7 +89,7 @@ impl Battery {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -100,46 +102,40 @@ impl PanelConfig for Battery {
     /// Parses an instance of the panel from the global [`Config`]
     ///
     /// Configuration options:
-    ///
     /// - `battery`: specify which battery to monitor
     ///   - type: String
     ///   - default: "BAT0"
-    ///
     /// - `adapter`: specify which adapter to monitor
     ///   - default: "AC"
     ///   - currently unused
-    ///
     /// - `charging_format`: format string when the battery is charging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "CHG: %percentage%%"
-    ///
     /// - `discharging_format`: format string when the battery is discharging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "DSCHG: %percentage%%"
-    ///
     /// - `not_charging_format`: format string when the battery is not charging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "NCHG: %percentage%%"
-    ///
     /// - `full_format`: format string when the battery is full
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "FULL: %percentage%%"
-    ///
     /// - `unknown_format`: format string when the battery is unknown
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "%percentage%%"
-    ///
     /// - `interval`: how often (in seconds) to poll for new values
     ///   - type: u64
     ///   - default: 10
-    ///
-    /// - See [`PanelCommon::parse`]. One ramp is supported corresponding to the
-    ///   battery level.
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - `ramp`: A string specifying the ramp to show battery level. See
+    ///   [`Ramp::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -157,7 +153,7 @@ impl PanelConfig for Battery {
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
         }
-        let (common, formats) = PanelCommon::parse(
+        let formats = PanelCommon::parse_formats(
             table,
             &[
                 "_charging",
@@ -173,11 +169,12 @@ impl PanelConfig for Battery {
                 "FULL: %percentage%%",
                 "%percentage%%",
             ],
-            &[""],
-            &[""],
-        )?;
+        );
+        let common = PanelCommon::parse_common(table)?;
 
         builder.formats(BatteryFormats::new(formats));
+        builder.attrs(PanelCommon::parse_attr(table, ""));
+        builder.ramp(PanelCommon::parse_ramp(table, ""));
 
         builder.common(common);
 
@@ -195,9 +192,7 @@ impl PanelConfig for Battery {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let mut map = StreamMap::<_, Pin<Box<dyn Stream<Item = ()>>>>::new();
 
@@ -214,7 +209,7 @@ impl PanelConfig for Battery {
     }
 }
 
-format_struct!(
+array_to_struct!(
     BatteryFormats,
     charging,
     discharging,

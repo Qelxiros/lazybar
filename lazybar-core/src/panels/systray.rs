@@ -222,7 +222,7 @@ impl PanelConfig for Systray {
     ///   convert the strings to lowercase first.
     /// - `sort_reverse`: If this is true, the sorting method above will be
     ///   reversed.
-    /// See [`PanelCommon::parse`]. This is used only for dependence.
+    /// See [`PanelCommon::parse_common`]. This is used only for dependence.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -267,7 +267,7 @@ impl PanelConfig for Systray {
             builder.icon_sort = builder.icon_sort.map(|s| s.reverse());
         }
 
-        let (common, _formats) = PanelCommon::parse(table, &[], &[], &[], &[])?;
+        let common = PanelCommon::parse_common(table)?;
 
         builder.common(common);
 

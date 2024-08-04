@@ -19,15 +19,15 @@ use tokio::time::interval;
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 use crate::{
+    array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
-    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream,
 };
 
-format_struct!(NetworkFormats, connected, disconnected);
+array_to_struct!(NetworkFormats, connected, disconnected);
 
 /// Displays information about the current network connection on a given
 /// interface.
@@ -40,7 +40,8 @@ pub struct Network {
     if_name: String,
     #[builder(default = r#"Duration::from_secs(10)"#)]
     duration: Duration,
-    formats: NetworkFormats,
+    formats: NetworkFormats<String>,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -76,7 +77,7 @@ impl Network {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -92,22 +93,20 @@ impl PanelConfig for Network {
     ///   `ip link`.
     ///   - type: String
     ///   - default: "wlan0"
-    ///
+    /// - `interval`: the amount of time in seconds to wait between polls
+    ///   - type: u64
+    ///   - default: 10
     /// - `format_connected`: the format string when there is a connection
     ///   present on the interface
     ///   - type: String
     ///   - default: "%ifname% %essid% %local_ip%"
-    ///
     /// - `format_disconnected`: the format string when there is no connection
     ///   present on the interface
     ///   - type: String
     ///   - default: "%ifname% disconnected"
-    ///
-    /// - `interval`: the amount of time in seconds to wait between polls
-    ///   - type: u64
-    ///   - default: 10
-    ///
-    /// - See [`PanelCommon::parse`].
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -123,16 +122,17 @@ impl PanelConfig for Network {
             builder.duration(Duration::from_secs(duration));
         }
 
-        let (common, formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let formats = PanelCommon::parse_formats(
             table,
             &["_connected", "_disconnected"],
             &["%ifname% %essid% %local_ip%", "%ifname% disconnected"],
-            &[""],
-            &[],
-        )?;
+        );
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
         builder.formats(NetworkFormats::new(formats));
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -148,9 +148,7 @@ impl PanelConfig for Network {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
         let stream = IntervalStream::new(interval(self.duration))
             .map(move |_| self.draw(&cr, height));
 

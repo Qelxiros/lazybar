@@ -36,6 +36,7 @@ pub struct Memory {
     path: String,
     formatter: AhoCorasick,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -212,7 +213,7 @@ impl Memory {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -224,11 +225,6 @@ impl Memory {
 impl PanelConfig for Memory {
     /// Configuration options:
     ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `RAM: %percentage_used%`
-    ///   - formatting options: `%{gb,mb}_[swap_]{total,used,free}%,
-    ///     %percentage_[swap_]{used,free}%`
     /// - `interval`: how long to wait in seconds between each check
     ///   - type: u64
     ///   - default: 10
@@ -237,7 +233,14 @@ impl PanelConfig for Memory {
     ///   - default: `/proc/meminfo` - If you're considering changing this, you
     ///     might want to use a different panel like
     ///     [`Inotify`][crate::panels::Inotify]
-    /// - See [`PanelCommon::parse`].
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `RAM: %percentage_used%`
+    ///   - formatting options: `%{gb,mb}_[swap_]{total,used,free}%,
+    ///     %percentage_[swap_]{used,free}%`
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -253,17 +256,14 @@ impl PanelConfig for Memory {
             builder.path(path);
         }
 
-        let (common, formats) = PanelCommon::parse(
-            table,
-            &[""],
-            &["RAM: %percentage_used%%"],
-            &[""],
-            &[""],
-        )?;
+        let common = PanelCommon::parse_common(table)?;
+        let format =
+            PanelCommon::parse_format(table, "", "RAM: %percentage_used%");
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
 
         builder.formatter(AhoCorasick::new([
             "%gb_total%",
@@ -299,9 +299,7 @@ impl PanelConfig for Memory {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let stream = IntervalStream::new(interval(self.interval))
             .map(move |_| self.draw(&cr, height));

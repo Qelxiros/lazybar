@@ -20,15 +20,15 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
+    array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
-    format_struct,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    PanelStream, Ramp,
 };
 
-format_struct!(PingFormats, connected, disconnected);
+array_to_struct!(PingFormats, connected, disconnected);
 
 /// Displays the ping to a given address
 ///
@@ -47,7 +47,9 @@ pub struct Ping {
     pings: usize,
     #[builder(default, setter(strip_option))]
     max_ping: Option<u32>,
-    formats: PingFormats,
+    formats: PingFormats<String>,
+    attrs: Attrs,
+    ramp: Ramp,
     common: PanelCommon,
 }
 
@@ -66,7 +68,7 @@ impl Ping {
                     .replace("%ping%", ping.to_string().as_str())
                     .replace(
                         "%ramp%",
-                        self.common.ramps[0]
+                        self.ramp
                             .choose::<u32>(
                                 ping as u32,
                                 0,
@@ -80,7 +82,7 @@ impl Ping {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -114,7 +116,11 @@ impl PanelConfig for Ping {
     ///   `ramp` is unset. Clamped to [0, 2000].
     ///   - type: u64
     ///   - default: 2000
-    /// - See [`PanelCommon::parse`].
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - `ramp`: A string specifying the ramp to show ping. See [`Ramp::parse`]
+    ///   for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -141,17 +147,19 @@ impl PanelConfig for Ping {
             builder.max_ping(max_ping as u32);
         }
 
-        let (common, formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let formats = PanelCommon::parse_formats(
             table,
             &["_connected", "_disconnected"],
             &["%ping%ms", "disconnected"],
-            &[""],
-            &[""],
-        )?;
+        );
+        let attrs = PanelCommon::parse_attr(table, "");
+        let ramp = PanelCommon::parse_ramp(table, "");
 
         builder.common(common);
-
         builder.formats(PingFormats::new(formats));
+        builder.attrs(attrs);
+        builder.ramp(ramp);
 
         Ok(builder.build()?)
     }
@@ -167,9 +175,7 @@ impl PanelConfig for Ping {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let (pinger, recv) = Pinger::new(None, None).map_err(|s| anyhow!(s))?;
 

@@ -27,6 +27,8 @@
 //!   by panels.
 //! - `bgs`: each subtable defines a background configuration (shape, color)
 //!   that can be referenced by attrs.
+//! - `highlights`: each subtable defines a highlight, or partial background,
+//!   that can be reference by panels.
 //! - `images`: each value is a path to an image that can be rendered on a panel
 //!   by referencing its key.
 //! - `consts`: each value is a string that can be substituted into any other

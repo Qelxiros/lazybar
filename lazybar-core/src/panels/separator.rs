@@ -19,6 +19,7 @@ use crate::{
 pub struct Separator {
     name: &'static str,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -29,6 +30,9 @@ impl PanelConfig for Separator {
     /// - `format`: the text to display
     ///   - type: String
     ///   - default: " <span foreground='#666'>|</span> "
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -38,16 +42,17 @@ impl PanelConfig for Separator {
 
         builder.name(name);
 
-        let (common, formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(
             table,
-            &[""],
-            &[" <span foreground='#666'>|</span> "],
-            &[""],
-            &[],
-        )?;
+            "",
+            " <span foreground='#666'>|</span> ",
+        );
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -63,15 +68,13 @@ impl PanelConfig for Separator {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         Ok((
             Box::pin(tokio_stream::once(draw_common(
                 &cr,
                 self.format,
-                &self.common.attrs[0],
+                &self.attrs,
                 self.common.dependence,
                 self.common.images.clone(),
                 height,

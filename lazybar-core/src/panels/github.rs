@@ -20,6 +20,7 @@ use tokio::{
 use tokio_stream::Stream;
 
 use crate::{
+    attrs::Attrs,
     bar::PanelDrawInfo,
     common::{draw_common, PanelCommon},
     remove_array_from_config, remove_bool_from_config,
@@ -47,6 +48,7 @@ pub struct Github {
     #[builder(default = "true")]
     show_zero: bool,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -70,7 +72,7 @@ impl Github {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -98,8 +100,11 @@ impl PanelConfig for Github {
     ///   not in `filter` will be counted.
     /// - `show_zero`: Whether or not the panel is shown when you have zero
     ///   notifications.
-    ///
-    /// See [`PanelCommon::parse`].
+    /// - `format`: The formatting option. The only formatting option is
+    ///   `%count%`.
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut std::collections::HashMap<String, config::Value>,
@@ -137,11 +142,13 @@ impl PanelConfig for Github {
             builder.show_zero(show_zero);
         }
 
-        let (common, formats) =
-            PanelCommon::parse(table, &[""], &["%count%"], &[""], &[])?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "%count%");
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -164,9 +171,7 @@ impl PanelConfig for Github {
             >,
         >,
     )> {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let stream = GithubStream::new(
             self.token.as_str(),

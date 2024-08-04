@@ -54,16 +54,34 @@ lazy_static! {
     pub static ref ATTRS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
     /// The `ramps` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
     pub static ref RAMPS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
     /// The `bgs` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
     pub static ref BGS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
     /// The `consts` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
     pub static ref CONSTS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
     /// The `images` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
     pub static ref IMAGES: OnceCell<HashMap<String, Value>> =
+        OnceCell::new();
+    /// The `highlights` table from the global [`Config`].
+    ///
+    /// This cell is guaranteed to be initialized during the execution of all
+    /// [`PanelConfig::parse`] functions.
+    pub static ref HIGHLIGHTS: OnceCell<HashMap<String, Value>> =
         OnceCell::new();
 }
 
@@ -121,6 +139,10 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
 
     IMAGES
         .set(config.get_table("images").unwrap_or_default())
+        .unwrap();
+
+    HIGHLIGHTS
+        .set(config.get_table("highlights").unwrap_or_default())
         .unwrap();
 
     let mut bars_table = config

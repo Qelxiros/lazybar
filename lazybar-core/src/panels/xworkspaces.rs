@@ -32,6 +32,7 @@ use x11rb::{
 };
 
 use crate::{
+    array_to_struct,
     background::Bg,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
     common::PanelCommon,
@@ -58,8 +59,8 @@ pub struct XWorkspaces {
     name: &'static str,
     conn: Arc<RustConnection>,
     screen: usize,
-    #[builder(setter(strip_option))]
-    highlight: Option<Highlight>,
+    attrs: XWorkspacesConfig<Attrs>,
+    highlights: XWorkspacesConfig<Highlight>,
     common: PanelCommon,
 }
 
@@ -96,9 +97,9 @@ impl XWorkspaces {
             desktop_atom,
         )?;
 
-        let active = self.common.attrs[0].clone();
-        let nonempty = self.common.attrs[1].clone();
-        let inactive = self.common.attrs[2].clone();
+        let active = self.attrs.active.clone();
+        let nonempty = self.attrs.nonempty.clone();
+        let inactive = self.attrs.inactive.clone();
         let layouts: Vec<_> = workspaces
             .into_iter()
             .enumerate()
@@ -125,13 +126,9 @@ impl XWorkspaces {
             let size = l.1.pixel_size();
             width_cache.push(
                 match l.0 {
-                    WorkspaceState::Active => &self.common.attrs.as_slice()[0],
-                    WorkspaceState::Nonempty => {
-                        &self.common.attrs.as_slice()[1]
-                    }
-                    WorkspaceState::Inactive => {
-                        &self.common.attrs.as_slice()[2]
-                    }
+                    WorkspaceState::Active => &self.attrs.active,
+                    WorkspaceState::Nonempty => &self.attrs.nonempty,
+                    WorkspaceState::Inactive => &self.attrs.inactive,
                 }
                 .bg
                 .clone()
@@ -142,10 +139,12 @@ impl XWorkspaces {
         let width = width_cache.iter().sum::<i32>();
         drop(width_cache);
 
-        let active = self.common.attrs[0].clone();
-        let nonempty = self.common.attrs[1].clone();
-        let inactive = self.common.attrs[2].clone();
-        let highlight = self.highlight.clone();
+        let active = self.attrs.active.clone();
+        let nonempty = self.attrs.nonempty.clone();
+        let inactive = self.attrs.inactive.clone();
+        let active_highlight = self.highlights.active.clone();
+        let nonempty_highlight = self.highlights.nonempty.clone();
+        let inactive_highlight = self.highlights.inactive.clone();
         let images = self.common.images.clone();
 
         Ok(PanelDrawInfo::new(
@@ -159,52 +158,51 @@ impl XWorkspaces {
                 for (i, layout) in &layouts {
                     let size = layout.pixel_size();
 
-                    let offset = match i {
-                        WorkspaceState::Active => {
+                    let (offset, highlight) = match i {
+                        WorkspaceState::Active => (
                             active.bg.as_ref().unwrap_or(&Bg::None).draw(
                                 cr,
                                 size.0 as f64,
                                 size.1 as f64,
                                 height as f64,
-                            )?
-                        }
-                        WorkspaceState::Nonempty => {
+                            )?,
+                            active_highlight.clone(),
+                        ),
+                        WorkspaceState::Nonempty => (
                             nonempty.bg.as_ref().unwrap_or(&Bg::None).draw(
                                 cr,
                                 size.0 as f64,
                                 size.1 as f64,
                                 height as f64,
-                            )?
-                        }
-                        WorkspaceState::Inactive => {
+                            )?,
+                            nonempty_highlight.clone(),
+                        ),
+                        WorkspaceState::Inactive => (
                             inactive.bg.as_ref().unwrap_or(&Bg::None).draw(
                                 cr,
                                 size.0 as f64,
                                 size.1 as f64,
                                 height as f64,
-                            )?
-                        }
+                            )?,
+                            inactive_highlight.clone(),
+                        ),
                     };
 
                     cr.save()?;
 
-                    if *i == WorkspaceState::Active {
-                        if let Some(highlight) = &highlight {
-                            cr.rectangle(
-                                0.0,
-                                f64::from(height) - highlight.height,
-                                2.0f64.mul_add(offset.0, f64::from(size.0)),
-                                highlight.height,
-                            );
-                            cr.set_source_rgba(
-                                highlight.color.r,
-                                highlight.color.g,
-                                highlight.color.b,
-                                highlight.color.a,
-                            );
-                            cr.fill()?;
-                        }
-                    }
+                    cr.rectangle(
+                        0.0,
+                        f64::from(height) - highlight.height,
+                        2.0f64.mul_add(offset.0, f64::from(size.0)),
+                        highlight.height,
+                    );
+                    cr.set_source_rgba(
+                        highlight.color.r,
+                        highlight.color.g,
+                        highlight.color.b,
+                        highlight.color.a,
+                    );
+                    cr.fill()?;
 
                     cr.translate(offset.0, f64::from(height - size.1) / 2.0);
 
@@ -324,13 +322,26 @@ impl PanelConfig for XWorkspaces {
     ///   - type: String
     ///   - default: None (This will tell X to choose the default screen, which
     ///     is probably what you want.)
-    ///
-    /// - `highlight`: The highlight that will appear on the active workspaces.
-    ///   See [`Highlight::parse`] for parsing options.
-    ///
-    /// - See [`PanelCommon::parse`]. No format strings are used for this panel.
-    ///   Three instances of [`Attrs`] are parsed using the prefixes `active_`,
-    ///   `nonempty_`, and `inactive_`
+    /// - `active_highlight`: The name of the highlight that will appear on the
+    ///   active workspaces. See [`Highlight::parse`] for parsing options.
+    /// - `nonempty_highlight`: The name of the highlight that will appear on
+    ///   the nonempty workspaces. See [`Highlight::parse`] for parsing options.
+    /// - `inactive_highlight`: The name of the highlight that will appear on
+    ///   the inactive workspaces. See [`Highlight::parse`] for parsing options.
+    /// - `attrs_active`: A string specifying the attrs for the active
+    ///   workspace. See [`Attrs::parse`] for details.
+    /// - `attrs_nonempty`: A string specifying the attrs for the nonempty
+    ///   workspaces. See [`Attrs::parse`] for details.
+    /// - `attrs_inactive`: A string specifying the attrs for the inactive
+    ///   workspaces. See [`Attrs::parse`] for details.
+    /// - `highlight_active`: The highlight to be used for the active workspace.
+    ///   See [`Highlight::parse`] for more details.
+    /// - `highlight_nonempty`: The highlight to be used for the nonempty
+    ///   workspaces. See [`Highlight::parse`] for more details.
+    /// - `highlight_inactive`: The highlight to be used for the inactive
+    ///   workspaces. See [`Highlight::parse`] for more details.
+    /// - See [`PanelCommon::parse_common`]. The supported events are each the
+    ///   name of a current workspace.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -346,17 +357,19 @@ impl PanelConfig for XWorkspaces {
             log::error!("Failed to connect to X server");
         }
 
-        let (common, _formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let attrs = PanelCommon::parse_attrs(
             table,
-            &[],
-            &[],
-            &["active_", "nonempty_", "inactive_"],
-            &[],
-        )?;
+            &["_active", "_nonempty", "_inactive"],
+        );
+        let highlights = PanelCommon::parse_highlights(
+            table,
+            &["_active", "_nonempty", "_inactive"],
+        );
 
         builder.common(common);
-
-        builder.highlight(Highlight::parse(table));
+        builder.attrs(XWorkspacesConfig::new(attrs));
+        builder.highlights(XWorkspacesConfig::new(highlights));
 
         Ok(builder.build()?)
     }
@@ -397,9 +410,10 @@ impl PanelConfig for XWorkspaces {
                 .event_mask(EventMask::PROPERTY_CHANGE),
         )?;
 
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        // TODO: clean up
+        self.attrs.active.apply_to(&global_attrs);
+        self.attrs.nonempty.apply_to(&global_attrs);
+        self.attrs.inactive.apply_to(&global_attrs);
 
         let mut map =
             StreamMap::<usize, Pin<Box<dyn Stream<Item = Result<()>>>>>::new();
@@ -634,3 +648,5 @@ impl Stream for XStream {
         }
     }
 }
+
+array_to_struct!(XWorkspacesConfig, active, nonempty, inactive);

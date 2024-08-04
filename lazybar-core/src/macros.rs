@@ -2,27 +2,27 @@
 ///
 /// The constructor has the following function signature:
 /// ```rust
-/// fn new(value: Vec<String>) -> Self
+/// fn new(value: Vec<T>) -> Self
 /// ```
 /// `value` must have the same number of elements as `args` passed to this
 /// macro, and `new` will panic otherwise.
 #[macro_export]
-macro_rules! format_struct {
+macro_rules! array_to_struct {
     ($name:ident, $($args:ident),+) => {
-        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        struct $name {
+        #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        struct $name<T> {
             $(
-                $args: &'static ::std::primitive::str,
+                $args: T,
             )+
         }
 
-        impl $name {
-            fn new(value: ::std::vec::Vec<::std::string::String>) -> Self {
-                let mut value = ::std::iter::Iterator::map(::std::iter::IntoIterator::into_iter(value), |s| ::std::string::String::leak(s));
+        impl<T> $name<T> {
+            fn new<const N: usize>(value: [T; N]) -> Self {
+                let mut value = value.into_iter();
 
                 Self {
                     $(
-                        $args: ::std::iter::Iterator::next(&mut value).unwrap(),
+                        $args: value.next().unwrap(),
                     )+
                 }
             }

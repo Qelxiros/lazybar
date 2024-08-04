@@ -25,7 +25,7 @@ This is a lightweight, event-driven status bar for EWMH-compliant window manager
 - [x] RAM usage
 - [x] conditional rendering
 - [ ] storage usage?
-- [ ] systray
+- [x] systray
 - [x] clickable panels
 - [x] ipc for messaging (see [lazybar-msg](https://lib.rs/lazybar-msg))
 

@@ -115,11 +115,6 @@ pub fn find_visual(screen: &Screen, depth: u8) -> Option<&Visualtype> {
     None
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss
-)]
 pub fn create_window(
     position: Position,
     height: u16,

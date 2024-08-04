@@ -89,14 +89,15 @@ impl FromStr for Precision {
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Clock {
     name: &'static str,
-    format_idx: Arc<Mutex<(usize, usize)>>,
-    formats: Vec<String>,
-    precisions: Vec<Precision>,
-    common: PanelCommon,
     #[builder(default)]
     precision: Arc<Mutex<Precision>>,
     #[builder(default)]
     waker: Arc<Mutex<Option<Waker>>>,
+    idx: Arc<Mutex<(usize, usize)>>,
+    formats: Vec<String>,
+    precisions: Vec<Precision>,
+    attrs: Vec<Attrs>,
+    common: PanelCommon,
 }
 
 impl Clock {
@@ -109,13 +110,13 @@ impl Clock {
         data?;
         let now = chrono::Local::now();
         let text = now
-            .format(&self.formats[self.format_idx.lock().unwrap().0])
+            .format(&self.formats[self.idx.lock().unwrap().0])
             .to_string();
 
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs[self.idx.lock().unwrap().0],
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -183,8 +184,22 @@ impl Clock {
 impl PanelConfig for Clock {
     /// Configuration options:
     ///
-    /// - See [`PanelCommon::parse_variadic`]. For formats, see
+    /// - `formats`: The format strings to use. See
+    ///   [`PanelCommon::parse_formats_variadic`]. See
     ///   [`chrono::format::strftime`] for clock-specific formatting details.
+    /// - `precisions`: An array of strings specifying the precision required
+    ///   for each format. This must be the same length as the `formats` array.
+    ///   Each precision should be one of `seconds`, `minutes`, `hours`, and
+    ///   `days`. The default for each precision is `seconds`.
+    /// - `precision`: Specify the precision for all formats. Only checked if
+    ///   `precisions` is unset.
+    /// - `attrs`: An array specifying the attrs for each format. See
+    ///   [`Attrs::parse`] for details. This must be the same length as the
+    ///   `formats` array.
+    /// - `attr`: A string specifying the attrs for each format. Only checked if
+    ///   `attrs` is unset.
+    /// - See [`PanelCommon::parse_common`]. The supported events are `cycle`
+    ///   and `cycle_back`.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -193,18 +208,23 @@ impl PanelConfig for Clock {
         let mut builder = ClockBuilder::default();
 
         builder.name(name);
-        let (common, formats) =
-            PanelCommon::parse_variadic(table, &["%Y-%m-%d %T"], &[""], &[])?;
+        let common = PanelCommon::parse_common(table)?;
         builder.common(common);
+        let formats =
+            PanelCommon::parse_formats_variadic(table, &["%Y-%m-%d %T"]);
         let formats_len = formats.len();
-        builder.format_idx(Arc::new(Mutex::new((0, formats_len))));
+        builder.idx(Arc::new(Mutex::new((0, formats_len))));
         builder.formats(formats);
 
         if let Some(precisions) = remove_array_from_config("precisions", table)
             .map(|v| {
                 v.into_iter()
-                    .filter_map(|p| {
-                        p.into_string().ok().and_then(|s| s.parse().ok())
+                    .map(|p| {
+                        match p.into_string().ok().and_then(|s| s.parse().ok())
+                        {
+                            Some(p) => p,
+                            None => Precision::Seconds,
+                        }
                     })
                     .collect::<Vec<_>>()
             })
@@ -216,7 +236,33 @@ impl PanelConfig for Clock {
             remove_string_from_config("precision", table)
                 .and_then(|s| s.parse().ok())
         {
-            builder.precisions(vec![precision; formats_len]);
+            builder
+                .precisions(vec![precision; formats_len].try_into().unwrap());
+        }
+
+        if let Some(attrs) = remove_array_from_config("attrs", table).map(|v| {
+            v.into_iter()
+                .map(|a| {
+                    match a
+                        .into_string()
+                        .ok()
+                        .and_then(|s| Attrs::parse(s).ok())
+                    {
+                        Some(a) => a,
+                        None => Attrs::default(),
+                    }
+                })
+                .collect::<Vec<_>>()
+        }) {
+            if attrs.len() == formats_len {
+                builder.attrs(attrs);
+            }
+        } else if let Some(attr) = remove_string_from_config("attr", table)
+            .and_then(|s| Attrs::parse(s).ok())
+        {
+            builder.attrs(vec![attr; formats_len]);
+        } else {
+            builder.attrs(vec![Attrs::default(); formats_len]);
         }
 
         Ok(builder.build()?)
@@ -233,11 +279,11 @@ impl PanelConfig for Clock {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
+        for attr in &mut self.attrs {
             attr.apply_to(&global_attrs);
         }
 
-        let idx = self.format_idx.clone();
+        let idx = self.idx.clone();
         let actions = self.common.actions.clone();
         let precision = self.precision.clone();
         let precisions = self.precisions.clone();

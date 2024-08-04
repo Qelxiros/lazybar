@@ -10,7 +10,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
-    remove_uint_from_config, Attrs, PanelConfig, PanelStream,
+    remove_uint_from_config, Attrs, PanelConfig, PanelStream, Ramp,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -27,6 +27,8 @@ pub struct Temp {
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
     format: &'static str,
+    attrs: Attrs,
+    ramp: Ramp,
     common: PanelCommon,
 }
 
@@ -48,15 +50,12 @@ impl Temp {
         let text = self
             .format
             .replace("%temp%", temp.to_string().as_str())
-            .replace(
-                "%ramp%",
-                self.common.ramps[0].choose(temp, 0, 200).as_str(),
-            );
+            .replace("%ramp%", self.ramp.choose(temp, 0, 200).as_str());
 
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -78,7 +77,11 @@ impl PanelConfig for Temp {
     /// - `zone`: the thermal zone to check
     ///   - type: u64
     ///   - default: 0
-    /// - See [`PanelCommon::parse`].
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - `ramp`: A string specifying the ramp to show internal temperature. See
+    ///   [`Ramp::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut std::collections::HashMap<String, config::Value>,
@@ -94,11 +97,15 @@ impl PanelConfig for Temp {
             builder.zone(zone as usize);
         }
 
-        let (common, formats) =
-            PanelCommon::parse(table, &[""], &["TEMP: %temp%"], &[""], &[""])?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "TEMP: %temp%");
+        let attrs = PanelCommon::parse_attr(table, "");
+        let ramp = PanelCommon::parse_ramp(table, "");
 
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
+        builder.ramp(ramp);
 
         Ok(builder.build()?)
     }
@@ -114,9 +121,7 @@ impl PanelConfig for Temp {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let stream = IntervalStream::new(interval(self.interval))
             .map(move |_| self.draw(&cr, height));

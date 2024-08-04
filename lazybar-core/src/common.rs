@@ -1,8 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, hash::BuildHasher, rc::Rc};
 
 use anyhow::Result;
-#[cfg(doc)]
-use config::Config;
 use config::Value;
 use derive_builder::Builder;
 use pangocairo::functions::show_layout;
@@ -13,7 +11,7 @@ use crate::{
     bar::{Dependence, PanelDrawInfo},
     image::Image,
     remove_array_from_config, remove_bool_from_config,
-    remove_string_from_config, Ramp,
+    remove_string_from_config, Highlight, Ramp,
 };
 
 /// The end of a typical draw function.
@@ -80,12 +78,8 @@ pub fn draw_common(
 pub struct PanelCommon {
     /// Whether the panel depends on its neighbors
     pub dependence: Dependence,
-    /// The instances of [`Attrs`] used by the panel
-    pub attrs: Vec<Attrs>,
     /// The events that should be run on mouse events
     pub actions: Actions,
-    /// The ramps that are available for use in format strings
-    pub ramps: Vec<Ramp>,
     /// The images that will be displayed on the bar
     pub images: Vec<Image>,
     /// Whether the panel should be visible on startup
@@ -93,37 +87,187 @@ pub struct PanelCommon {
 }
 
 impl PanelCommon {
+    /// Parses a single format from a subset of the global config.
+    pub fn parse_format<S: BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        suffix: &'static str,
+        default: &'static str,
+    ) -> String {
+        let format = remove_string_from_config(
+            format!("format{suffix}").as_str(),
+            table,
+        )
+        .unwrap_or_else(|| (*default).to_string());
+        log::debug!("got format: {:?}", format);
+        format
+    }
+
+    /// Parses a fixed-size group of formats from a subset of the global config.
+    pub fn parse_formats<S: BuildHasher, const N: usize>(
+        table: &mut HashMap<String, Value, S>,
+        suffixes: &[&'static str; N],
+        defaults: &[&'static str; N],
+    ) -> [String; N] {
+        let mut formats = [const { String::new() }; N];
+        let mut config = suffixes.iter().zip(defaults);
+        for format in &mut formats {
+            let (suffix, default) = config.next().unwrap();
+            *format = remove_string_from_config(
+                format!("format{suffix}").as_str(),
+                table,
+            )
+            .unwrap_or_else(|| (*default).to_string());
+        }
+        log::debug!("got formats: {:?}", formats);
+        formats
+    }
+
+    /// Parses a variable-size group of formats from a subset of the global
+    /// config.
+    ///
+    /// The formats should be specified with `formats = ["format1", "format2",
+    /// ...]`
+    pub fn parse_formats_variadic<S: BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        default: &[&'static str],
+    ) -> Vec<String> {
+        let formats = remove_array_from_config("formats", table).map_or_else(
+            || default.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            |arr| {
+                arr.into_iter()
+                    .filter_map(|v| v.into_string().ok())
+                    .collect::<Vec<_>>()
+            },
+        );
+        log::debug!("got formats: {:?}", formats);
+        formats
+    }
+
+    /// Parses a single [`Attrs`] from a subset of the global config.
+    pub fn parse_attr<S: BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        suffix: &'static str,
+    ) -> Attrs {
+        let attr =
+            remove_string_from_config(format!("attrs{suffix}").as_str(), table)
+                .map_or_else(Attrs::default, |name| {
+                    Attrs::parse(name).unwrap_or_default()
+                });
+        log::debug!("got attrs: {:?}", attr);
+        attr
+    }
+
+    /// Parses a fixed-size group of [`Attrs`] from a subset of the global
+    /// config.
+    pub fn parse_attrs<S: BuildHasher, const N: usize>(
+        table: &mut HashMap<String, Value, S>,
+        suffixes: &[&'static str; N],
+    ) -> [Attrs; N] {
+        let mut attrs = [const { Attrs::empty() }; N];
+        let mut config = suffixes.iter();
+        for attr in &mut attrs {
+            let suffix = config.next().unwrap();
+            if let Some(name) = remove_string_from_config(
+                format!("attrs{suffix}").as_str(),
+                table,
+            ) {
+                if let Ok(res) = Attrs::parse(name) {
+                    *attr = res;
+                }
+            }
+        }
+        log::debug!("got attrs: {:?}", attrs);
+        attrs
+    }
+
+    /// Parses a single [`Ramp`] from a subset of the global config.
+    pub fn parse_ramp<S: BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        suffix: &'static str,
+    ) -> Ramp {
+        let ramp =
+            remove_string_from_config(format!("ramp{suffix}").as_str(), table)
+                .and_then(Ramp::parse)
+                .unwrap_or_default();
+        log::debug!("got ramps: {:?}", ramp);
+        ramp
+    }
+
+    /// Parses a fixed-size group of [`Ramp`]s from a subset of the global
+    /// config.
+    pub fn parse_ramps<S: BuildHasher, const N: usize>(
+        table: &mut HashMap<String, Value, S>,
+        suffixes: &[&'static str; N],
+    ) -> [Ramp; N] {
+        let mut ramps = [const { Ramp::empty() }; N];
+        let mut config = suffixes.iter();
+        for ramp in &mut ramps {
+            let suffix = config.next().unwrap();
+            if let Some(name) = remove_string_from_config(
+                format!("ramp{suffix}").as_str(),
+                table,
+            ) {
+                if let Some(res) = Ramp::parse(name) {
+                    *ramp = res;
+                }
+            }
+        }
+        log::debug!("got ramps: {:?}", ramps);
+        ramps
+    }
+
+    /// Parses a single [`Highlight`] from a subset of the global config.
+    pub fn parse_highlight<S: BuildHasher>(
+        table: &mut HashMap<String, Value, S>,
+        suffix: &'static str,
+    ) -> Highlight {
+        let highlight = remove_string_from_config(
+            format!("highlight{suffix}").as_str(),
+            table,
+        )
+        .and_then(Highlight::parse)
+        .unwrap_or_default();
+        log::debug!("got highlights: {:?}", highlight);
+        highlight
+    }
+
+    /// Parses a fixed-size group of [`Highlight`]s from the global config.
+    pub fn parse_highlights<S: BuildHasher, const N: usize>(
+        table: &mut HashMap<String, Value, S>,
+        suffixes: &[&'static str; N],
+    ) -> [Highlight; N] {
+        let mut highlights = [const { Highlight::empty() }; N];
+        let mut config = suffixes.iter();
+        for highlight in &mut highlights {
+            let suffix = config.next().unwrap();
+            if let Some(name) = remove_string_from_config(
+                format!("highlight{suffix}").as_str(),
+                table,
+            ) {
+                if let Some(res) = Highlight::parse(name) {
+                    *highlight = res;
+                }
+            }
+        }
+        log::debug!("got highlights: {:?}", highlights);
+        highlights
+    }
+
     /// Attempts to parse common panel configuration options from a subset of
-    /// the global [`Config`]. The format suffixes and defaults
+    /// the global [`Config`][config::Config]. The format suffixes and defaults
     /// and attrs prefixes are documented by each panel.
     ///
     /// Format strings should be specified as `format{suffix} = "value"`. Where
     /// not noted, panels accept one format string with no suffix.
+    ///
     /// Dependence should be specified as `dependence = "value"`, where value is
     /// a valid variant of [`Dependence`].
-    /// See [`Attrs::parse`], [`Actions::parse`], [`Image::parse`], and
-    /// [`Ramp::parse`] for more parsing details.
-    pub fn parse<S: std::hash::BuildHasher>(
+    ///
+    /// See [`Actions::parse`] and [`Image::parse`] for more parsing details.
+    pub fn parse_common<S: BuildHasher>(
         table: &mut HashMap<String, Value, S>,
-        format_suffixes: &[&'static str],
-        format_defaults: &[&'static str],
-        attrs_prefixes: &[&'static str],
-        ramp_suffixes: &[&'static str],
-    ) -> Result<(Self, Vec<String>)> {
+    ) -> Result<Self> {
         let mut builder = PanelCommonBuilder::default();
-
-        let formats = format_suffixes
-            .iter()
-            .zip(format_defaults.iter())
-            .map(|(suffix, default)| {
-                remove_string_from_config(
-                    format!("format{suffix}").as_str(),
-                    table,
-                )
-                .unwrap_or_else(|| (*default).to_string())
-            })
-            .collect();
-        log::debug!("got formats: {:?}", formats);
 
         builder.dependence(
             match remove_string_from_config("dependence", table)
@@ -138,39 +282,8 @@ impl PanelCommon {
         );
         log::debug!("got dependence: {:?}", builder.dependence);
 
-        builder.attrs(
-            attrs_prefixes
-                .iter()
-                .map(|p| {
-                    remove_string_from_config(
-                        format!("{p}attrs").as_str(),
-                        table,
-                    )
-                    .map_or_else(Attrs::default, |name| {
-                        Attrs::parse(name).unwrap_or_default()
-                    })
-                })
-                .collect(),
-        );
-        log::debug!("got attrs: {:?}", builder.attrs);
-
         builder.actions(Actions::parse(table)?);
         log::debug!("got actions: {:?}", builder.actions);
-
-        builder.ramps(
-            ramp_suffixes
-                .iter()
-                .map(|suffix| {
-                    remove_string_from_config(
-                        format!("ramp{suffix}").as_str(),
-                        table,
-                    )
-                    .and_then(Ramp::parse)
-                    .unwrap_or_default()
-                })
-                .collect(),
-        );
-        log::debug!("got ramps: {:?}", builder.ramps);
 
         builder.images(remove_array_from_config("images", table).map_or_else(
             Vec::new,
@@ -196,102 +309,6 @@ impl PanelCommon {
         builder
             .visible(remove_bool_from_config("visible", table).unwrap_or(true));
 
-        Ok((builder.build()?, formats))
-    }
-
-    /// Attempts to parse common panel configuration options from a subset of
-    /// the global [`Config`]. The format defaults, attrs
-    /// prefixes, and ramp suffixes are documented by each panel.
-    ///
-    /// Format strings should be specified as `formats = ["value", ...]`.
-    /// Dependence should be specified as `dependence = "value"`, where value is
-    /// a valid variant of [`Dependence`].
-    /// See [`Attrs::parse`] for more parsing details.
-    pub fn parse_variadic<S: std::hash::BuildHasher>(
-        table: &mut HashMap<String, Value, S>,
-        format_default: &[&'static str],
-        attrs_prefixes: &[&'static str],
-        ramp_suffixes: &[&'static str],
-    ) -> Result<(Self, Vec<String>)> {
-        let mut builder = PanelCommonBuilder::default();
-
-        let formats = remove_array_from_config("formats", table).map_or_else(
-            || {
-                format_default
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-            },
-            |arr| {
-                arr.into_iter()
-                    .filter_map(|v| v.into_string().ok())
-                    .collect::<Vec<_>>()
-            },
-        );
-        log::debug!("got formats: {:?}", formats);
-
-        builder.dependence(
-            match remove_string_from_config("dependence", table)
-                .map(|s| s.to_lowercase())
-                .as_deref()
-            {
-                Some("left") => Dependence::Left,
-                Some("right") => Dependence::Right,
-                Some("both") => Dependence::Both,
-                _ => Dependence::None,
-            },
-        );
-        log::debug!("got dependence: {:?}", builder.dependence);
-
-        builder.attrs(
-            attrs_prefixes
-                .iter()
-                .map(|p| {
-                    remove_string_from_config(
-                        format!("{p}attrs").as_str(),
-                        table,
-                    )
-                    .map_or_else(Attrs::default, |name| {
-                        Attrs::parse(name).unwrap_or_default()
-                    })
-                })
-                .collect(),
-        );
-        log::debug!("got attrs: {:?}", builder.attrs);
-
-        builder.actions(Actions::parse(table)?);
-        log::debug!("got actions: {:?}", builder.actions);
-
-        builder.ramps(
-            ramp_suffixes
-                .iter()
-                .map(|suffix| {
-                    remove_string_from_config(
-                        format!("ramp{suffix}").as_str(),
-                        table,
-                    )
-                    .and_then(Ramp::parse)
-                    .unwrap_or_default()
-                })
-                .collect(),
-        );
-        log::debug!("got ramps: {:?}", builder.ramps);
-
-        builder.images(remove_array_from_config("images", table).map_or_else(
-            Vec::new,
-            |a| {
-                a.into_iter()
-                    .filter_map(|i| {
-                        Image::parse(i.into_string().ok()?.as_str()).ok()
-                    })
-                    .collect()
-            },
-        ));
-        log::debug!("got images: {:?}", builder.images);
-
-        builder
-            .visible(remove_bool_from_config("visible", table).unwrap_or(true));
-
-        Ok((builder.build()?, formats))
+        Ok(builder.build()?)
     }
 }

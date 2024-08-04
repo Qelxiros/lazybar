@@ -47,6 +47,7 @@ pub struct XWindow {
     #[builder(setter(strip_option), default = "None")]
     max_width: Option<u32>,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -128,7 +129,7 @@ impl XWindow {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -148,8 +149,9 @@ impl PanelConfig for XWindow {
     ///   - type: String
     ///   - default: `%name%`
     ///   - formatting options: `%name%`
-    ///
-    /// - `attrs`: See [`Attrs::parse`] for parsing options
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -170,11 +172,13 @@ impl PanelConfig for XWindow {
             builder.max_width(max_width as u32);
         }
 
-        let (common, formats) =
-            PanelCommon::parse(table, &[""], &["%name%"], &[""], &[])?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "%name%");
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -208,9 +212,7 @@ impl PanelConfig for XWindow {
             )?
             .check()?;
 
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let stream = tokio_stream::once(())
             .chain(XStream::new(self.conn.clone(), name_atom, window_atom))

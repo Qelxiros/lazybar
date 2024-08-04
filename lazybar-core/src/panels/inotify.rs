@@ -33,6 +33,7 @@ pub struct Inotify {
     name: &'static str,
     path: String,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -53,7 +54,7 @@ impl Inotify {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -65,16 +66,16 @@ impl Inotify {
 impl PanelConfig for Inotify {
     /// Configuration options:
     ///
+    /// - `path`: the file to monitor
+    ///   - type: String
+    ///   - default: none
     /// - `format`: the format string
     ///   - type: String
     ///   - default: `%file%`
     ///   - formatting options: `%file%`
-    ///
-    /// - `path`: the file to monitor
-    ///   - type: String
-    ///   - default: none
-    ///
-    /// - See [`PanelCommon::parse`].
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -88,11 +89,13 @@ impl PanelConfig for Inotify {
             builder.path(path);
         }
 
-        let (common, formats) =
-            PanelCommon::parse(table, &[""], &["%file%"], &[""], &[])?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "%file%");
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -114,9 +117,7 @@ impl PanelConfig for Inotify {
         let watch_flags = AddWatchFlags::IN_MODIFY;
         inotify.add_watch(self.path.as_str(), watch_flags)?;
 
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
         let stream = tokio_stream::once(file.clone())

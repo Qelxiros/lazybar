@@ -29,9 +29,9 @@ use tokio_stream::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
+    array_to_struct,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
     common::PanelCommon,
-    format_struct,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
@@ -52,7 +52,7 @@ enum EventType {
     Action,
 }
 
-format_struct!(
+array_to_struct!(
     MpdFormats,
     playing,
     paused,
@@ -100,7 +100,8 @@ pub struct Mpd {
     last_layout: Rc<Mutex<Option<(Layout, String)>>>,
     index_cache: Arc<Mutex<Option<IndexCache>>>,
     formatter: AhoCorasick,
-    formats: MpdFormats,
+    formats: MpdFormats<String>,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -114,26 +115,26 @@ impl Mpd {
         let conn = self.noidle_conn.clone();
         let status = conn.lock().unwrap().status()?;
         let format = match status.state {
-            State::Play => self.formats.playing,
-            State::Pause => self.formats.paused,
-            State::Stop => self.formats.stopped,
+            State::Play => self.formats.playing.clone(),
+            State::Pause => self.formats.paused.clone(),
+            State::Stop => self.formats.stopped.clone(),
         };
 
         let mut main = String::new();
         self.formatter.replace_all_with(
-            self.formats.main,
+            self.formats.main.as_str(),
             &mut main,
             |_, content, dst| self.replace(content, dst, &status),
         );
         let mut text = String::new();
         self.formatter.replace_all_with(
-            format,
+            format.as_str(),
             &mut text,
             |_, content, dst| self.replace(content, dst, &status),
         );
 
         let mut index_cache = Vec::new();
-        if let Ok(haystack) = pango::parse_markup(format, '\0') {
+        if let Ok(haystack) = pango::parse_markup(format.as_str(), '\0') {
             let haystack = haystack.1.as_str();
             let mut ignored = String::new();
             let mut offset = 0;
@@ -237,7 +238,7 @@ impl Mpd {
             }
         };
 
-        self.common.attrs[0].apply_font(&layout);
+        self.attrs.apply_font(&layout);
 
         let size = layout.pixel_size();
         let (bar_start_idx, bar_max_width_idx) = index_cache
@@ -268,7 +269,7 @@ impl Mpd {
         }
 
         let bar_width = self.last_progress_width;
-        let attrs = self.common.attrs[0].clone();
+        let attrs = self.attrs.clone();
         let progress_bg = self.progress_bg.clone();
         let images = self.common.images.clone();
 
@@ -599,8 +600,10 @@ impl PanelConfig for Mpd {
     ///   beginning when it scrolls (ignored if `strategy != scroll`)
     ///   - type: String
     ///   - default: `  ` (two spaces)
-    /// - See [`PanelCommon::parse`]. `click_*` and `scroll_*` are currently
-    ///   ignored.
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`]. `click_*` and `scroll_*` are
+    ///   currently ignored in favor of this panel's builtins.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -672,7 +675,8 @@ impl PanelConfig for Mpd {
             "%consume%",
         ])?);
 
-        let (common, formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let formats = PanelCommon::parse_formats(
             table,
             &[
                 "_playing",
@@ -710,13 +714,12 @@ impl PanelConfig for Mpd {
                 "",
                 "",
             ],
-            &[""],
-            &[],
-        )?;
+        );
+        let attrs = PanelCommon::parse_attr(table, "");
 
         builder.common(common);
-
         builder.formats(MpdFormats::new(formats));
+        builder.attrs(attrs);
 
         Ok(builder.build()?)
     }
@@ -787,9 +790,7 @@ impl PanelConfig for Mpd {
             })),
         );
 
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         Ok((
             Box::pin(map.map(move |(t, r)| {

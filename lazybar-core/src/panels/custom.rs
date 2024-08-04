@@ -54,6 +54,7 @@ pub struct Custom {
     #[builder(setter(strip_option))]
     duration: Option<Duration>,
     format: &'static str,
+    attrs: Attrs,
     common: PanelCommon,
 }
 
@@ -77,7 +78,7 @@ impl Custom {
         draw_common(
             cr,
             text.trim(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -89,21 +90,20 @@ impl Custom {
 impl PanelConfig for Custom {
     /// Configuration options:
     ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `%stdout%`
-    ///   - formatting options: `%stdout%`, `%stderr%`
-    ///
     /// - `command`: the command to run
     ///   - type: String
     ///   - default: none
-    ///
     /// - `interval`: the amount of time in seconds to wait between runs
     ///   - type: u64
     ///   - default: none
     ///   - if not present, the command will run exactly once.
-    ///
-    /// - See [`PanelCommon::parse`].
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `%stdout%`
+    ///   - formatting options: `%stdout%`, `%stderr%`
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -131,13 +131,15 @@ impl PanelConfig for Custom {
             (None, None) => CustomBuilder::default(),
         };
 
-        let (common, formats) =
-            PanelCommon::parse(table, &[""], &["%stdout%"], &[""], &[])?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "%stdout%");
+        let attrs = PanelCommon::parse_attr(table, "");
 
         Ok(builder
             .name(name)
             .common(common)
-            .format(formats.into_iter().next().unwrap().leak())
+            .format(format.leak())
+            .attrs(attrs)
             .build()?)
     }
 
@@ -152,9 +154,7 @@ impl PanelConfig for Custom {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         Ok((
             Box::pin(

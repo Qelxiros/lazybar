@@ -13,7 +13,7 @@ use crate::{
     common::{draw_common, PanelCommon},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    PanelStream, Ramp,
 };
 
 lazy_static! {
@@ -33,6 +33,8 @@ pub struct Cpu {
     path: String,
     last_load: Load,
     format: &'static str,
+    attrs: Attrs,
+    ramp: Ramp,
     common: PanelCommon,
 }
 
@@ -55,7 +57,7 @@ impl Cpu {
             .replace("%percentage%", format!("{percentage:.0}").as_str())
             .replace(
                 "%ramp%",
-                self.common.ramps[0].choose(percentage, 0.0, 100.0).as_str(),
+                self.ramp.choose(percentage, 0.0, 100.0).as_str(),
             );
 
         self.last_load = load;
@@ -63,7 +65,7 @@ impl Cpu {
         draw_common(
             cr,
             text.as_str(),
-            &self.common.attrs[0],
+            &self.attrs,
             self.common.dependence,
             self.common.images.clone(),
             height,
@@ -75,10 +77,6 @@ impl Cpu {
 impl PanelConfig for Cpu {
     /// Configuration options:
     ///
-    /// - `format`: the format string
-    ///   - type: String
-    ///   - default: `CPU: %percentage%`
-    ///   - formatting options: `%percentage%`
     /// - `interval`: how long to wait in seconds between each check
     ///   - type: u64
     ///   - default: 10
@@ -87,7 +85,15 @@ impl PanelConfig for Cpu {
     ///   - default: `/proc/stat` - If you're considering changing this, you
     ///     might want to use a different panel like
     ///     [`Inotify`][crate::panels::Inotify]
-    /// - See [`PanelCommon::parse`].
+    /// - `format`: the format string
+    ///   - type: String
+    ///   - default: `CPU: %percentage%%`
+    ///   - formatting options: `%percentage%`
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - `ramp`: A string specifying the ramp to show CPU usage. See
+    ///   [`Ramp::parse`] for details.
+    /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,
@@ -105,15 +111,14 @@ impl PanelConfig for Cpu {
         } else {
             builder.last_load(read_current_load("/proc/stat")?);
         }
-        let (common, formats) = PanelCommon::parse(
-            table,
-            &[""],
-            &["CPU: %percentage%%"],
-            &[""],
-            &[""],
-        )?;
+        let common = PanelCommon::parse_common(table)?;
+        let format = PanelCommon::parse_format(table, "", "CPU: %percentage%%");
+        let attr = PanelCommon::parse_attr(table, "");
+        let ramp = PanelCommon::parse_ramp(table, "");
         builder.common(common);
-        builder.format(formats.into_iter().next().unwrap().leak());
+        builder.format(format.leak());
+        builder.attrs(attr);
+        builder.ramp(ramp);
 
         Ok(builder.build()?)
     }
@@ -129,9 +134,7 @@ impl PanelConfig for Cpu {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
+        self.attrs.apply_to(&global_attrs);
 
         let stream = IntervalStream::new(interval(self.interval))
             .map(move |_| self.draw(&cr, height));

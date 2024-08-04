@@ -35,16 +35,17 @@ use tokio_stream::{
 
 use crate::{
     actions::Actions,
+    array_to_struct,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
     common::{draw_common, PanelCommon},
-    format_struct,
     image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream, Ramp,
 };
 
-format_struct!(PulseaudioFormats, unmuted, muted);
+array_to_struct!(PulseaudioFormats, unmuted, muted);
+array_to_struct!(PulseaudioRamps, unmuted, muted);
 
 /// Displays the current volume and mute status of a given sink.
 #[derive(Builder, Debug)]
@@ -62,7 +63,9 @@ pub struct Pulseaudio {
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
     #[builder(default, setter(skip))]
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
-    formats: PulseaudioFormats,
+    formats: PulseaudioFormats<String>,
+    attrs: Attrs,
+    ramps: PulseaudioRamps<Ramp>,
     common: PanelCommon,
 }
 
@@ -274,35 +277,32 @@ impl Pulseaudio {
 impl PanelConfig for Pulseaudio {
     /// Configuration options:
     ///
-    /// - `format_unmuted`: the format string when the default sink is unmuted
-    ///   - type: String
-    ///   - default: `%ramp%%volume%%`
-    ///   - formatting options: `%volume%`, `%ramp%`
-    ///
-    /// - `format_muted`: the format string when the default sink is muted
-    ///   - type: String
-    ///   - default: `%ramp%%volume%%`
-    ///   - formatting options: `%volume%`, `%ramp%`
-    ///
     /// - `sink`: the sink about which to display information
     ///   - type: String
     ///   - default: "@DEFAULT_SINK@"
-    ///
     /// - `server`: the pulseaudio server to which to connect
     ///   - type: String
     ///   - default: None (This does not mean no default; rather
     ///     [`Option::None`] is passed to the connect function and pulseaudio
     ///     will make its best guess. This is the right option on most systems.)
-    ///
-    /// - `ramp`: Shows an icon based on the volume level. See [`Ramp::parse`]
-    ///   for parsing details. This ramp is used when the sink is unmuted.
-    ///
+    /// - `format_unmuted`: the format string when the default sink is unmuted
+    ///   - type: String
+    ///   - default: `%ramp%%volume%%`
+    ///   - formatting options: `%volume%`, `%ramp%`
+    /// - `format_muted`: the format string when the default sink is muted
+    ///   - type: String
+    ///   - default: `%ramp%%volume%%`
+    ///   - formatting options: `%volume%`, `%ramp%`
+    /// - `attrs`: A string specifying the attrs for the panel. See
+    ///   [`Attrs::parse`] for details.
+    /// - `ramp_unmuted`: Shows an icon based on the volume level. See
+    ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
+    ///   is unmuted.
     /// - `ramp_muted`: Shows an icon based on the volume level. See
     ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
     ///   is muted.
-    ///
-    /// - See [`PanelCommon::parse`]. Valid events are `increment`, `decrement`,
-    ///   and `toggle`.
+    /// - See [`PanelCommon::parse_common`]. The supported events are
+    ///   `increment`, `decrement`, and `toggle`.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, Value>,
@@ -325,16 +325,19 @@ impl PanelConfig for Pulseaudio {
         builder.send(send);
         builder.recv(Arc::new(Mutex::new(recv)));
 
-        let (common, formats) = PanelCommon::parse(
+        let common = PanelCommon::parse_common(table)?;
+        let formats = PanelCommon::parse_formats(
             table,
             &["_unmuted", "_muted"],
             &["%ramp%%volume%", "%ramp%%volume%"],
-            &[""],
-            &["", "_muted"],
-        )?;
+        );
+        let attrs = PanelCommon::parse_attr(table, "");
+        let ramps = PanelCommon::parse_ramps(table, &["_unmuted", "_muted"]);
 
         builder.common(common);
         builder.formats(PulseaudioFormats::new(formats));
+        builder.attrs(attrs);
+        builder.ramps(PulseaudioRamps::new(ramps));
 
         Ok(builder.build()?)
     }
@@ -455,14 +458,12 @@ impl PanelConfig for Pulseaudio {
         // prevent these structures from going out of scope
         Box::leak(Box::new(context));
 
-        for attr in &mut self.common.attrs {
-            attr.apply_to(&global_attrs);
-        }
-        let ramp = self.common.ramps[0].clone();
-        let ramp_muted = self.common.ramps[1].clone();
-        let format_unmuted = self.formats.unmuted;
-        let format_muted = self.formats.muted;
-        let attrs = self.common.attrs[0].clone();
+        self.attrs.apply_to(&global_attrs);
+        let ramp = self.ramps.unmuted.clone();
+        let ramp_muted = self.ramps.muted.clone();
+        let format_unmuted = self.formats.unmuted.clone();
+        let format_muted = self.formats.muted.clone();
+        let attrs = self.attrs.clone();
         let dependence = self.common.dependence;
         let images = self.common.images.clone();
 
@@ -510,8 +511,8 @@ impl PanelConfig for Pulseaudio {
                     &cr,
                     data,
                     &last_data,
-                    format_unmuted,
-                    format_muted,
+                    format_unmuted.as_str(),
+                    format_muted.as_str(),
                     &ramp,
                     &ramp_muted,
                     &attrs,
