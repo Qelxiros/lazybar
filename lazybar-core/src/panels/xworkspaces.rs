@@ -540,10 +540,10 @@ fn get_nonempty(
         .iter()
         .filter(|&&w| {
             conn.get_property(false, w, type_atom, AtomEnum::ATOM, 0, 1)
-                .map_or(false, |c| {
-                    c.reply().map_or(false, |r| {
-                        r.value32().map_or(false, |mut iter| {
-                            iter.next().map_or(false, |v| v == normal_atom)
+                .map_or(true, |c| {
+                    c.reply().map_or(true, |r| {
+                        r.value32().map_or(true, |mut iter| {
+                            iter.next().map_or(true, |v| v == normal_atom)
                         })
                     })
                 })
