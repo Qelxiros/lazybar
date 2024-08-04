@@ -140,7 +140,8 @@ pub fn create_window(
         .with_context(|| format!("No monitor found with name {monitor}"))?
     } else {
         iter.find(|info| info.primary)
-            .context("No primary monitor found")?
+            .or_else(|| monitors.monitors.first())
+            .context("No monitors found")?
     };
 
     let width = mon.width;
