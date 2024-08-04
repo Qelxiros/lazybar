@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering, collections::HashMap, ffi::CString, rc::Rc, sync::Arc,
+    thread::sleep, time::Duration,
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -28,7 +29,7 @@ use x11rb::{
 };
 
 use crate::{
-    bar::{self, Event, EventResponse, PanelDrawInfo},
+    bar::{self, BarInfo, Event, EventResponse, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
@@ -71,6 +72,8 @@ pub struct Systray {
     time_end: u32,
     #[builder(default)]
     icons: Vec<Icon>,
+    #[builder(default)]
+    pending: Vec<(Window, bool)>,
     #[builder(default = "1")]
     width: u16,
     #[builder(default)]
@@ -92,7 +95,7 @@ pub struct Systray {
 
 impl Systray {
     fn draw(
-        &self,
+        &mut self,
         tray: Window,
         selection: Window,
         root: Window,
@@ -104,30 +107,39 @@ impl Systray {
         let shutdown_conn = self.conn.clone();
         let icons = self.icons.clone();
         let picture = self.picture;
+        let bg = bar_info.bg.to_rgba16();
         let bg = Color {
-            red: bar_info.bg.r as u16,
-            green: bar_info.bg.g as u16,
-            blue: bar_info.bg.b as u16,
-            alpha: bar_info.bg.a as u16,
+            red: bg[0],
+            green: bg[1],
+            blue: bg[2],
+            alpha: bg[3],
         };
         let width = self.width;
         let height = self.height;
+        let icon_padding = self.icon_padding;
+        let icon_size = self.icon_size;
+        let pending = self.pending.pop();
 
         PanelDrawInfo::new(
             (self.width as i32, self.height as i32),
             self.common.dependence,
             Box::new(move |_, x, y| {
-                config_conn.render_fill_rectangles(
-                    PictOp::SRC,
-                    picture,
-                    bg,
-                    &[Rectangle {
-                        x: 0,
-                        y: 0,
-                        width,
-                        height,
-                    }],
-                )?;
+                if let Some((window, mapped)) = pending {
+                    config_conn
+                        .reparent_window(
+                            window,
+                            tray,
+                            width as i16 + icon_padding / 2,
+                            (height as i16 - icon_size) / 2,
+                        )?
+                        .check()?;
+
+                    if mapped {
+                        config_conn.map_window(window)?.check()?;
+                    }
+                }
+
+                Self::draw_bg(&*config_conn, bg, picture, width, height)?;
 
                 config_conn
                     .configure_window(
@@ -155,6 +167,29 @@ impl Systray {
                 let _ = shutdown_conn.destroy_window(selection);
             })),
         )
+    }
+
+    fn draw_bg(
+        conn: &impl Connection,
+        bg: Color,
+        picture: Picture,
+        width: u16,
+        height: u16,
+    ) -> Result<()> {
+        conn.render_fill_rectangles(
+            PictOp::SRC,
+            picture,
+            bg,
+            &[Rectangle {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            }],
+        )?
+        .check()?;
+
+        Ok(())
     }
 
     fn resize(&mut self, tray: Window, removed: Option<usize>) -> Result<()> {
@@ -324,21 +359,23 @@ impl PanelConfig for Systray {
 
         let selection_wid: Window = self.conn.generate_id()?;
 
-        self.conn.create_window(
-            24,
-            selection_wid,
-            root,
-            -1,
-            -1,
-            1,
-            1,
-            0,
-            WindowClass::INPUT_OUTPUT,
-            find_visual(screen, 24)
-                .context("couldn't find visual")?
-                .visual_id,
-            &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE),
-        )?;
+        self.conn
+            .create_window(
+                24,
+                selection_wid,
+                root,
+                -1,
+                -1,
+                1,
+                1,
+                0,
+                WindowClass::INPUT_OUTPUT,
+                find_visual(screen, 24)
+                    .context("couldn't find visual")?
+                    .visual_id,
+                &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+            )?
+            .check()?;
 
         self.conn
             .change_property32(
@@ -418,6 +455,7 @@ impl PanelConfig for Systray {
             Box::pin(XStream::new(self.conn.clone()).map(move |event| {
                 if let Ok(event) = event {
                     self.handle_tray_event(
+                        bar_info,
                         &event,
                         selection_wid,
                         tray_wid,
@@ -438,6 +476,7 @@ impl PanelConfig for Systray {
 impl Systray {
     fn handle_tray_event(
         &mut self,
+        bar_info: &BarInfo,
         event: &protocol::Event,
         selection_wid: Window,
         tray_wid: Window,
@@ -451,6 +490,7 @@ impl Systray {
         // _XEMBED
         xembed_atom: Atom,
     ) -> Result<()> {
+        log::trace!("systray event: {event:?}");
         match event {
             // https://x.org/releases/X11R7.7/doc/xorg-docs/icccm/icccm.html#Acquiring_Selection_Ownership
             protocol::Event::PropertyNotify(event) => {
@@ -545,15 +585,6 @@ impl Systray {
                         )?
                         .check()?;
 
-                    self.conn
-                        .reparent_window(
-                            window,
-                            tray_wid,
-                            self.width as i16 + self.icon_padding / 2,
-                            (self.height as i16 - self.icon_size) / 2,
-                        )?
-                        .check()?;
-
                     let xembed_info = self
                         .conn
                         .get_property(
@@ -567,14 +598,9 @@ impl Systray {
                         .reply()?;
 
                     let mapped =
-                        if xembed_info.value32().is_some_and(|mut val| {
+                        !xembed_info.value32().is_some_and(|mut val| {
                             val.nth(1).is_some_and(|mapped| mapped & 0x1 == 0)
-                        }) {
-                            false
-                        } else {
-                            self.conn.map_window(window)?.check()?;
-                            true
-                        };
+                        });
 
                     let idx = match self.icon_sort {
                         SortMethod::Arrival(false) => self.icons.len(),
@@ -635,6 +661,24 @@ impl Systray {
                         self.width +=
                             (self.icon_size + self.icon_padding) as u16;
                     }
+
+                    self.resize(tray_wid, None)?;
+
+                    let bg = bar_info.bg.to_rgba16();
+                    Self::draw_bg(
+                        &*self.conn,
+                        Color {
+                            red: bg[0],
+                            green: bg[1],
+                            blue: bg[2],
+                            alpha: bg[3],
+                        },
+                        self.picture,
+                        self.width,
+                        self.height,
+                    )?;
+
+                    self.pending.push((window, mapped));
                 } else if ty == xembed_atom {
                     let data = event.data.as_data32();
                     let time = data[0];
