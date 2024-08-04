@@ -513,7 +513,7 @@ pub mod builders {
 
             let mut ipc_set = JoinSet::<Result<()>>::new();
 
-            let mut cleanup = Box::pin(cleanup::cleanup());
+            let mut cleanup = task::spawn_local(cleanup::cleanup());
             let mut cleanup_done = false;
 
             task::spawn_local(async move { loop {
@@ -587,11 +587,14 @@ pub mod builders {
                     }
                     res = &mut cleanup, if !cleanup_done => {
                         match res {
-                            Ok(()) => {
+                            Ok(Ok(())) => {
                                 log::info!("IPC dir cleanup finished");
                             }
-                            Err(_) => {
-                                log::warn!("IPC dir cleanup failed");
+                            Ok(Err(e)) => {
+                                log::warn!("IPC dir cleanup failed: {e}");
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to join cleanup task: {e}");
                             }
                         }
                         cleanup_done = true;

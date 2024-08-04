@@ -34,7 +34,7 @@ pub async fn cleanup() -> Result<()> {
 
                     match bytes {
                         0 => Err(anyhow!("Failed to read from stream")),
-                        _ => Ok::<_, anyhow::Error>(()),
+                        _ => Ok(()),
                     }
                 })
                 .await
