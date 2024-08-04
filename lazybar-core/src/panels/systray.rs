@@ -1,6 +1,5 @@
 use std::{
     cmp::Ordering, collections::HashMap, ffi::CString, rc::Rc, sync::Arc,
-    thread::sleep, time::Duration,
 };
 
 use anyhow::{anyhow, Context, Result};
