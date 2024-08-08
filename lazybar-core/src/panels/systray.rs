@@ -124,37 +124,33 @@ impl Systray {
             self.common.dependence,
             Box::new(move |_, x, y| {
                 if let Some((window, mapped)) = pending {
-                    config_conn
-                        .reparent_window(
-                            window,
-                            tray,
-                            width as i16 + icon_padding / 2,
-                            (height as i16 - icon_size) / 2,
-                        )?
-                        .check()?;
+                    config_conn.reparent_window(
+                        window,
+                        tray,
+                        width as i16 + icon_padding / 2,
+                        (height as i16 - icon_size) / 2,
+                    )?;
 
                     if mapped {
-                        config_conn.map_window(window)?.check()?;
+                        config_conn.map_window(window)?;
                     }
                 }
 
                 Self::draw_bg(&*config_conn, bg, picture, width, height)?;
 
-                config_conn
-                    .configure_window(
-                        tray,
-                        &ConfigureWindowAux::new().x(x as i32).y(y as i32),
-                    )?
-                    .check()?;
+                config_conn.configure_window(
+                    tray,
+                    &ConfigureWindowAux::new().x(x as i32).y(y as i32),
+                )?;
 
                 Ok(())
             }),
             Box::new(move || {
-                show_conn.map_window(tray)?.check()?;
+                show_conn.map_window(tray)?;
                 Ok(())
             }),
             Box::new(move || {
-                hide_conn.unmap_window(tray)?.check()?;
+                hide_conn.unmap_window(tray)?;
                 Ok(())
             }),
             Some(Box::new(move || {
@@ -185,8 +181,7 @@ impl Systray {
                 width,
                 height,
             }],
-        )?
-        .check()?;
+        )?;
 
         Ok(())
     }
@@ -198,12 +193,10 @@ impl Systray {
             as u16)
             .max(1);
 
-        self.conn
-            .configure_window(
-                tray,
-                &ConfigureWindowAux::new().width(self.width as u32),
-            )?
-            .check()?;
+        self.conn.configure_window(
+            tray,
+            &ConfigureWindowAux::new().width(self.width as u32),
+        )?;
 
         if let Some(destroyed) = removed {
             for icon in &mut self.icons {
@@ -226,12 +219,10 @@ impl Systray {
         let x = icon.idx as i16 * (self.icon_size + self.icon_padding)
             + self.icon_padding / 2;
 
-        self.conn
-            .configure_window(
-                icon.window,
-                &ConfigureWindowAux::new().x(x as i32),
-            )?
-            .check()?;
+        self.conn.configure_window(
+            icon.window,
+            &ConfigureWindowAux::new().x(x as i32),
+        )?;
 
         Ok(())
     }
@@ -358,69 +349,61 @@ impl PanelConfig for Systray {
 
         let selection_wid: Window = self.conn.generate_id()?;
 
-        self.conn
-            .create_window(
-                24,
-                selection_wid,
-                root,
-                -1,
-                -1,
-                1,
-                1,
-                0,
-                WindowClass::INPUT_OUTPUT,
-                find_visual(screen, 24)
-                    .context("couldn't find visual")?
-                    .visual_id,
-                &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE),
-            )?
-            .check()?;
+        self.conn.create_window(
+            24,
+            selection_wid,
+            root,
+            -1,
+            -1,
+            1,
+            1,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            find_visual(screen, 24)
+                .context("couldn't find visual")?
+                .visual_id,
+            &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+        )?;
 
-        self.conn
-            .change_property32(
-                PropMode::REPLACE,
-                selection_wid,
-                systray_orientation_atom,
-                AtomEnum::CARDINAL,
-                &[0],
-            )?
-            .check()?;
+        self.conn.change_property32(
+            PropMode::REPLACE,
+            selection_wid,
+            systray_orientation_atom,
+            AtomEnum::CARDINAL,
+            &[0],
+        )?;
 
-        self.conn
-            .change_property32(
-                PropMode::REPLACE,
-                selection_wid,
-                systray_visual_atom,
-                AtomEnum::VISUALID,
-                &[bar_visual.visual_id],
-            )?
-            .check()?;
+        self.conn.change_property32(
+            PropMode::REPLACE,
+            selection_wid,
+            systray_visual_atom,
+            AtomEnum::VISUALID,
+            &[bar_visual.visual_id],
+        )?;
 
         let tray_wid: Window = self.conn.generate_id()?;
         let depth = if bar_info.transparent { 32 } else { 24 };
         self.height = height as u16;
 
-        self.conn
-            .create_window(
-                depth,
-                tray_wid,
-                bar_info.window,
-                0,
-                0,
-                1,
-                self.height,
-                0,
-                WindowClass::INPUT_OUTPUT,
-                COPY_FROM_PARENT,
-                &CreateWindowAux::new().event_mask(
-                    EventMask::KEY_PRESS
-                        | EventMask::KEY_RELEASE
-                        | EventMask::PROPERTY_CHANGE
-                        | EventMask::STRUCTURE_NOTIFY
-                        | EventMask::SUBSTRUCTURE_NOTIFY,
-                ),
-            )?
-            .check()?;
+        self.conn.create_window(
+            depth,
+            tray_wid,
+            bar_info.window,
+            0,
+            0,
+            1,
+            self.height,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            COPY_FROM_PARENT,
+            &CreateWindowAux::new().event_mask(
+                EventMask::KEY_PRESS
+                    | EventMask::KEY_RELEASE
+                    | EventMask::PROPERTY_CHANGE
+                    | EventMask::STRUCTURE_NOTIFY
+                    | EventMask::SUBSTRUCTURE_NOTIFY,
+            ),
+        )?;
 
         let pictformat = self
             .conn
@@ -439,14 +422,12 @@ impl PanelConfig for Systray {
 
         self.picture = self.conn.generate_id()?;
 
-        self.conn
-            .render_create_picture(
-                self.picture,
-                tray_wid,
-                pictformat,
-                &CreatePictureAux::new(),
-            )?
-            .check()?;
+        self.conn.render_create_picture(
+            self.picture,
+            tray_wid,
+            pictformat,
+            &CreatePictureAux::new(),
+        )?;
 
         self.conn.flush()?;
 
@@ -495,36 +476,32 @@ impl Systray {
             protocol::Event::PropertyNotify(event) => {
                 if self.time_start == 0 {
                     self.time_start = event.time;
-                    self.conn
-                        .set_selection_owner(
-                            selection_wid,
-                            tray_selection_atom,
-                            self.time_start,
-                        )?
-                        .check()?;
+                    self.conn.set_selection_owner(
+                        selection_wid,
+                        tray_selection_atom,
+                        self.time_start,
+                    )?;
 
                     let manager_atom =
                         InternedAtoms::get(&self.conn, "MANAGER")?;
 
-                    self.conn
-                        .send_event(
-                            false,
+                    self.conn.send_event(
+                        false,
+                        root,
+                        EventMask::STRUCTURE_NOTIFY,
+                        ClientMessageEvent::new(
+                            32,
                             root,
-                            EventMask::STRUCTURE_NOTIFY,
-                            ClientMessageEvent::new(
-                                32,
-                                root,
-                                manager_atom,
-                                [
-                                    self.time_start,
-                                    tray_selection_atom,
-                                    selection_wid,
-                                    0,
-                                    0,
-                                ],
-                            ),
-                        )?
-                        .check()?;
+                            manager_atom,
+                            [
+                                self.time_start,
+                                tray_selection_atom,
+                                selection_wid,
+                                0,
+                                0,
+                            ],
+                        ),
+                    )?;
                 } else if event.atom == info_atom {
                     let window = event.window;
                     let xembed_info = self
@@ -539,9 +516,9 @@ impl Systray {
                         .nth(1)
                     {
                         if mapped & 0x1 == 1 {
-                            self.conn.map_window(window)?.check()?;
+                            self.conn.map_window(window)?;
                         } else {
-                            self.conn.unmap_window(window)?.check()?;
+                            self.conn.unmap_window(window)?;
                         }
                     };
                 }
@@ -555,34 +532,28 @@ impl Systray {
                     }
                     let window = data[2];
 
-                    self.conn
-                        .configure_window(
-                            tray_wid,
-                            &ConfigureWindowAux::new().width(
-                                (self.width as i16
-                                    + self.icon_size
-                                    + self.icon_padding)
-                                    as u32,
-                            ),
-                        )?
-                        .check()?;
+                    self.conn.configure_window(
+                        tray_wid,
+                        &ConfigureWindowAux::new().width(
+                            (self.width as i16
+                                + self.icon_size
+                                + self.icon_padding)
+                                as u32,
+                        ),
+                    )?;
 
-                    self.conn
-                        .configure_window(
-                            window,
-                            &ConfigureWindowAux::new()
-                                .width(self.icon_size as u32)
-                                .height(self.icon_size as u32),
-                        )?
-                        .check()?;
+                    self.conn.configure_window(
+                        window,
+                        &ConfigureWindowAux::new()
+                            .width(self.icon_size as u32)
+                            .height(self.icon_size as u32),
+                    )?;
 
-                    self.conn
-                        .change_window_attributes(
-                            window,
-                            &ChangeWindowAttributesAux::new()
-                                .event_mask(EventMask::PROPERTY_CHANGE),
-                        )?
-                        .check()?;
+                    self.conn.change_window_attributes(
+                        window,
+                        &ChangeWindowAttributesAux::new()
+                            .event_mask(EventMask::PROPERTY_CHANGE),
+                    )?;
 
                     let xembed_info = self
                         .conn
@@ -686,52 +657,46 @@ impl Systray {
                         // request focus
                         3 => {
                             if let Some(focused) = self.focused {
-                                self.conn
-                                    .send_event(
-                                        false,
-                                        focused.window,
-                                        EventMask::NO_EVENT,
-                                        ClientMessageEvent::new(
-                                            32,
-                                            focused.window,
-                                            xembed_atom,
-                                            [time, 5, 0, 0, 0],
-                                        ),
-                                    )?
-                                    .check()?;
-                            }
-
-                            let window = event.window;
-                            self.conn
-                                .send_event(
+                                self.conn.send_event(
                                     false,
-                                    window,
+                                    focused.window,
                                     EventMask::NO_EVENT,
                                     ClientMessageEvent::new(
                                         32,
-                                        window,
+                                        focused.window,
                                         xembed_atom,
-                                        [time, 4, 0, 0, 0],
+                                        [time, 5, 0, 0, 0],
                                     ),
-                                )?
-                                .check()?;
+                                )?;
+                            }
+
+                            let window = event.window;
+                            self.conn.send_event(
+                                false,
+                                window,
+                                EventMask::NO_EVENT,
+                                ClientMessageEvent::new(
+                                    32,
+                                    window,
+                                    xembed_atom,
+                                    [time, 4, 0, 0, 0],
+                                ),
+                            )?;
                         }
                         // focus next/prev
                         6 | 7 => {
                             if let Some(focused) = self.focused {
-                                self.conn
-                                    .send_event(
-                                        false,
+                                self.conn.send_event(
+                                    false,
+                                    focused.window,
+                                    EventMask::NO_EVENT,
+                                    ClientMessageEvent::new(
+                                        32,
                                         focused.window,
-                                        EventMask::NO_EVENT,
-                                        ClientMessageEvent::new(
-                                            32,
-                                            focused.window,
-                                            xembed_atom,
-                                            [time, 5, 0, 0, 0],
-                                        ),
-                                    )?
-                                    .check()?;
+                                        xembed_atom,
+                                        [time, 5, 0, 0, 0],
+                                    ),
+                                )?;
                             }
                         }
                         _ => {}
@@ -771,14 +736,12 @@ impl Systray {
                     && (event.height != self.icon_size as u16
                         || event.width != self.icon_size as u16)
                 {
-                    self.conn
-                        .configure_window(
-                            event.window,
-                            &ConfigureWindowAux::new()
-                                .width(self.icon_size as u32)
-                                .height(self.icon_size as u32),
-                        )?
-                        .check()?;
+                    self.conn.configure_window(
+                        event.window,
+                        &ConfigureWindowAux::new()
+                            .width(self.icon_size as u32)
+                            .height(self.icon_size as u32),
+                    )?;
                 }
             }
             protocol::Event::SelectionClear(event) => {
@@ -788,14 +751,12 @@ impl Systray {
             | protocol::Event::KeyRelease(mut event) => {
                 if let Some(focused) = self.focused {
                     event.child = focused.window;
-                    self.conn
-                        .send_event(
-                            false,
-                            focused.window,
-                            EventMask::NO_EVENT,
-                            event,
-                        )?
-                        .check()?;
+                    self.conn.send_event(
+                        false,
+                        focused.window,
+                        EventMask::NO_EVENT,
+                        event,
+                    )?;
                 }
             }
             _ => {}

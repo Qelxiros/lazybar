@@ -255,8 +255,7 @@ impl XWorkspaces {
                             current_atom,
                             [idx as u32, CURRENT_TIME, 0, 0, 0],
                         ),
-                    )?
-                    .check()?;
+                    )?;
                     send.send(EventResponse::Ok)?;
                 } else {
                     send.send(EventResponse::Err(format!(

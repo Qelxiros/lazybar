@@ -379,7 +379,7 @@ impl Bar {
             name.as_str(),
             &mon,
         );
-        conn.map_window(window)?.check()?;
+        conn.map_window(window)?;
         let surface =
             create_surface(window, visual, width.into(), height.into(), &conn)?;
         let cr = cairo::Context::new(&surface)?;
@@ -543,12 +543,12 @@ impl Bar {
             "quit" => Ok(true),
             "show" => {
                 self.mapped = true;
-                self.conn.map_window(self.window)?.check()?;
+                self.conn.map_window(self.window)?;
                 Ok(false)
             }
             "hide" => {
                 self.mapped = true;
-                self.conn.unmap_window(self.window)?.check()?;
+                self.conn.unmap_window(self.window)?;
                 Ok(false)
             }
             "toggle" => {

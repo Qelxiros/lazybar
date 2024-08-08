@@ -154,8 +154,7 @@ pub fn create_window(
         colormap,
         screen.root,
         visual.visual_id,
-    )?
-    .check()?;
+    )?;
 
     // assume RGBA
     // TODO: awesome wm has a more robust way of handling this
@@ -192,8 +191,7 @@ pub fn create_window(
             .border_pixel(bg)
             .event_mask(EventMask::EXPOSURE | EventMask::BUTTON_PRESS)
             .colormap(colormap),
-    )?
-    .check()?;
+    )?;
 
     Ok((conn, screen_idx, window, width, visual, mon.clone()))
 }

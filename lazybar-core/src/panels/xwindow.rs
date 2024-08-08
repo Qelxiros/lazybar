@@ -73,13 +73,11 @@ impl XWindow {
             String::new()
         } else {
             if self.windows.insert(active) {
-                self.conn
-                    .change_window_attributes(
-                        active,
-                        &ChangeWindowAttributesAux::new()
-                            .event_mask(EventMask::PROPERTY_CHANGE),
-                    )?
-                    .check()?;
+                self.conn.change_window_attributes(
+                    active,
+                    &ChangeWindowAttributesAux::new()
+                        .event_mask(EventMask::PROPERTY_CHANGE),
+                )?;
             }
 
             if let Some(max_width) = self.max_width {
@@ -204,13 +202,11 @@ impl PanelConfig for XWindow {
             .get(self.screen)
             .ok_or_else(|| anyhow!("Screen not found"))?
             .root;
-        self.conn
-            .change_window_attributes(
-                root,
-                &ChangeWindowAttributesAux::new()
-                    .event_mask(EventMask::PROPERTY_CHANGE),
-            )?
-            .check()?;
+        self.conn.change_window_attributes(
+            root,
+            &ChangeWindowAttributesAux::new()
+                .event_mask(EventMask::PROPERTY_CHANGE),
+        )?;
 
         self.attrs.apply_to(&global_attrs);
 
