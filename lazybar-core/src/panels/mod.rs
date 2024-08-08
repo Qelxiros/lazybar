@@ -6,8 +6,6 @@ mod clock;
 mod cpu;
 #[cfg(feature = "custom")]
 mod custom;
-#[cfg(feature = "fanotify")]
-mod fanotify;
 #[cfg(feature = "github")]
 mod github;
 #[cfg(feature = "inotify")]
@@ -41,8 +39,6 @@ pub use clock::Clock;
 pub use cpu::Cpu;
 #[cfg(feature = "custom")]
 pub use custom::Custom;
-#[cfg(feature = "fanotify")]
-pub use fanotify::Fanotify;
 #[cfg(feature = "github")]
 pub use github::Github;
 #[cfg(feature = "inotify")]
@@ -78,8 +74,6 @@ pub mod builders {
     pub use super::cpu::{CpuBuilder, CpuBuilderError};
     #[cfg(feature = "custom")]
     pub use super::custom::{CustomBuilder, CustomBuilderError};
-    #[cfg(feature = "fanotify")]
-    pub use super::fanotify::{FanotifyBuilder, FanotifyBuilderError};
     #[cfg(feature = "github")]
     pub use super::github::{GithubBuilder, GithubBuilderError};
     #[cfg(feature = "inotify")]

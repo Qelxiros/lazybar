@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
-    ffi::{c_char, CStr},
+    ffi::{c_char, c_void, CStr},
     net::IpAddr,
-    os::fd::AsRawFd,
+    ptr,
     rc::Rc,
     sync::{Arc, Mutex},
     time::Duration,
@@ -13,9 +13,11 @@ use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use nix::{
-    ifaddrs::getifaddrs,
-    sys::socket::{self, AddressFamily, SockFlag, SockType},
+use get_if_addrs::get_if_addrs;
+use rustix::{
+    io::Errno,
+    ioctl::{ioctl, Ioctl, Opcode},
+    net::{socket, AddressFamily, SocketType},
 };
 use tokio_stream::StreamExt;
 
@@ -216,48 +218,56 @@ impl Request {
     }
 }
 
-// can't use #[doc(hidden)] or #[allow(missing_docs)], so this hides the macro
-// away from docs.rs
-mod hidden {
-    use super::Request;
-
-    nix::ioctl_read_bad!(query_essid_inner, 0x8b1b, Request);
-}
-
 fn query_essid(if_name: &str) -> Result<String> {
-    let socket = socket::socket(
-        AddressFamily::Inet,
-        SockType::Datagram,
-        SockFlag::empty(),
-        None,
-    )?;
+    let socket = socket(AddressFamily::INET, SocketType::DGRAM, None)?;
 
     let buf = [0; 33];
-    let mut req = Request::new(if_name, &buf);
+    let req = EssidIoctl {
+        data: Request::new(if_name, &buf),
+    };
 
-    unsafe { hidden::query_essid_inner(socket.as_raw_fd(), &mut req) }?;
+    unsafe { ioctl(socket, req) }?;
     let res = buf.as_ptr();
     Ok(unsafe { CStr::from_ptr(res) }.to_str()?.to_owned())
 }
 
-fn query_ipv4(if_name: &str) -> Option<IpAddr> {
-    Some(IpAddr::V4(
-        getifaddrs()
-            .ok()?
-            .filter(|a| a.interface_name == if_name)
-            .find_map(|a| Some(a.address?.as_sockaddr_in()?.ip()))?,
-    ))
-}
-
-fn query_ipv6(if_name: &str) -> Option<IpAddr> {
-    Some(IpAddr::V6(
-        getifaddrs()
-            .ok()?
-            .filter(|a| a.interface_name == if_name)
-            .find_map(|a| Some(a.address?.as_sockaddr_in6()?.ip()))?,
-    ))
-}
-
 fn query_ip(if_name: &str) -> Option<IpAddr> {
-    query_ipv4(if_name).or_else(|| query_ipv6(if_name))
+    let (v4, v6) =
+        get_if_addrs()
+            .ok()?
+            .into_iter()
+            .partition::<Vec<_>, _>(|i| match i.addr {
+                get_if_addrs::IfAddr::V4(_) => true,
+                get_if_addrs::IfAddr::V6(_) => true,
+            });
+
+    Some(v4.into_iter().chain(v6).find(|i| i.name == if_name)?.ip())
+}
+
+struct EssidIoctl {
+    data: Request,
+}
+
+unsafe impl Ioctl for EssidIoctl {
+    type Output = String;
+
+    const OPCODE: Opcode = Opcode::old(0x8b1b);
+    const IS_MUTATING: bool = true;
+
+    fn as_ptr(&mut self) -> *mut c_void {
+        ptr::addr_of_mut!(self.data) as _
+    }
+
+    unsafe fn output_from_ptr(
+        _out: rustix::ioctl::IoctlOutput,
+        extract_output: *mut c_void,
+    ) -> rustix::io::Result<Self::Output> {
+        let req = &mut *(extract_output as *mut Request);
+        let data = req.data.essid.ptr;
+        let res = match CStr::from_ptr(data).to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return Err(Errno::BADMSG),
+        };
+        Ok(res)
+    }
 }

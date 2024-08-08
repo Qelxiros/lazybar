@@ -14,8 +14,6 @@ use crate::panels::Clock;
 use crate::panels::Cpu;
 #[cfg(feature = "custom")]
 use crate::panels::Custom;
-#[cfg(feature = "fanotify")]
-use crate::panels::Fanotify;
 #[cfg(feature = "github")]
 use crate::panels::Github;
 #[cfg(feature = "inotify")]
@@ -382,11 +380,6 @@ fn parse_panel(
                 #[cfg(feature = "custom")]
                 "custom" => {
                     Custom::parse(p, &mut table, config)
-                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
-                }
-                #[cfg(feature = "fanotify")]
-                "fanotify" => {
-                    Fanotify::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 #[cfg(feature = "github")]

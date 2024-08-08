@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Seek},
+    os::fd::AsFd,
     pin::Pin,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -13,7 +14,11 @@ use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::{task::AtomicWaker, FutureExt};
-use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
+use rustix::{
+    fd::OwnedFd,
+    fs::inotify::{inotify_add_watch, inotify_init, CreateFlags, WatchFlags},
+    io,
+};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
@@ -122,11 +127,11 @@ impl PanelConfig for Inotify {
         height: i32,
     ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
     {
-        let init_flags = InitFlags::empty();
-        let inotify = inotify::Inotify::init(init_flags)?;
+        let create_flags = CreateFlags::empty();
+        let inotify = inotify_init(create_flags)?;
 
-        let watch_flags = AddWatchFlags::IN_MODIFY;
-        inotify.add_watch(self.path.as_str(), watch_flags)?;
+        let watch_flags = WatchFlags::MODIFY;
+        inotify_add_watch(inotify.as_fd(), self.path.as_str(), watch_flags)?;
 
         self.attrs.apply_to(&global_attrs);
 
@@ -142,7 +147,7 @@ impl PanelConfig for Inotify {
 }
 
 struct InotifyStream {
-    i: Arc<inotify::Inotify>,
+    i: Arc<OwnedFd>,
     file: Rc<Mutex<File>>,
     handle: Option<JoinHandle<()>>,
     paused: Arc<Mutex<bool>>,
@@ -151,7 +156,7 @@ struct InotifyStream {
 
 impl InotifyStream {
     fn new(
-        i: inotify::Inotify,
+        i: OwnedFd,
         file: Rc<Mutex<File>>,
         paused: Arc<Mutex<bool>>,
         waker: Arc<AtomicWaker>,
@@ -186,10 +191,14 @@ impl Stream for InotifyStream {
             let i = self.i.clone();
             let waker = cx.waker().clone();
             self.handle = Some(task::spawn_blocking(move || loop {
-                let result = i.read_events();
-                if result.is_ok() {
-                    waker.wake();
-                    break;
+                let mut buf = [0u8; 1024];
+                let bytes = io::read(i.as_fd(), &mut buf);
+                match bytes {
+                    Err(_) | Ok(0) => continue,
+                    Ok(_) => {
+                        waker.wake();
+                        break;
+                    }
                 }
             }));
             Poll::Pending

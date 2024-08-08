@@ -13,7 +13,7 @@ use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
 use lazy_static::lazy_static;
-use nix::unistd::gethostname;
+use rustix::system::uname;
 use tokio::task::JoinHandle;
 use tokio_stream::Stream;
 use x11rb::{
@@ -346,15 +346,13 @@ pub fn set_wm_properties(
         );
     }
 
-    if let Ok(hostname) = gethostname() {
-        let _ = conn.change_property8(
-            PropMode::REPLACE,
-            window,
-            AtomEnum::WM_CLIENT_MACHINE,
-            AtomEnum::STRING,
-            hostname.as_encoded_bytes(),
-        );
-    }
+    let _ = conn.change_property8(
+        PropMode::REPLACE,
+        window,
+        AtomEnum::WM_CLIENT_MACHINE,
+        AtomEnum::STRING,
+        uname().nodename().to_bytes(),
+    );
 
     if let Ok(desktop_atom) = InternedAtoms::get(conn, "_NET_WM_DESKTOP") {
         let _ = conn.change_property32(
