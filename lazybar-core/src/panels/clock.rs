@@ -27,8 +27,8 @@ use crate::{
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_array_from_config, remove_string_from_config, Attrs, PanelConfig,
-    PanelStream,
+    remove_array_from_config, remove_string_from_config,
+    remove_uint_from_config, Attrs, PanelConfig, PanelStream,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -98,6 +98,8 @@ pub struct Clock {
     formats: Vec<String>,
     precisions: Vec<Precision>,
     attrs: Vec<Attrs>,
+    #[builder(default = "Duration::from_millis(1)")]
+    offset: Duration,
     common: PanelCommon,
 }
 
@@ -202,6 +204,8 @@ impl PanelConfig for Clock {
     ///   `formats` array.
     /// - `attr`: A string specifying the attrs for each format. Only checked if
     ///   `attrs` is unset.
+    /// - `offset`: This panel will anticipate a delay of this many milliseconds
+    ///   and trigger early. The default value is 1.
     /// - See [`PanelCommon::parse_common`]. The supported events are `cycle`
     ///   and `cycle_back`.
     fn parse(
@@ -263,6 +267,10 @@ impl PanelConfig for Clock {
             builder.attrs(vec![Attrs::default(); formats_len]);
         }
 
+        if let Some(offset) = remove_uint_from_config("offset", table) {
+            builder.offset(Duration::from_millis(offset));
+        }
+
         Ok(builder.build()?)
     }
 
@@ -317,6 +325,7 @@ impl PanelConfig for Clock {
                     Precision::tick,
                     self.precision.clone(),
                     self.waker.clone(),
+                    self.offset.clone(),
                     &paused,
                 )
                 .map(|_| Ok(())),
@@ -339,6 +348,7 @@ struct ClockStream {
     local_precision: Precision,
     waker: Arc<AtomicWaker>,
     interval: Interval,
+    offset: Duration,
     paused: Arc<Mutex<bool>>,
 }
 
@@ -347,6 +357,7 @@ impl ClockStream {
         get_duration: fn(Precision) -> Duration,
         precision: Arc<Mutex<Precision>>,
         waker: Arc<AtomicWaker>,
+        offset: Duration,
         paused: &Arc<Mutex<bool>>,
     ) -> Self {
         let local_precision = *precision.lock().unwrap();
@@ -357,6 +368,7 @@ impl ClockStream {
             local_precision,
             waker,
             interval,
+            offset,
             paused: paused.clone(),
         }
     }
@@ -365,7 +377,8 @@ impl ClockStream {
         let shared = *self.shared_precision.lock().unwrap();
         self.local_precision = shared;
         let duration = (self.get_duration)(shared);
-        self.interval.reset_after(duration);
+        self.interval
+            .reset_after(duration.checked_sub(self.offset).unwrap_or(duration));
     }
 }
 
