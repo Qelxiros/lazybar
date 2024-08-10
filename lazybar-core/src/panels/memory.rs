@@ -1,21 +1,28 @@
-use std::{collections::HashMap, fs::File, io::Read, rc::Rc, time::Duration};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::Read,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio::time::interval;
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use tokio_stream::StreamExt;
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs,
+    ManagedIntervalStream, PanelConfig, PanelStream,
 };
 
 lazy_static! {
@@ -32,6 +39,8 @@ pub struct Memory {
     name: &'static str,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     #[builder(default = r#"String::from("/proc/meminfo")"#)]
     path: String,
     formatter: AhoCorasick,
@@ -45,6 +54,7 @@ impl Memory {
         &self,
         cr: &Rc<cairo::Context>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let mut meminfo = String::new();
         File::open(self.path.as_str())?.read_to_string(&mut meminfo)?;
@@ -217,6 +227,7 @@ impl Memory {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -301,8 +312,13 @@ impl PanelConfig for Memory {
     {
         self.attrs.apply_to(&global_attrs);
 
-        let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr, height));
+        let paused = Arc::new(Mutex::new(false));
+
+        let stream = ManagedIntervalStream::builder()
+            .duration(self.interval)
+            .paused(paused.clone())
+            .build()?
+            .map(move |_| self.draw(&cr, height, paused.clone()));
 
         Ok((Box::pin(stream), None))
     }

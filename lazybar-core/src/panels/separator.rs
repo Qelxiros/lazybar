@@ -7,7 +7,7 @@ use derive_builder::Builder;
 
 use crate::{
     bar::{Event, EventResponse},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     Attrs, PanelConfig, PanelStream,
 };
@@ -78,6 +78,7 @@ impl PanelConfig for Separator {
                 self.common.dependence,
                 self.common.images.clone(),
                 height,
+                ShowHide::None,
             ))),
             None,
         ))

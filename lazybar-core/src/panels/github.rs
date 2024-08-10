@@ -1,11 +1,17 @@
 use std::{
-    fs::File, io::Read, pin::Pin, rc::Rc, sync::Arc, task::Poll, time::Duration,
+    fs::File,
+    io::Read,
+    pin::Pin,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
 };
 
 use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
-use futures::{FutureExt, StreamExt};
+use futures::{task::AtomicWaker, FutureExt, StreamExt};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{
@@ -22,7 +28,7 @@ use tokio_stream::Stream;
 use crate::{
     attrs::Attrs,
     bar::PanelDrawInfo,
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, remove_uint_from_config, PanelConfig,
 };
@@ -40,6 +46,8 @@ pub struct Github {
     name: &'static str,
     #[builder(default = "Duration::from_secs(60)")]
     interval: Duration,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     token: String,
     #[builder(default = "Vec::new()")]
     filter: Vec<String>,
@@ -58,6 +66,7 @@ impl Github {
         cr: &Rc<cairo::Context>,
         height: i32,
         count: usize,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let mut text = if !self.show_zero && count == 0 {
             String::new()
@@ -76,6 +85,7 @@ impl Github {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -173,13 +183,16 @@ impl PanelConfig for Github {
     )> {
         self.attrs.apply_to(&global_attrs);
 
+        let paused = Arc::new(Mutex::new(false));
+
         let stream = GithubStream::new(
             self.token.as_str(),
             self.interval,
+            paused.clone(),
             self.filter.clone(),
             self.include,
         )?
-        .map(move |r| self.draw(&cr, height, r?));
+        .map(move |r| self.draw(&cr, height, r?, paused.clone()));
 
         Ok((Box::pin(stream), None))
     }
@@ -188,6 +201,8 @@ impl PanelConfig for Github {
 struct GithubStream {
     handle: Option<JoinHandle<Result<usize>>>,
     interval: Arc<futures::lock::Mutex<Interval>>,
+    waker: Arc<AtomicWaker>,
+    paused: Arc<Mutex<bool>>,
     filter: Vec<String>,
     include: bool,
     client: Client,
@@ -197,6 +212,7 @@ impl GithubStream {
     pub fn new(
         token: &str,
         duration: Duration,
+        paused: Arc<Mutex<bool>>,
         filter: Vec<String>,
         include: bool,
     ) -> Result<Self> {
@@ -216,9 +232,12 @@ impl GithubStream {
         headers.insert(AUTHORIZATION, secret);
         let client = Client::builder().default_headers(headers).build()?;
         let interval = Arc::new(futures::lock::Mutex::new(interval(duration)));
+        let waker = Arc::new(AtomicWaker::new());
         Ok(Self {
             handle: None,
             interval,
+            waker,
+            paused,
             filter,
             include,
             client,
@@ -233,7 +252,10 @@ impl Stream for GithubStream {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        if let Some(ref mut handle) = &mut self.handle {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(ref mut handle) = &mut self.handle {
             let val = handle.poll_unpin(cx).map(Result::ok);
 
             if val.is_ready() {

@@ -14,7 +14,7 @@ use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
-use futures::FutureExt;
+use futures::{task::AtomicWaker, FutureExt};
 use libpulse_binding::{
     callbacks::ListResult,
     context::{
@@ -37,7 +37,7 @@ use crate::{
     actions::Actions,
     array_to_struct,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
@@ -61,6 +61,10 @@ pub struct Pulseaudio {
     unit: u32,
     send: Sender<(Volume, bool)>,
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
+    #[builder(default)]
+    paused: Arc<Mutex<bool>>,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     #[builder(default, setter(skip))]
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
     formats: PulseaudioFormats<String>,
@@ -76,7 +80,10 @@ impl Stream for Pulseaudio {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &mut self.handle {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(handle) = &mut self.handle {
             if handle.is_finished() {
                 let value = handle
                     .poll_unpin(cx)
@@ -114,6 +121,8 @@ impl Pulseaudio {
         dependence: Dependence,
         images: Vec<Image>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
+        waker: Arc<AtomicWaker>,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
             Ok(Some(data)) => data,
@@ -132,7 +141,15 @@ impl Pulseaudio {
             .replace("%ramp%", ramp_text.as_str())
             .replace("%volume%", volume.to_string().as_str());
 
-        draw_common(cr, text.as_str(), attrs, dependence, images, height)
+        draw_common(
+            cr,
+            text.as_str(),
+            attrs,
+            dependence,
+            images,
+            height,
+            ShowHide::Default(paused, waker),
+        )
     }
 
     fn process_event(
@@ -466,6 +483,8 @@ impl PanelConfig for Pulseaudio {
         let attrs = self.attrs.clone();
         let dependence = self.common.dependence;
         let images = self.common.images.clone();
+        let paused = self.paused.clone();
+        let waker = self.waker.clone();
 
         let mut map = StreamMap::<
             usize,
@@ -519,6 +538,8 @@ impl PanelConfig for Pulseaudio {
                     dependence,
                     images.clone(),
                     height,
+                    paused.clone(),
+                    waker.clone(),
                 )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),

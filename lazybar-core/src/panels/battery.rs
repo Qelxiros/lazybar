@@ -1,21 +1,28 @@
 use std::{
-    collections::HashMap, fs::File, io::Read, pin::Pin, rc::Rc, time::Duration,
+    collections::HashMap,
+    fs::File,
+    io::Read,
+    pin::Pin,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use anyhow::Result;
 use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use tokio::time::interval;
-use tokio_stream::{wrappers::IntervalStream, Stream, StreamExt, StreamMap};
+use tokio_stream::{Stream, StreamExt, StreamMap};
 
 use crate::{
     array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream, Ramp,
+    remove_string_from_config, remove_uint_from_config, Attrs,
+    ManagedIntervalStream, PanelConfig, PanelStream, Ramp,
 };
 
 /// Shows the current battery level.
@@ -31,6 +38,8 @@ pub struct Battery {
     adapter: String,
     #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     formats: BatteryFormats<String>,
     attrs: Attrs,
     ramp: Ramp,
@@ -42,6 +51,7 @@ impl Battery {
         &self,
         cr: &Rc<cairo::Context>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let mut capacity_f = File::open(format!(
             "/sys/class/power_supply/{}/capacity",
@@ -93,6 +103,7 @@ impl Battery {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -194,18 +205,29 @@ impl PanelConfig for Battery {
     {
         self.attrs.apply_to(&global_attrs);
 
-        let mut map = StreamMap::<_, Pin<Box<dyn Stream<Item = ()>>>>::new();
+        let mut map =
+            StreamMap::<_, Pin<Box<dyn Stream<Item = ()>>>>::with_capacity(2);
+
+        let interval = Arc::new(Mutex::new(interval(self.duration)));
+        let paused = Arc::new(Mutex::new(false));
+        let waker = Arc::new(AtomicWaker::new());
 
         map.insert(
             0,
-            Box::pin(IntervalStream::new(interval(self.duration)).map(|_| ())),
+            Box::pin(
+                ManagedIntervalStream::new(interval, paused.clone(), waker)
+                    .map(|_| ()),
+            ),
         );
         let stream = acpid_plug::connect().await;
         if let Ok(stream) = stream {
             map.insert(1, Box::pin(stream.map(|_| ())));
         }
 
-        Ok((Box::pin(map.map(move |_| self.draw(&cr, height))), None))
+        Ok((
+            Box::pin(map.map(move |_| self.draw(&cr, height, paused.clone()))),
+            None,
+        ))
     }
 }
 

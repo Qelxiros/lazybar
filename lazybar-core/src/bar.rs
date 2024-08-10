@@ -109,11 +109,13 @@ pub struct PanelDrawInfo {
     /// (0, 0). Translating the Context is the responsibility of functions in
     /// this module.
     pub draw_fn: PanelDrawFn,
-    /// The function to be run when the panel is shown
-    pub show_fn: PanelShowFn,
-    /// The function to be run when the panel is hidden
-    pub hide_fn: PanelHideFn,
-    /// The function to be run before the panel is destroyed
+    /// The function to be run when the panel is shown.
+    pub show_fn: Option<PanelShowFn>,
+    /// The function to be run when the panel is hidden.
+    pub hide_fn: Option<PanelHideFn>,
+    /// The function to be run before the panel is destroyed. This function
+    /// should run as quickly as possible because the shutdown functions
+    /// for all panels are held to a time limit.
     pub shutdown: Option<PanelShutdownFn>,
 }
 
@@ -124,8 +126,8 @@ impl PanelDrawInfo {
         dims: (i32, i32),
         dependence: Dependence,
         draw_fn: PanelDrawFn,
-        show_fn: PanelShowFn,
-        hide_fn: PanelHideFn,
+        show_fn: Option<PanelShowFn>,
+        hide_fn: Option<PanelHideFn>,
         shutdown: Option<PanelShutdownFn>,
     ) -> Self {
         Self {
@@ -452,6 +454,34 @@ impl Bar {
             .collect()
     }
 
+    fn show_panels(&mut self) {
+        self.left_panels
+            .iter()
+            .chain(self.center_panels.iter())
+            .chain(self.right_panels.iter())
+            .filter_map(|p| p.draw_info.as_ref())
+            .filter_map(|d| d.show_fn.as_ref())
+            .for_each(|f| {
+                if let Err(e) = f() {
+                    log::warn!("showing panel produced an error: {e}");
+                }
+            });
+    }
+
+    fn hide_panels(&mut self) {
+        self.left_panels
+            .iter()
+            .chain(self.center_panels.iter())
+            .chain(self.right_panels.iter())
+            .filter_map(|p| p.draw_info.as_ref())
+            .filter_map(|d| d.hide_fn.as_ref())
+            .for_each(|f| {
+                if let Err(e) = f() {
+                    log::warn!("hiding panel produced an error: {e}");
+                }
+            });
+    }
+
     fn process_show_hide_events(
         panels: &mut [Panel],
         statuses: &[PanelStatus],
@@ -478,10 +508,14 @@ impl Bar {
                 panel.last_status = status == PanelStatus::Shown;
             });
         for draw_info in hidden {
-            let _ = (draw_info.hide_fn)();
+            if let Some(ref hide) = draw_info.hide_fn {
+                let _ = hide();
+            }
         }
         for draw_info in shown {
-            let _ = (draw_info.show_fn)();
+            if let Some(ref show) = draw_info.show_fn {
+                let _ = show();
+            }
         }
     }
 
@@ -544,11 +578,13 @@ impl Bar {
             "show" => {
                 self.mapped = true;
                 self.conn.map_window(self.window)?;
+                self.show_panels();
                 Ok(false)
             }
             "hide" => {
                 self.mapped = true;
                 self.conn.unmap_window(self.window)?;
+                self.hide_panels();
                 Ok(false)
             }
             "toggle" => {

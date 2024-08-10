@@ -3,6 +3,7 @@ use std::{
     pin::Pin,
     process::Command,
     rc::Rc,
+    sync::{Arc, Mutex},
     task::{self, Poll},
     time::Duration,
 };
@@ -10,36 +11,17 @@ use std::{
 use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use tokio::time::{interval, Interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream,
 };
-
-impl Stream for CustomStream {
-    type Item = ();
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        match &mut self.interval {
-            Some(ref mut interval) => interval.poll_tick(cx).map(|_| Some(())),
-            None => {
-                if self.fired {
-                    Poll::Pending
-                } else {
-                    self.fired = true;
-                    Poll::Ready(Some(()))
-                }
-            }
-        }
-    }
-}
 
 /// Runs a custom command with `sh -c <command>`, either once or on a given
 /// interval.
@@ -52,7 +34,9 @@ pub struct Custom {
     #[builder(default = r#"Command::new("echo")"#)]
     command: Command,
     #[builder(setter(strip_option))]
-    duration: Option<Duration>,
+    interval: Option<Duration>,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
     common: PanelCommon,
@@ -63,6 +47,7 @@ impl Custom {
         &mut self,
         cr: &Rc<cairo::Context>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let output = self.command.output()?;
         let text = self
@@ -75,6 +60,7 @@ impl Custom {
                 "%stderr%",
                 String::from_utf8_lossy(output.stderr.as_slice()).as_ref(),
             );
+
         draw_common(
             cr,
             text.trim(),
@@ -82,6 +68,7 @@ impl Custom {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -113,20 +100,20 @@ impl PanelConfig for Custom {
             remove_string_from_config("command", table),
             remove_uint_from_config("interval", table),
         ) {
-            (Some(command), Some(duration)) => {
+            (Some(command), Some(interval)) => {
                 let mut cmd = Command::new("sh");
                 cmd.arg("-c").arg(command.as_str());
                 CustomBuilder::default()
                     .command(cmd)
-                    .duration(Duration::from_secs(duration))
+                    .interval(Duration::from_secs(interval))
             }
             (Some(command), None) => {
                 let mut cmd = Command::new("sh");
                 cmd.arg("-c").arg(command.as_str());
                 CustomBuilder::default().command(cmd)
             }
-            (None, Some(duration)) => {
-                CustomBuilder::default().duration(Duration::from_secs(duration))
+            (None, Some(interval)) => {
+                CustomBuilder::default().interval(Duration::from_secs(interval))
             }
             (None, None) => CustomBuilder::default(),
         };
@@ -156,10 +143,16 @@ impl PanelConfig for Custom {
     {
         self.attrs.apply_to(&global_attrs);
 
+        let paused = Arc::new(Mutex::new(false));
+
         Ok((
             Box::pin(
-                CustomStream::new(self.duration.map(|d| interval(d)))
-                    .map(move |_| self.draw(&cr, height)),
+                CustomStream::new(
+                    self.interval.map(|d| interval(d)),
+                    paused.clone(),
+                    self.waker.clone(),
+                )
+                .map(move |_| self.draw(&cr, height, paused.clone())),
             ),
             None,
         ))
@@ -168,14 +161,49 @@ impl PanelConfig for Custom {
 
 struct CustomStream {
     interval: Option<Interval>,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
     fired: bool,
 }
 
 impl CustomStream {
-    const fn new(interval: Option<Interval>) -> Self {
+    const fn new(
+        interval: Option<Interval>,
+        paused: Arc<Mutex<bool>>,
+        waker: Arc<AtomicWaker>,
+    ) -> Self {
         Self {
             interval,
+            paused,
+            waker,
             fired: false,
+        }
+    }
+}
+
+impl Stream for CustomStream {
+    type Item = ();
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else {
+            match &mut self.interval {
+                Some(ref mut interval) => {
+                    interval.poll_tick(cx).map(|_| Some(()))
+                }
+                None => {
+                    if self.fired {
+                        Poll::Pending
+                    } else {
+                        self.fired = true;
+                        Poll::Ready(Some(()))
+                    }
+                }
+            }
         }
     }
 }

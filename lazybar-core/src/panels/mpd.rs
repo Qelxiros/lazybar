@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use mpd::{Client, Idle, State, Status, Subsystem};
 use pango::Layout;
 use pangocairo::functions::{create_layout, show_layout};
@@ -23,8 +24,7 @@ use tokio::{
     time::{self, interval, Interval},
 };
 use tokio_stream::{
-    wrappers::{IntervalStream, UnboundedReceiverStream},
-    Stream, StreamExt, StreamMap,
+    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -35,7 +35,7 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
-    IndexCache, PanelConfig, PanelStream,
+    IndexCache, ManagedIntervalStream, PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
@@ -111,6 +111,8 @@ impl Mpd {
         cr: &Rc<cairo::Context>,
         height: i32,
         event: EventType,
+        paused: Arc<Mutex<bool>>,
+        wakers: [Arc<AtomicWaker>; 3],
     ) -> Result<PanelDrawInfo> {
         let conn = self.noidle_conn.clone();
         let status = conn.lock().unwrap().status()?;
@@ -272,6 +274,7 @@ impl Mpd {
         let attrs = self.attrs.clone();
         let progress_bg = self.progress_bg.clone();
         let images = self.common.images.clone();
+        let paused_ = paused.clone();
 
         Ok(PanelDrawInfo::new(
             (size.0, height),
@@ -315,9 +318,17 @@ impl Mpd {
                 cr.restore()?;
                 Ok(())
             }),
-            // TODO: maybe do things here?
-            Box::new(|| Ok(())),
-            Box::new(|| Ok(())),
+            Some(Box::new(move || {
+                *paused.lock().unwrap() = false;
+                for waker in &wakers {
+                    waker.wake();
+                }
+                Ok(())
+            })),
+            Some(Box::new(move || {
+                *paused_.lock().unwrap() = true;
+                Ok(())
+            })),
             None,
         ))
     }
@@ -745,19 +756,28 @@ impl PanelConfig for Mpd {
             Pin<Box<dyn Stream<Item = Result<()>>>>,
         >::new();
 
+        let paused = Arc::new(Mutex::new(false));
+        let mpd_waker = Arc::new(AtomicWaker::new());
+
         map.insert(
             EventType::Player,
             Box::pin(tokio_stream::once(Ok(())).chain(MpdStream {
                 conn: self.conn.clone(),
                 handle: None,
+                paused: paused.clone(),
+                waker: mpd_waker.clone(),
             })),
         );
+
+        let progress_waker = Arc::new(AtomicWaker::new());
 
         if self.progress_bar {
             map.insert(
                 EventType::Progress,
                 Box::pin(HighlightStream {
                     interval: time::interval(Duration::from_secs(10)),
+                    paused: paused.clone(),
+                    waker: progress_waker.clone(),
                     song_length: None,
                     song_elapsed: None,
                     max_width: self.max_width,
@@ -770,10 +790,19 @@ impl PanelConfig for Mpd {
             );
         }
 
+        let scroll_waker = Arc::new(AtomicWaker::new());
+
         if let Strategy::Scroll { interval: i } = self.strategy {
             map.insert(
                 EventType::Scroll,
-                Box::pin(IntervalStream::new(interval(i)).map(|_| Ok(()))),
+                Box::pin(
+                    ManagedIntervalStream::builder()
+                        .duration(i)
+                        .paused(paused.clone())
+                        .waker(scroll_waker.clone())
+                        .build()?
+                        .map(|_| Ok(())),
+                ),
             );
         }
 
@@ -800,7 +829,17 @@ impl PanelConfig for Mpd {
         Ok((
             Box::pin(map.map(move |(t, r)| {
                 r?;
-                self.draw(&cr, height, t)
+                self.draw(
+                    &cr,
+                    height,
+                    t,
+                    paused.clone(),
+                    [
+                        mpd_waker.clone(),
+                        progress_waker.clone(),
+                        scroll_waker.clone(),
+                    ],
+                )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
@@ -809,6 +848,8 @@ impl PanelConfig for Mpd {
 
 struct HighlightStream {
     interval: Interval,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
     song_length: Option<Duration>,
     song_elapsed: Option<Duration>,
     max_width: usize,
@@ -826,8 +867,12 @@ impl Stream for HighlightStream {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            return Poll::Pending;
+        }
         if self.handle.is_none() {
-            let waker = cx.waker().clone();
+            let waker = self.waker.clone();
             let conn = self.conn.clone();
             let stale = self.stale.clone();
             self.handle = Some(task::spawn_blocking(move || {
@@ -861,6 +906,8 @@ impl Stream for HighlightStream {
 struct MpdStream {
     conn: Arc<Mutex<Client>>,
     handle: Option<JoinHandle<Result<()>>>,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
 }
 
 impl Stream for MpdStream {
@@ -870,7 +917,10 @@ impl Stream for MpdStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &self.handle {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(handle) = &self.handle {
             if handle.is_finished() {
                 self.handle = None;
                 Poll::Ready(Some(Ok(())))

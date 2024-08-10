@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
-use futures::FutureExt;
+use futures::{task::AtomicWaker, FutureExt};
 use tokio::{
     task::{self, JoinHandle},
     time::{interval, Interval},
@@ -22,7 +22,7 @@ use tokio_stream::{Stream, StreamExt};
 use crate::{
     array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
     PanelStream, Ramp,
@@ -43,6 +43,8 @@ pub struct Ping {
     address: String,
     #[builder(default = "Some(Duration::from_secs(60))")]
     interval: Option<Duration>,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     #[builder(default = "5")]
     pings: usize,
     #[builder(default, setter(strip_option))]
@@ -59,6 +61,7 @@ impl Ping {
         cr: &Rc<cairo::Context>,
         ping: Result<u128>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let text = ping.map_or_else(
             |_| self.formats.disconnected.to_string(),
@@ -86,6 +89,7 @@ impl Ping {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -182,15 +186,18 @@ impl PanelConfig for Ping {
         pinger.add_ipaddr(self.address.as_str());
         let recv = Arc::new(Mutex::new(recv));
         let pinger = Arc::new(Mutex::new(pinger));
+        let paused = Arc::new(Mutex::new(false));
 
         let stream = PingStream {
             pings: self.pings,
             pinger,
             recv,
             interval: self.interval.map(interval),
+            paused: paused.clone(),
+            waker: self.waker.clone(),
             handle: None,
         }
-        .map(move |ping| self.draw(&cr, ping, height));
+        .map(move |ping| self.draw(&cr, ping, height, paused.clone()));
 
         Ok((Box::pin(stream), None))
     }
@@ -201,6 +208,8 @@ struct PingStream {
     pinger: Arc<Mutex<Pinger>>,
     recv: Arc<Mutex<Receiver<PingResult>>>,
     interval: Option<Interval>,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
     handle: Option<JoinHandle<Result<u128>>>,
 }
 
@@ -245,7 +254,10 @@ impl Stream for PingStream {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &mut self.handle {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(handle) = &mut self.handle {
             let value = handle.poll_unpin(cx).map(Result::ok);
             if value.is_ready() {
                 self.handle = None;

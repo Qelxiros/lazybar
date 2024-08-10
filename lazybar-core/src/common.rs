@@ -1,8 +1,14 @@
-use std::{collections::HashMap, hash::BuildHasher, rc::Rc};
+use std::{
+    collections::HashMap,
+    hash::BuildHasher,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use config::Value;
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use pangocairo::functions::show_layout;
 
 use crate::{
@@ -11,8 +17,23 @@ use crate::{
     bar::{Dependence, PanelDrawInfo},
     image::Image,
     remove_array_from_config, remove_bool_from_config,
-    remove_string_from_config, Highlight, Ramp,
+    remove_string_from_config, Highlight, PanelHideFn, PanelShowFn, Ramp,
 };
+
+/// A [`PanelShowFn`] and a [`PanelHideFn`] bundled together. Only for use with
+/// [draw_common].
+pub enum ShowHide {
+    /// This is designed for use with a [`ManagedIntervalStream`], but other
+    /// streams can also work.
+    ///
+    /// The show function sets the bool to false and wakes the Waker. The hide
+    /// function sets the bool to true (indicating paused).
+    Default(Arc<Mutex<bool>>, Arc<AtomicWaker>),
+    /// The functions are provided.
+    Custom(Option<PanelShowFn>, Option<PanelHideFn>),
+    /// The functions are no-ops.
+    None,
+}
 
 /// The end of a typical draw function.
 ///
@@ -30,6 +51,7 @@ pub fn draw_common(
     dependence: Dependence,
     images: Vec<Image>,
     height: i32,
+    show_hide: ShowHide,
 ) -> Result<PanelDrawInfo> {
     let layout = pangocairo::functions::create_layout(cr);
     layout.set_markup(text);
@@ -38,6 +60,26 @@ pub fn draw_common(
 
     let attrs = attrs.clone();
     let bg = attrs.bg.clone().unwrap_or_default();
+
+    let (show, hide): (Option<PanelShowFn>, Option<PanelHideFn>) =
+        match show_hide {
+            ShowHide::Default(paused, waker) => {
+                let paused_ = paused.clone();
+                (
+                    Some(Box::new(move || {
+                        *paused.lock().unwrap() = false;
+                        waker.wake();
+                        Ok(())
+                    })),
+                    Some(Box::new(move || {
+                        *paused_.lock().unwrap() = true;
+                        Ok(())
+                    })),
+                )
+            }
+            ShowHide::Custom(show, hide) => (show, hide),
+            ShowHide::None => (None, None),
+        };
 
     Ok(PanelDrawInfo::new(
         bg.adjust_dims(dims, height),
@@ -64,8 +106,8 @@ pub fn draw_common(
             cr.restore()?;
             Ok(())
         }),
-        Box::new(|| Ok(())),
-        Box::new(|| Ok(())),
+        show,
+        hide,
         None,
     ))
 }

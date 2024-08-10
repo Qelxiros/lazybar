@@ -26,7 +26,7 @@ use x11rb::{
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::InternedAtoms,
@@ -124,6 +124,9 @@ impl XWindow {
             glib::markup_escape_text(name.as_str()).as_str(),
         );
 
+        let conn = self.conn.clone();
+        let conn_ = self.conn.clone();
+
         draw_common(
             cr,
             text.as_str(),
@@ -131,6 +134,24 @@ impl XWindow {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Custom(
+                Some(Box::new(move || {
+                    conn.change_window_attributes(
+                        root,
+                        &ChangeWindowAttributesAux::new()
+                            .event_mask(EventMask::PROPERTY_CHANGE),
+                    )?;
+                    Ok(())
+                })),
+                Some(Box::new(move || {
+                    conn_.change_window_attributes(
+                        root,
+                        &ChangeWindowAttributesAux::new()
+                            .event_mask(EventMask::NO_EVENT),
+                    )?;
+                    Ok(())
+                })),
+            ),
         )
     }
 }

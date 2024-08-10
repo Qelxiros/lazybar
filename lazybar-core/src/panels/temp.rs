@@ -1,16 +1,23 @@
-use std::{fs::File, io::Read, rc::Rc, time::Duration};
+use std::{
+    fs::File,
+    io::Read,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
-use tokio::time::interval;
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use futures::task::AtomicWaker;
+use tokio_stream::StreamExt;
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_uint_from_config, Attrs, PanelConfig, PanelStream, Ramp,
+    remove_uint_from_config, Attrs, ManagedIntervalStream, PanelConfig,
+    PanelStream, Ramp,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -26,6 +33,8 @@ pub struct Temp {
     zone: usize,
     #[builder(default = "Duration::from_secs(10)")]
     interval: Duration,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
     ramp: Ramp,
@@ -37,6 +46,7 @@ impl Temp {
         &self,
         cr: &Rc<cairo::Context>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let mut temp = String::new();
         File::open(format!(
@@ -59,6 +69,7 @@ impl Temp {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -123,8 +134,14 @@ impl PanelConfig for Temp {
     {
         self.attrs.apply_to(&global_attrs);
 
-        let stream = IntervalStream::new(interval(self.interval))
-            .map(move |_| self.draw(&cr, height));
+        let paused = Arc::new(Mutex::new(false));
+
+        let stream = ManagedIntervalStream::builder()
+            .duration(self.interval)
+            .paused(paused.clone())
+            .waker(self.waker.clone())
+            .build()?
+            .map(move |_| self.draw(&cr, height, paused.clone()));
 
         Ok((Box::pin(stream), None))
     }

@@ -4,7 +4,7 @@ use std::{
     rc::Rc,
     str::FromStr,
     sync::{Arc, Mutex},
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
     time::Duration,
 };
 
@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use chrono::{Local, Timelike};
 use config::{Config, Value};
 use derive_builder::Builder;
+use futures::task::AtomicWaker;
 use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedSender},
     time::{interval, Instant, Interval},
@@ -24,7 +25,7 @@ use tokio_stream::{
 use crate::{
     actions::Actions,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_array_from_config, remove_string_from_config, Attrs, PanelConfig,
     PanelStream,
@@ -92,7 +93,7 @@ pub struct Clock {
     #[builder(default)]
     precision: Arc<Mutex<Precision>>,
     #[builder(default)]
-    waker: Arc<Mutex<Option<Waker>>>,
+    waker: Arc<AtomicWaker>,
     idx: Arc<Mutex<(usize, usize)>>,
     formats: Vec<String>,
     precisions: Vec<Precision>,
@@ -106,6 +107,7 @@ impl Clock {
         cr: &Rc<cairo::Context>,
         data: Result<()>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         data?;
         let now = chrono::Local::now();
@@ -120,6 +122,7 @@ impl Clock {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 
@@ -130,7 +133,7 @@ impl Clock {
         precision: Arc<Mutex<Precision>>,
         precisions: &[Precision],
         send: UnboundedSender<EventResponse>,
-        waker: &Arc<Mutex<Option<Waker>>>,
+        waker: &Arc<AtomicWaker>,
     ) -> Result<()> {
         match event {
             Event::Action(value) => {
@@ -152,9 +155,7 @@ impl Clock {
                 *precision = new_precision;
                 drop(precision);
                 if new_precision < old_precision {
-                    if let Some(w) = waker.lock().unwrap().as_ref() {
-                        w.wake_by_ref();
-                    }
+                    waker.wake();
                 }
                 drop(idx);
                 send.send(EventResponse::Ok)?;
@@ -285,10 +286,12 @@ impl PanelConfig for Clock {
         let precision = self.precision.clone();
         let precisions = self.precisions.clone();
         let waker = self.waker.clone();
+        let paused = Arc::new(Mutex::new(false));
         let (event_send, event_recv) = unbounded_channel();
         let (response_send, response_recv) = unbounded_channel();
         let mut map =
             StreamMap::<usize, Pin<Box<dyn Stream<Item = Result<()>>>>>::new();
+
         map.insert(
             0,
             Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
@@ -306,6 +309,7 @@ impl PanelConfig for Clock {
                 )
             })),
         );
+
         map.insert(
             1,
             Box::pin(
@@ -313,13 +317,16 @@ impl PanelConfig for Clock {
                     Precision::tick,
                     self.precision.clone(),
                     self.waker.clone(),
+                    &paused,
                 )
                 .map(|_| Ok(())),
             ),
         );
 
         Ok((
-            Box::pin(map.map(move |(_, data)| self.draw(&cr, data, height))),
+            Box::pin(map.map(move |(_, data)| {
+                self.draw(&cr, data, height, paused.clone())
+            })),
             Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
     }
@@ -330,15 +337,17 @@ struct ClockStream {
     get_duration: fn(Precision) -> Duration,
     shared_precision: Arc<Mutex<Precision>>,
     local_precision: Precision,
-    waker: Arc<Mutex<Option<Waker>>>,
+    waker: Arc<AtomicWaker>,
     interval: Interval,
+    paused: Arc<Mutex<bool>>,
 }
 
 impl ClockStream {
     fn new(
         get_duration: fn(Precision) -> Duration,
         precision: Arc<Mutex<Precision>>,
-        waker: Arc<Mutex<Option<Waker>>>,
+        waker: Arc<AtomicWaker>,
+        paused: &Arc<Mutex<bool>>,
     ) -> Self {
         let local_precision = *precision.lock().unwrap();
         let interval = interval(get_duration(local_precision));
@@ -348,6 +357,7 @@ impl ClockStream {
             local_precision,
             waker,
             interval,
+            paused: paused.clone(),
         }
     }
 
@@ -366,6 +376,9 @@ impl Stream for ClockStream {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Instant>> {
+        if *self.paused.lock().unwrap() {
+            return Poll::Pending;
+        }
         if *self.shared_precision.lock().unwrap() != self.local_precision {
             self.reset();
         }
@@ -373,7 +386,7 @@ impl Stream for ClockStream {
         if ret.is_ready() {
             self.reset();
         } else {
-            *self.waker.lock().unwrap() = Some(cx.waker().clone());
+            self.waker.register(cx.waker());
         }
         ret
     }

@@ -145,14 +145,14 @@ impl Systray {
 
                 Ok(())
             }),
-            Box::new(move || {
+            Some(Box::new(move || {
                 show_conn.map_window(tray)?;
                 Ok(())
-            }),
-            Box::new(move || {
+            })),
+            Some(Box::new(move || {
                 hide_conn.unmap_window(tray)?;
                 Ok(())
-            }),
+            })),
             Some(Box::new(move || {
                 for icon in icons {
                     let _ = shutdown_conn

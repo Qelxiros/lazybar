@@ -19,7 +19,7 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, Attrs, PanelConfig, PanelStream,
 };
@@ -29,6 +29,8 @@ use crate::{
 #[derive(Builder, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
+#[deprecated = "This panel will be removed in a future release. Use \
+                panels::inotify::Inotify instead."]
 pub struct Fanotify {
     name: &'static str,
     path: String,
@@ -58,6 +60,7 @@ impl Fanotify {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::None,
         )
     }
 }

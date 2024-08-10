@@ -12,14 +12,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
-use futures::FutureExt;
+use futures::{task::AtomicWaker, FutureExt};
 use nix::sys::inotify::{self, AddWatchFlags, InitFlags};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon},
+    common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, Attrs, PanelConfig, PanelStream,
 };
@@ -32,6 +32,8 @@ use crate::{
 pub struct Inotify {
     name: &'static str,
     path: String,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
     common: PanelCommon,
@@ -43,6 +45,7 @@ impl Inotify {
         cr: &Rc<cairo::Context>,
         file: &Rc<Mutex<File>>,
         height: i32,
+        paused: Arc<Mutex<bool>>,
     ) -> Result<PanelDrawInfo> {
         let mut buf = String::new();
         file.lock().unwrap().read_to_string(&mut buf)?;
@@ -58,6 +61,7 @@ impl Inotify {
             self.common.dependence,
             self.common.images.clone(),
             height,
+            ShowHide::Default(paused, self.waker.clone()),
         )
     }
 }
@@ -120,9 +124,11 @@ impl PanelConfig for Inotify {
         self.attrs.apply_to(&global_attrs);
 
         let file = Rc::new(Mutex::new(File::open(self.path.clone())?));
+        let paused = Arc::new(Mutex::new(false));
+        let waker = Arc::new(AtomicWaker::new());
         let stream = tokio_stream::once(file.clone())
-            .chain(InotifyStream::new(inotify, file))
-            .map(move |f| self.draw(&cr, &f, height));
+            .chain(InotifyStream::new(inotify, file, paused.clone(), waker))
+            .map(move |f| self.draw(&cr, &f, height, paused.clone()));
 
         Ok((Box::pin(stream), None))
     }
@@ -132,14 +138,23 @@ struct InotifyStream {
     i: Arc<inotify::Inotify>,
     file: Rc<Mutex<File>>,
     handle: Option<JoinHandle<()>>,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
 }
 
 impl InotifyStream {
-    fn new(i: inotify::Inotify, file: Rc<Mutex<File>>) -> Self {
+    fn new(
+        i: inotify::Inotify,
+        file: Rc<Mutex<File>>,
+        paused: Arc<Mutex<bool>>,
+        waker: Arc<AtomicWaker>,
+    ) -> Self {
         Self {
             i: Arc::new(i),
             file,
             handle: None,
+            paused,
+            waker,
         }
     }
 }
@@ -151,7 +166,10 @@ impl Stream for InotifyStream {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        if let Some(handle) = &mut self.handle {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(handle) = &mut self.handle {
             let value = handle.poll_unpin(cx).map(|_| Some(self.file.clone()));
             if value.is_ready() {
                 self.handle = None;

@@ -1,11 +1,24 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use anyhow::Result;
 use config::{Map, Value, ValueKind};
 use csscolorparser::Color;
+use derive_builder::Builder;
+use futures::{task::AtomicWaker, Stream};
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
-use tokio::{io::AsyncWriteExt, net::UnixStream};
+use tokio::{
+    io::AsyncWriteExt,
+    net::UnixStream,
+    time::{interval, Instant, Interval},
+};
 
 use crate::{bar::EventResponse, ipc::ChannelEndpoint, parser};
 
@@ -49,6 +62,88 @@ impl UnixStreamWrapper {
         self.inner.shutdown().await?;
 
         Ok(())
+    }
+}
+
+///Custom [`IntervalStream`]
+///
+/// Similar to [`tokio_stream::wrappers::IntervalStream`], but its interval is
+/// wrapped by a [`Mutex`] and an [`Arc`], so it can be modified externally
+/// (e.g. in a [`PanelShowFn`][crate::PanelShowFn] or
+/// [`PanelHideFn`][crate::PanelHideFn]).
+///
+/// If unset, the interval has a length of 10 seconds.
+///
+/// Make sure to set the interval's
+/// [`MissedTickBehavior`][tokio::time::MissedTickBehavior] appropriately.
+#[derive(Builder)]
+#[builder_struct_attr(allow(missing_docs))]
+#[builder_impl_attr(allow(missing_docs))]
+pub struct ManagedIntervalStream {
+    #[builder(
+        default = "Arc::new(Mutex::new(interval(Duration::from_secs(10))))"
+    )]
+    interval: Arc<Mutex<Interval>>,
+    #[builder(default)]
+    paused: Arc<Mutex<bool>>,
+    #[builder(default)]
+    waker: Arc<AtomicWaker>,
+}
+
+impl ManagedIntervalStream {
+    /// Creates a new instance using the provided parts.
+    pub fn new(
+        interval: Arc<Mutex<Interval>>,
+        paused: Arc<Mutex<bool>>,
+        waker: Arc<AtomicWaker>,
+    ) -> Self {
+        Self {
+            interval,
+            paused,
+            waker,
+        }
+    }
+
+    /// Provides access to the [`ManagedIntervalStreamBuilder`] without an
+    /// additional import.
+    pub fn builder() -> ManagedIntervalStreamBuilder {
+        ManagedIntervalStreamBuilder::default()
+    }
+}
+
+impl Stream for ManagedIntervalStream {
+    type Item = Instant;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else {
+            let val = self.interval.lock().unwrap().poll_tick(cx).map(Some);
+            val
+        }
+    }
+}
+
+impl AsRef<Arc<Mutex<Interval>>> for ManagedIntervalStream {
+    fn as_ref(&self) -> &Arc<Mutex<Interval>> {
+        &self.interval
+    }
+}
+
+impl AsMut<Arc<Mutex<Interval>>> for ManagedIntervalStream {
+    fn as_mut(&mut self) -> &mut Arc<Mutex<Interval>> {
+        &mut self.interval
+    }
+}
+
+impl ManagedIntervalStreamBuilder {
+    /// Set the interval using a [`Duration`] instead of an [`Interval`]
+    pub fn duration(&mut self, duration: Duration) -> &mut Self {
+        self.interval(Arc::new(Mutex::new(interval(duration))))
     }
 }
 

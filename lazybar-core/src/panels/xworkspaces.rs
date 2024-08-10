@@ -146,6 +146,8 @@ impl XWorkspaces {
         let nonempty_highlight = self.highlights.nonempty.clone();
         let inactive_highlight = self.highlights.inactive.clone();
         let images = self.common.images.clone();
+        let conn = self.conn.clone();
+        let conn_ = self.conn.clone();
 
         Ok(PanelDrawInfo::new(
             (width, height),
@@ -225,9 +227,22 @@ impl XWorkspaces {
                 }
                 Ok(())
             }),
-            // TODO: maybe do things here?
-            Box::new(|| Ok(())),
-            Box::new(|| Ok(())),
+            Some(Box::new(move || {
+                conn.change_window_attributes(
+                    root,
+                    &ChangeWindowAttributesAux::new()
+                        .event_mask(EventMask::PROPERTY_CHANGE),
+                )?;
+                Ok(())
+            })),
+            Some(Box::new(move || {
+                conn_.change_window_attributes(
+                    root,
+                    &ChangeWindowAttributesAux::new()
+                        .event_mask(EventMask::NO_EVENT),
+                )?;
+                Ok(())
+            })),
             None,
         ))
     }
