@@ -326,7 +326,7 @@ impl PanelConfig for Clock {
                     Precision::tick,
                     self.precision.clone(),
                     self.waker.clone(),
-                    self.offset.clone(),
+                    self.offset,
                     &paused,
                 )
                 .map(|_| Ok(())),

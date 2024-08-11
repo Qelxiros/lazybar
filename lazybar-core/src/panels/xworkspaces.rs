@@ -431,7 +431,7 @@ impl PanelConfig for XWorkspaces {
                         current_atom,
                         names_atom,
                     ))
-                    .map(|_| Ok(())),
+                    .map(|()| Ok(())),
             ),
         );
 

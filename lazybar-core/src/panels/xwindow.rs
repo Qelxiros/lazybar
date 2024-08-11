@@ -240,7 +240,7 @@ impl PanelConfig for XWindow {
 
         let stream = tokio_stream::once(())
             .chain(XStream::new(self.conn.clone(), name_atom, window_atom))
-            .map(move |_| {
+            .map(move |()| {
                 self.draw(&cr, name_atom, window_atom, root, utf8_atom, height)
             });
         Ok((Box::pin(stream), None))

@@ -434,7 +434,7 @@ impl PanelConfig for Systray {
         Ok((
             Box::pin(XStream::new(self.conn.clone()).filter_map(
                 move |event| {
-                    if let Ok(event) = event {
+                    event.map_or(None, |event| {
                         match self.handle_tray_event(
                             bar_info,
                             &event,
@@ -455,9 +455,7 @@ impl PanelConfig for Systray {
                             Ok(false) => None,
                             Err(e) => Some(Err(e)),
                         }
-                    } else {
-                        None
-                    }
+                    })
                 },
             )),
             None,
@@ -728,7 +726,6 @@ impl Systray {
             protocol::Event::ReparentNotify(event) => {
                 if event.parent == tray_wid {
                     self.resize(tray_wid, None)?;
-                    true
                 } else {
                     let mut removed = None;
                     self.icons.retain(|&w| {
@@ -740,8 +737,8 @@ impl Systray {
                         }
                     });
                     self.resize(tray_wid, removed)?;
-                    true
                 }
+                true
             }
             protocol::Event::DestroyNotify(event) => {
                 let mut destroyed = None;

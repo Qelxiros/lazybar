@@ -579,7 +579,7 @@ pub mod builders {
                     Some(_) = ipc_set.join_next() => {
                         log::debug!("ipc future completed");
                     }
-                    Some(_) = endpoint1.recv.recv() => {
+                    Some(()) = endpoint1.recv.recv() => {
                         bar.shutdown();
                         let _ = endpoint1.send.send(());
                         // this message will never arrive, but it avoids a race condition with the

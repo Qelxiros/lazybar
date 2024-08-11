@@ -92,7 +92,7 @@ pub struct ManagedIntervalStream {
 
 impl ManagedIntervalStream {
     /// Creates a new instance using the provided parts.
-    pub fn new(
+    pub const fn new(
         interval: Arc<Mutex<Interval>>,
         paused: Arc<Mutex<bool>>,
         waker: Arc<AtomicWaker>,
@@ -106,6 +106,7 @@ impl ManagedIntervalStream {
 
     /// Provides access to the [`ManagedIntervalStreamBuilder`] without an
     /// additional import.
+    #[must_use]
     pub fn builder() -> ManagedIntervalStreamBuilder {
         ManagedIntervalStreamBuilder::default()
     }

@@ -451,7 +451,7 @@ impl Bar {
             .collect()
     }
 
-    fn show_panels(&mut self) {
+    fn show_panels(&self) {
         self.left_panels
             .iter()
             .chain(self.center_panels.iter())
@@ -465,7 +465,7 @@ impl Bar {
             });
     }
 
-    fn hide_panels(&mut self) {
+    fn hide_panels(&self) {
         self.left_panels
             .iter()
             .chain(self.center_panels.iter())

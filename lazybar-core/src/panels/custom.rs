@@ -159,7 +159,7 @@ impl PanelConfig for Custom {
                     paused.clone(),
                     self.waker.clone(),
                 )
-                .map(move |_| self.draw(&cr, height, paused.clone())),
+                .map(move |()| self.draw(&cr, height, paused.clone())),
             ),
             None,
         ))
