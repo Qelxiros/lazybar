@@ -40,8 +40,8 @@ use crate::{
     common::{draw_common, PanelCommon, ShowHide},
     image::Image,
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream, Ramp,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
+    PanelConfig, PanelStream, Ramp,
 };
 
 array_to_struct!(PulseaudioFormats, unmuted, muted);
@@ -69,6 +69,8 @@ pub struct Pulseaudio {
     handle: Option<JoinHandle<Result<(Volume, bool)>>>,
     formats: PulseaudioFormats<String>,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     ramps: PulseaudioRamps<Ramp>,
     common: PanelCommon,
 }
@@ -119,6 +121,7 @@ impl Pulseaudio {
         ramp_muted: &Ramp,
         attrs: &Attrs,
         dependence: Dependence,
+        highlight: Option<Highlight>,
         images: Vec<Image>,
         height: i32,
         paused: Arc<Mutex<bool>>,
@@ -146,6 +149,7 @@ impl Pulseaudio {
             text.as_str(),
             attrs,
             dependence,
+            highlight,
             images,
             height,
             ShowHide::Default(paused, waker),
@@ -312,6 +316,8 @@ impl PanelConfig for Pulseaudio {
     ///   - formatting options: `%volume%`, `%ramp%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - `ramp_unmuted`: Shows an icon based on the volume level. See
     ///   [`Ramp::parse`] for parsing details. This ramp is used when the sink
     ///   is unmuted.
@@ -349,11 +355,13 @@ impl PanelConfig for Pulseaudio {
             &["%ramp%%volume%", "%ramp%%volume%"],
         );
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
         let ramps = PanelCommon::parse_ramps(table, &["_unmuted", "_muted"]);
 
         builder.common(common);
         builder.formats(PulseaudioFormats::new(formats));
         builder.attrs(attrs);
+        builder.highlight(highlight);
         builder.ramps(PulseaudioRamps::new(ramps));
 
         Ok(builder.build()?)
@@ -482,6 +490,7 @@ impl PanelConfig for Pulseaudio {
         let format_muted = self.formats.muted.clone();
         let attrs = self.attrs.clone();
         let dependence = self.common.dependence;
+        let highlight = self.highlight.clone();
         let images = self.common.images.clone();
         let paused = self.paused.clone();
         let waker = self.waker.clone();
@@ -536,6 +545,7 @@ impl PanelConfig for Pulseaudio {
                     &ramp_muted,
                     &attrs,
                     dependence,
+                    highlight.clone(),
                     images.clone(),
                     height,
                     paused.clone(),

@@ -24,8 +24,8 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream, Ramp,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
+    PanelConfig, PanelStream, Ramp,
 };
 
 array_to_struct!(PingFormats, connected, disconnected);
@@ -51,6 +51,8 @@ pub struct Ping {
     max_ping: Option<u32>,
     formats: PingFormats<String>,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     ramp: Ramp,
     common: PanelCommon,
 }
@@ -87,6 +89,7 @@ impl Ping {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -122,6 +125,8 @@ impl PanelConfig for Ping {
     ///   - default: 2000
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - `ramp`: A string specifying the ramp to show ping. See [`Ramp::parse`]
     ///   for details.
     /// - See [`PanelCommon::parse_common`].
@@ -158,11 +163,13 @@ impl PanelConfig for Ping {
             &["%ping%ms", "disconnected"],
         );
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
         let ramp = PanelCommon::parse_ramp(table, "");
 
         builder.common(common);
         builder.formats(PingFormats::new(formats));
         builder.attrs(attrs);
+        builder.highlight(highlight);
         builder.ramp(ramp);
 
         Ok(builder.build()?)

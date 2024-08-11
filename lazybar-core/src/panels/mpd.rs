@@ -279,17 +279,17 @@ impl Mpd {
         Ok(PanelDrawInfo::new(
             (size.0, height),
             self.common.dependence,
-            Box::new(move |cr, _, _| {
+            Box::new(move |cr, _| {
                 cr.save()?;
 
                 let offset = if let Some(bg) = &attrs.bg {
                     bg.draw(cr, size.0 as f64, size.1 as f64, height as f64)?
                 } else {
-                    (0.0, false)
+                    0.0
                 };
 
                 cr.save()?;
-                cr.translate(offset.0, 0.0);
+                cr.translate(offset, 0.0);
 
                 cr.set_source_rgba(
                     progress_bg.r,
@@ -310,7 +310,7 @@ impl Mpd {
                     image.draw(cr)?;
                 }
 
-                cr.translate(offset.0, f64::from(height - size.1) / 2.0);
+                cr.translate(offset, f64::from(height - size.1) / 2.0);
 
                 attrs.apply_fg(cr);
                 show_layout(cr, &layout);

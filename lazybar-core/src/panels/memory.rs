@@ -21,7 +21,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     ManagedIntervalStream, PanelConfig, PanelStream,
 };
 
@@ -46,6 +46,8 @@ pub struct Memory {
     formatter: AhoCorasick,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     common: PanelCommon,
 }
 
@@ -225,6 +227,7 @@ impl Memory {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -251,6 +254,8 @@ impl PanelConfig for Memory {
     ///     %percentage_[swap_]{used,free}%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
@@ -271,10 +276,12 @@ impl PanelConfig for Memory {
         let format =
             PanelCommon::parse_format(table, "", "RAM: %percentage_used%");
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
 
         builder.common(common);
         builder.format(format.leak());
         builder.attrs(attrs);
+        builder.highlight(highlight);
 
         builder.formatter(AhoCorasick::new([
             "%gb_total%",

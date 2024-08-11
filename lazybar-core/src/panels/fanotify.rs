@@ -58,6 +58,7 @@ impl Fanotify {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            None,
             self.common.images.clone(),
             height,
             ShowHide::None,

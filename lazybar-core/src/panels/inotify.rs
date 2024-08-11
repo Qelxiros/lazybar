@@ -21,7 +21,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, Attrs, PanelConfig, PanelStream,
+    remove_string_from_config, Attrs, Highlight, PanelConfig, PanelStream,
 };
 
 /// Uses inotify to monitor and display the contents of a file. Useful for
@@ -36,6 +36,8 @@ pub struct Inotify {
     waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     common: PanelCommon,
 }
 
@@ -59,6 +61,7 @@ impl Inotify {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -79,6 +82,8 @@ impl PanelConfig for Inotify {
     ///   - formatting options: `%file%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
@@ -96,10 +101,12 @@ impl PanelConfig for Inotify {
         let common = PanelCommon::parse_common(table)?;
         let format = PanelCommon::parse_format(table, "", "%file%");
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
 
         builder.common(common);
         builder.format(format.leak());
         builder.attrs(attrs);
+        builder.highlight(highlight);
 
         Ok(builder.build()?)
     }

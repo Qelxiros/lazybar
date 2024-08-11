@@ -122,7 +122,7 @@ impl Systray {
         PanelDrawInfo::new(
             (self.width as i32, self.height as i32),
             self.common.dependence,
-            Box::new(move |_, x, y| {
+            Box::new(move |_, x| {
                 if let Some((window, mapped)) = pending {
                     config_conn.reparent_window(
                         window,
@@ -140,7 +140,7 @@ impl Systray {
 
                 config_conn.configure_window(
                     tray,
-                    &ConfigureWindowAux::new().x(x as i32).y(y as i32),
+                    &ConfigureWindowAux::new().x(x as i32).y(0),
                 )?;
 
                 Ok(())
@@ -188,8 +188,8 @@ impl Systray {
 
     fn resize(&mut self, tray: Window, removed: Option<usize>) -> Result<()> {
         let len = self.icons.len();
-        self.width = ((len * self.icon_size as usize
-            + (len - 1) * self.icon_padding as usize)
+        self.width = ((len
+            * (self.icon_size as usize + self.icon_padding as usize))
             as u16)
             .max(1);
 
@@ -432,22 +432,34 @@ impl PanelConfig for Systray {
         self.conn.flush()?;
 
         Ok((
-            Box::pin(XStream::new(self.conn.clone()).map(move |event| {
-                if let Ok(event) = event {
-                    self.handle_tray_event(
-                        bar_info,
-                        &event,
-                        selection_wid,
-                        tray_wid,
-                        root,
-                        tray_selection_atom,
-                        info_atom,
-                        systray_opcode_atom,
-                        xembed_atom,
-                    )?;
-                };
-                Ok(self.draw(tray_wid, selection_wid, root, bar_info))
-            })),
+            Box::pin(XStream::new(self.conn.clone()).filter_map(
+                move |event| {
+                    if let Ok(event) = event {
+                        match self.handle_tray_event(
+                            bar_info,
+                            &event,
+                            selection_wid,
+                            tray_wid,
+                            root,
+                            tray_selection_atom,
+                            info_atom,
+                            systray_opcode_atom,
+                            xembed_atom,
+                        ) {
+                            Ok(true) => Some(Ok(self.draw(
+                                tray_wid,
+                                selection_wid,
+                                root,
+                                bar_info,
+                            ))),
+                            Ok(false) => None,
+                            Err(e) => Some(Err(e)),
+                        }
+                    } else {
+                        None
+                    }
+                },
+            )),
             None,
         ))
     }
@@ -469,9 +481,9 @@ impl Systray {
         systray_opcode_atom: Atom,
         // _XEMBED
         xembed_atom: Atom,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         log::trace!("systray event: {event:?}");
-        match event {
+        let redraw_needed = match event {
             // https://x.org/releases/X11R7.7/doc/xorg-docs/icccm/icccm.html#Acquiring_Selection_Ownership
             protocol::Event::PropertyNotify(event) => {
                 if self.time_start == 0 {
@@ -502,6 +514,7 @@ impl Systray {
                             ],
                         ),
                     )?;
+                    true
                 } else if event.atom == info_atom {
                     let window = event.window;
                     let xembed_info = self
@@ -521,6 +534,9 @@ impl Systray {
                             self.conn.unmap_window(window)?;
                         }
                     };
+                    true
+                } else {
+                    false
                 }
             }
             protocol::Event::ClientMessage(event) => {
@@ -528,7 +544,7 @@ impl Systray {
                 if ty == systray_opcode_atom {
                     let data = event.data.as_data32();
                     if data[1] != 0 {
-                        return Ok(());
+                        return Ok(false);
                     }
                     let window = data[2];
 
@@ -649,6 +665,8 @@ impl Systray {
                     )?;
 
                     self.pending.push((window, mapped));
+
+                    true
                 } else if ty == xembed_atom {
                     let data = event.data.as_data32();
                     let time = data[0];
@@ -701,11 +719,16 @@ impl Systray {
                         }
                         _ => {}
                     }
+
+                    false
+                } else {
+                    false
                 }
             }
             protocol::Event::ReparentNotify(event) => {
                 if event.parent == tray_wid {
                     self.resize(tray_wid, None)?;
+                    true
                 } else {
                     let mut removed = None;
                     self.icons.retain(|&w| {
@@ -717,6 +740,7 @@ impl Systray {
                         }
                     });
                     self.resize(tray_wid, removed)?;
+                    true
                 }
             }
             protocol::Event::DestroyNotify(event) => {
@@ -730,6 +754,7 @@ impl Systray {
                     }
                 });
                 self.resize(tray_wid, destroyed)?;
+                true
             }
             protocol::Event::ConfigureNotify(event) => {
                 if event.window != tray_wid
@@ -743,9 +768,11 @@ impl Systray {
                             .height(self.icon_size as u32),
                     )?;
                 }
+                true
             }
             protocol::Event::SelectionClear(event) => {
                 self.time_end = event.time;
+                false
             }
             protocol::Event::KeyPress(mut event)
             | protocol::Event::KeyRelease(mut event) => {
@@ -758,13 +785,14 @@ impl Systray {
                         event,
                     )?;
                 }
+                false
             }
-            _ => {}
-        }
+            _ => false,
+        };
 
         self.conn.flush()?;
 
-        Ok(())
+        Ok(redraw_needed)
     }
 }
 

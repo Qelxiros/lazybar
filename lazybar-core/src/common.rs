@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// A [`PanelShowFn`] and a [`PanelHideFn`] bundled together. Only for use with
-/// [draw_common].
+/// [`draw_common`].
 pub enum ShowHide {
     /// This is designed for use with a [`ManagedIntervalStream`], but other
     /// streams can also work.
@@ -49,6 +49,7 @@ pub fn draw_common(
     text: &str,
     attrs: &Attrs,
     dependence: Dependence,
+    highlight: Option<Highlight>,
     images: Vec<Image>,
     height: i32,
     show_hide: ShowHide,
@@ -84,7 +85,7 @@ pub fn draw_common(
     Ok(PanelDrawInfo::new(
         bg.adjust_dims(dims, height),
         dependence,
-        Box::new(move |cr, _, _| {
+        Box::new(move |cr, _| {
             let offset =
                 bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
 
@@ -93,14 +94,14 @@ pub fn draw_common(
             }
 
             cr.save()?;
-            cr.translate(
-                offset.0,
-                if offset.1 {
-                    (height - dims.1) as f64 / 2.0
-                } else {
-                    0.0
-                },
-            );
+
+            cr.translate(offset, 0.0);
+            if let Some(ref highlight) = highlight {
+                highlight.draw(cr, height as f64, dims.0 as f64)?;
+            }
+
+            cr.translate(0.0, (height - dims.1) as f64 / 2.0);
+
             attrs.apply_fg(cr);
             show_layout(cr, &layout);
             cr.restore()?;

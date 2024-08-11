@@ -19,8 +19,8 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, PanelConfig,
-    PanelStream,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
+    PanelConfig, PanelStream,
 };
 
 /// Runs a custom command with `sh -c <command>`, either once or on a given
@@ -39,6 +39,8 @@ pub struct Custom {
     waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     common: PanelCommon,
 }
 
@@ -66,6 +68,7 @@ impl Custom {
             text.trim(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -90,6 +93,8 @@ impl PanelConfig for Custom {
     ///   - formatting options: `%stdout%`, `%stderr%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
@@ -121,12 +126,14 @@ impl PanelConfig for Custom {
         let common = PanelCommon::parse_common(table)?;
         let format = PanelCommon::parse_format(table, "", "%stdout%");
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
 
         Ok(builder
             .name(name)
             .common(common)
             .format(format.leak())
             .attrs(attrs)
+            .highlight(highlight)
             .build()?)
     }
 

@@ -76,6 +76,7 @@ impl PanelConfig for Separator {
                 self.format,
                 &self.attrs,
                 self.common.dependence,
+                None,
                 self.common.images.clone(),
                 height,
                 ShowHide::None,

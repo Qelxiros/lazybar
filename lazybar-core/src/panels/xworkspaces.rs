@@ -152,7 +152,7 @@ impl XWorkspaces {
         Ok(PanelDrawInfo::new(
             (width, height),
             self.common.dependence,
-            Box::new(move |cr, _, _| {
+            Box::new(move |cr, _| {
                 for image in &images {
                     image.draw(cr)?;
                 }
@@ -191,22 +191,13 @@ impl XWorkspaces {
                     };
 
                     cr.save()?;
+                    highlight.draw(
+                        cr,
+                        height as f64,
+                        2.0f64.mul_add(offset, f64::from(size.0)),
+                    )?;
 
-                    cr.rectangle(
-                        0.0,
-                        f64::from(height) - highlight.height,
-                        2.0f64.mul_add(offset.0, f64::from(size.0)),
-                        highlight.height,
-                    );
-                    cr.set_source_rgba(
-                        highlight.color.r,
-                        highlight.color.g,
-                        highlight.color.b,
-                        highlight.color.a,
-                    );
-                    cr.fill()?;
-
-                    cr.translate(offset.0, f64::from(height - size.1) / 2.0);
+                    cr.translate(offset, f64::from(height - size.1) / 2.0);
 
                     match i {
                         WorkspaceState::Active => active.apply_fg(cr),
@@ -218,10 +209,8 @@ impl XWorkspaces {
                     cr.restore()?;
 
                     cr.translate(
-                        2.0f64.mul_add(
-                            offset.0,
-                            f64::from(layout.pixel_size().0),
-                        ),
+                        2.0f64
+                            .mul_add(offset, f64::from(layout.pixel_size().0)),
                         0.0,
                     );
                 }

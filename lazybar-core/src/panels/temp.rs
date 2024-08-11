@@ -16,8 +16,8 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_uint_from_config, Attrs, ManagedIntervalStream, PanelConfig,
-    PanelStream, Ramp,
+    remove_uint_from_config, Attrs, Highlight, ManagedIntervalStream,
+    PanelConfig, PanelStream, Ramp,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -37,6 +37,8 @@ pub struct Temp {
     waker: Arc<AtomicWaker>,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     ramp: Ramp,
     common: PanelCommon,
 }
@@ -67,6 +69,7 @@ impl Temp {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -90,6 +93,8 @@ impl PanelConfig for Temp {
     ///   - default: 0
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - `ramp`: A string specifying the ramp to show internal temperature. See
     ///   [`Ramp::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
@@ -111,11 +116,13 @@ impl PanelConfig for Temp {
         let common = PanelCommon::parse_common(table)?;
         let format = PanelCommon::parse_format(table, "", "TEMP: %temp%");
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
         let ramp = PanelCommon::parse_ramp(table, "");
 
         builder.common(common);
         builder.format(format.leak());
         builder.attrs(attrs);
+        builder.highlight(highlight);
         builder.ramp(ramp);
 
         Ok(builder.build()?)

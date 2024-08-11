@@ -1,3 +1,4 @@
+use anyhow::Result;
 use csscolorparser::Color;
 
 use crate::{parser, remove_color_from_config, remove_float_from_config};
@@ -5,10 +6,14 @@ use crate::{parser, remove_color_from_config, remove_float_from_config};
 /// Describes a bar to be drawn below a workspace name
 #[derive(Clone, Debug, Default)]
 pub struct Highlight {
-    /// the height in pixels of the bar
-    pub height: f64,
-    /// the color of the bar
-    pub color: Color,
+    /// the height in pixels of the top highlight
+    pub overline_height: f64,
+    /// the color of the top highlight
+    pub overline_color: Color,
+    /// the height in pixels of the bottom highlight
+    pub underline_height: f64,
+    /// the color of the bottom highlight
+    pub underline_color: Color,
 }
 
 impl Highlight {
@@ -19,9 +24,51 @@ impl Highlight {
     #[must_use]
     pub const fn empty() -> Self {
         Self {
-            height: 0.0,
-            color: Color::new(0.0, 0.0, 0.0, 1.0),
+            overline_height: 0.0,
+            overline_color: Color::new(0.0, 0.0, 0.0, 1.0),
+            underline_height: 0.0,
+            underline_color: Color::new(0.0, 0.0, 0.0, 1.0),
         }
+    }
+
+    /// Draws the {over,under}lines associated with this highlight.
+    ///
+    /// The current point of `cr` should have the same x coordinate as the left
+    /// edge of the expected rectangles.
+    pub fn draw(
+        &self,
+        cr: &cairo::Context,
+        bar_height: f64,
+        width: f64,
+    ) -> Result<()> {
+        cr.save()?;
+
+        cr.rectangle(0.0, 0.0, width, self.overline_height);
+        cr.set_source_rgba(
+            self.overline_color.r,
+            self.overline_color.g,
+            self.overline_color.b,
+            self.overline_color.a,
+        );
+        cr.fill()?;
+
+        cr.rectangle(
+            0.0,
+            bar_height - self.underline_height,
+            width,
+            self.underline_height,
+        );
+        cr.set_source_rgba(
+            self.underline_color.r,
+            self.underline_color.g,
+            self.underline_color.b,
+            self.underline_color.a,
+        );
+        cr.fill()?;
+
+        cr.restore()?;
+
+        Ok(())
     }
 
     /// Parses a new instance from a subset of the global
@@ -43,12 +90,38 @@ impl Highlight {
             .clone()
             .into_table()
             .ok()?;
-        let height = remove_float_from_config("height", &mut highlight_table)
-            .unwrap_or(0.0);
 
-        let color = remove_color_from_config("color", &mut highlight_table)
-            .unwrap_or_else(|| "#0000".parse().unwrap());
+        let overline_height =
+            remove_float_from_config("overline_height", &mut highlight_table)
+                .unwrap_or(0.0);
 
-        Some(Self { height, color })
+        let overline_color =
+            remove_color_from_config("overline_color", &mut highlight_table)
+                .unwrap_or(Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                });
+
+        let underline_height =
+            remove_float_from_config("underline_height", &mut highlight_table)
+                .unwrap_or(0.0);
+
+        let underline_color =
+            remove_color_from_config("underline_color", &mut highlight_table)
+                .unwrap_or(Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                });
+
+        Some(Self {
+            overline_height,
+            overline_color,
+            underline_height,
+            underline_color,
+        })
     }
 }

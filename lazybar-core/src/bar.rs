@@ -265,8 +265,6 @@ pub struct Panel {
     pub draw_info: Option<PanelDrawInfo>,
     /// The current x-coordinate of the panel
     pub x: f64,
-    /// The current y-coordinate of the panel
-    pub y: f64,
     /// The name of the panel (taken from the name of the toml table that
     /// defines it)
     pub name: &'static str,
@@ -290,7 +288,6 @@ impl Panel {
         Self {
             draw_info,
             x: 0.0,
-            y: 0.0,
             name,
             visible,
             last_status: false,
@@ -879,8 +876,8 @@ impl Bar {
                         start_x: panel.x,
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
+                    self.cr.translate(panel.x, 0.0);
+                    (draw_info.draw_fn)(&self.cr, panel.x)?;
                 }
 
                 self.surface.flush();
@@ -906,8 +903,8 @@ impl Bar {
                         start_x: panel.x,
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
+                    self.cr.translate(panel.x, 0.0);
+                    (draw_info.draw_fn)(&self.cr, panel.x)?;
                 }
 
                 self.surface.flush();
@@ -933,8 +930,8 @@ impl Bar {
                         start_x: panel.x,
                         end_x: panel.x + f64::from(draw_info.width),
                     })?;
-                    self.cr.translate(panel.x, panel.y);
-                    (draw_info.draw_fn)(&self.cr, panel.x, panel.y)?;
+                    self.cr.translate(panel.x, 0.0);
+                    (draw_info.draw_fn)(&self.cr, panel.x)?;
                 }
 
                 self.surface.flush();
@@ -990,12 +987,9 @@ impl Bar {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
                 let x = self.extents.left;
-                let y =
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
                 panel.x = x;
-                panel.y = y;
-                self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr, x, y)?;
+                self.cr.translate(x, 0.0);
+                (draw_info.draw_fn)(&self.cr, x)?;
                 self.extents.left += f64::from(draw_info.width);
                 self.cr.restore()?;
             }
@@ -1101,12 +1095,9 @@ impl Bar {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
                 let x = self.extents.center.1;
-                let y =
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
                 panel.x = x;
-                panel.y = y;
-                self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr, x, y)?;
+                self.cr.translate(x, 0.0);
+                (draw_info.draw_fn)(&self.cr, x)?;
                 self.extents.center.1 += f64::from(draw_info.width);
                 self.cr.restore()?;
             }
@@ -1172,12 +1163,9 @@ impl Bar {
             if let Some(draw_info) = &panel.draw_info {
                 self.cr.save()?;
                 let x = temp;
-                let y =
-                    f64::from(i32::from(self.height) - draw_info.height) / 2.0;
                 panel.x = x;
-                panel.y = y;
-                self.cr.translate(x, y);
-                (draw_info.draw_fn)(&self.cr, x, y)?;
+                self.cr.translate(x, 0.0);
+                (draw_info.draw_fn)(&self.cr, x)?;
                 temp += f64::from(draw_info.width);
                 self.cr.restore()?;
             }

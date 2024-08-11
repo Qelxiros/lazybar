@@ -19,7 +19,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     ManagedIntervalStream, PanelConfig, PanelStream, Ramp,
 };
 
@@ -43,6 +43,8 @@ pub struct Cpu {
     last_load: Load,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     ramp: Ramp,
     common: PanelCommon,
 }
@@ -77,6 +79,7 @@ impl Cpu {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -102,6 +105,8 @@ impl PanelConfig for Cpu {
     ///   - formatting options: `%percentage%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - `ramp`: A string specifying the ramp to show CPU usage. See
     ///   [`Ramp::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
@@ -129,6 +134,7 @@ impl PanelConfig for Cpu {
         builder.common(common);
         builder.format(format.leak());
         builder.attrs(attr);
+        builder.highlight(PanelCommon::parse_highlight(table, ""));
         builder.ramp(ramp);
 
         Ok(builder.build()?)

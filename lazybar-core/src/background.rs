@@ -132,19 +132,21 @@ impl Bg {
         width: f64,
         text_height: f64,
         max_height: f64,
-    ) -> Result<(f64, bool)> {
+    ) -> Result<f64> {
         if width == 0.0 {
-            return Ok((0.0, false));
+            return Ok(0.0);
         }
         cr.save()?;
         let offset = match self {
-            Self::None => (0.0, false),
+            Self::None => 0.0,
             Self::Bubble {
                 radius,
                 border,
                 color,
             } => {
                 let total_width = width + 2.0 * border;
+
+                cr.save()?;
 
                 cr.move_to(*radius, 0.0);
                 cr.rel_line_to(total_width - 2.0 * radius, 0.0);
@@ -165,7 +167,9 @@ impl Bg {
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
                 cr.fill()?;
 
-                (border.max(0.0), true)
+                cr.restore()?;
+
+                border.max(0.0)
             }
             Self::BubbleLeft {
                 radius,
@@ -173,6 +177,8 @@ impl Bg {
                 color,
             } => {
                 let total_width = width + 2.0 * border;
+
+                cr.save()?;
 
                 cr.move_to(*radius, 0.0);
                 cr.rel_line_to(total_width - radius, 0.0);
@@ -185,7 +191,9 @@ impl Bg {
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
                 cr.fill()?;
 
-                (border.max(0.0), true)
+                cr.restore()?;
+
+                border.max(0.0)
             }
             Self::BubbleRight {
                 radius,
@@ -193,6 +201,8 @@ impl Bg {
                 color,
             } => {
                 let total_width = width + 2.0 * border;
+
+                cr.save()?;
 
                 cr.move_to(0.0, 0.0);
                 cr.rel_line_to(total_width - radius, 0.0);
@@ -211,11 +221,15 @@ impl Bg {
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
                 cr.fill()?;
 
-                (border.max(0.0), true)
+                cr.restore()?;
+
+                border.max(0.0)
             }
             Self::BubbleProp { radius, color } => {
                 let border = (max_height - text_height) / 2.0;
                 let total_width = 2.0f64.mul_add(border, width);
+
+                cr.save()?;
 
                 cr.move_to(*radius, 0.0);
                 cr.rel_line_to(total_width - 2.0 * radius, 0.0);
@@ -236,7 +250,9 @@ impl Bg {
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
                 cr.fill()?;
 
-                (border.max(0.0), true)
+                cr.restore()?;
+
+                border.max(0.0)
             }
         };
 

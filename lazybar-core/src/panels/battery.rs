@@ -21,7 +21,7 @@ use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
     common::{draw_common, PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs,
+    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     ManagedIntervalStream, PanelConfig, PanelStream, Ramp,
 };
 
@@ -42,6 +42,8 @@ pub struct Battery {
     waker: Arc<AtomicWaker>,
     formats: BatteryFormats<String>,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     ramp: Ramp,
     common: PanelCommon,
 }
@@ -101,6 +103,7 @@ impl Battery {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
@@ -144,6 +147,8 @@ impl PanelConfig for Battery {
     ///   - default: 10
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - `ramp`: A string specifying the ramp to show battery level. See
     ///   [`Ramp::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
@@ -185,6 +190,7 @@ impl PanelConfig for Battery {
 
         builder.formats(BatteryFormats::new(formats));
         builder.attrs(PanelCommon::parse_attr(table, ""));
+        builder.highlight(PanelCommon::parse_highlight(table, ""));
         builder.ramp(PanelCommon::parse_ramp(table, ""));
 
         builder.common(common);

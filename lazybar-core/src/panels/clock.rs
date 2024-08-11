@@ -122,6 +122,7 @@ impl Clock {
             text.as_str(),
             &self.attrs[self.idx.lock().unwrap().0],
             self.common.dependence,
+            None,
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),

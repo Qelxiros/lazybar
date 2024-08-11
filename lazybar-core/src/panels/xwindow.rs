@@ -30,7 +30,7 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::InternedAtoms,
-    Attrs, PanelConfig, PanelStream,
+    Attrs, Highlight, PanelConfig, PanelStream,
 };
 
 /// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
@@ -48,6 +48,8 @@ pub struct XWindow {
     max_width: Option<u32>,
     format: &'static str,
     attrs: Attrs,
+    #[builder(default, setter(strip_option))]
+    highlight: Option<Highlight>,
     common: PanelCommon,
 }
 
@@ -132,6 +134,7 @@ impl XWindow {
             text.as_str(),
             &self.attrs,
             self.common.dependence,
+            self.highlight.clone(),
             self.common.images.clone(),
             height,
             ShowHide::Custom(
@@ -170,6 +173,8 @@ impl PanelConfig for XWindow {
     ///   - formatting options: `%name%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
+    /// - `highlight`: A string specifying the highlight for the panel. See
+    ///   [`Highlight::parse`] for details.
     /// - See [`PanelCommon::parse_common`].
     fn parse(
         name: &'static str,
@@ -194,10 +199,12 @@ impl PanelConfig for XWindow {
         let common = PanelCommon::parse_common(table)?;
         let format = PanelCommon::parse_format(table, "", "%name%");
         let attrs = PanelCommon::parse_attr(table, "");
+        let highlight = PanelCommon::parse_highlight(table, "");
 
         builder.common(common);
         builder.format(format.leak());
         builder.attrs(attrs);
+        builder.highlight(highlight);
 
         Ok(builder.build()?)
     }

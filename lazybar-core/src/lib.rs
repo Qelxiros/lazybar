@@ -49,6 +49,9 @@
 #![doc = include_str!("../examples/config.toml")]
 //! ```
 #![deny(missing_docs)]
+// use log macros
+#![deny(clippy::print_stdout)]
+#![deny(clippy::print_stderr)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::cast_possible_truncation)]
@@ -116,7 +119,7 @@ use x::{create_surface, create_window, set_wm_properties};
 /// [`cairo::Context`] will have its current point set to the top left corner of
 /// the panel. The second and third parameters are the x and y coordinates of
 /// that point relative to the top left corner of the bar.
-pub type PanelDrawFn = Box<dyn Fn(&cairo::Context, f64, f64) -> Result<()>>;
+pub type PanelDrawFn = Box<dyn Fn(&cairo::Context, f64) -> Result<()>>;
 /// A function that will be called whenever the panel is shown. Use this to
 /// resume polling, remap a child window, or make any other state changes that
 /// can be cheaply reversed.
@@ -180,9 +183,10 @@ pub trait PanelConfig {
 }
 
 /// Describes where on the screen the bar should appear.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Position {
     /// The top of the screen
+    #[default]
     Top,
     /// The bottom of the screen
     Bottom,
