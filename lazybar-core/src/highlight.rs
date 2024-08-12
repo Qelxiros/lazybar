@@ -31,6 +31,22 @@ impl Highlight {
         }
     }
 
+    /// Creates a new instance.
+    #[must_use]
+    pub const fn new(
+        overline_height: f64,
+        overline_color: Color,
+        underline_height: f64,
+        underline_color: Color,
+    ) -> Self {
+        Self {
+            overline_height,
+            overline_color,
+            underline_height,
+            underline_color,
+        }
+    }
+
     /// Draws the {over,under}lines associated with this highlight.
     ///
     /// The current point of `cr` should have the same x coordinate as the left
@@ -43,28 +59,32 @@ impl Highlight {
     ) -> Result<()> {
         cr.save()?;
 
-        cr.rectangle(0.0, 0.0, width, self.overline_height);
-        cr.set_source_rgba(
-            self.overline_color.r,
-            self.overline_color.g,
-            self.overline_color.b,
-            self.overline_color.a,
-        );
-        cr.fill()?;
+        if self.overline_height > 0.0 {
+            cr.rectangle(0.0, 0.0, width, self.overline_height);
+            cr.set_source_rgba(
+                self.overline_color.r,
+                self.overline_color.g,
+                self.overline_color.b,
+                self.overline_color.a,
+            );
+            cr.fill()?;
+        }
 
-        cr.rectangle(
-            0.0,
-            bar_height - self.underline_height,
-            width,
-            self.underline_height,
-        );
-        cr.set_source_rgba(
-            self.underline_color.r,
-            self.underline_color.g,
-            self.underline_color.b,
-            self.underline_color.a,
-        );
-        cr.fill()?;
+        if self.underline_height > 0.0 {
+            cr.rectangle(
+                0.0,
+                bar_height - self.underline_height,
+                width,
+                self.underline_height,
+            );
+            cr.set_source_rgba(
+                self.underline_color.r,
+                self.underline_color.g,
+                self.underline_color.b,
+                self.underline_color.a,
+            );
+            cr.fill()?;
+        }
 
         cr.restore()?;
 

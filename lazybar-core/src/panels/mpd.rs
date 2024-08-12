@@ -35,7 +35,7 @@ use crate::{
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
-    IndexCache, ManagedIntervalStream, PanelConfig, PanelStream,
+    Highlight, IndexCache, ManagedIntervalStream, PanelConfig, PanelStream,
 };
 
 #[derive(Clone, Debug)]
@@ -273,6 +273,21 @@ impl Mpd {
         let bar_width = self.last_progress_width;
         let attrs = self.attrs.clone();
         let progress_bg = self.progress_bg.clone();
+        let highlight = if bar_width > 0.0 {
+            Some(Highlight::new(
+                height as f64,
+                progress_bg,
+                0.0,
+                Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                },
+            ))
+        } else {
+            None
+        };
         let images = self.common.images.clone();
         let paused_ = paused.clone();
 
@@ -288,23 +303,14 @@ impl Mpd {
                     0.0
                 };
 
-                cr.save()?;
-                cr.translate(offset, 0.0);
+                if let Some(ref highlight) = highlight {
+                    cr.save()?;
 
-                cr.set_source_rgba(
-                    progress_bg.r,
-                    progress_bg.g,
-                    progress_bg.b,
-                    progress_bg.a,
-                );
-                cr.rectangle(
-                    bar_start,
-                    0.0,
-                    bar_width.min(bar_max_width),
-                    height as f64,
-                );
-                cr.fill()?;
-                cr.restore()?;
+                    cr.translate(bar_start, 0.0);
+                    highlight.draw(cr, height as f64, bar_width)?;
+
+                    cr.restore()?;
+                }
 
                 for image in &images {
                     image.draw(cr)?;
