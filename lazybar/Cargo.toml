@@ -1,6 +1,6 @@
 [package]
 name = "lazybar"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
 rust-version = "1.79.0"
@@ -35,7 +35,7 @@ xworkspaces = ["lazybar-core/xworkspaces"]
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["cargo"] }
 clap_complete = "4.5.8"
-lazybar-core = { version = "0.4.1", default-features = false, path = "../lazybar-core" }
+lazybar-core = { version = "0.5.0", default-features = false, path = "../lazybar-core" }
 log = "0.4.22"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
 simple_logger = "5.0.0"
