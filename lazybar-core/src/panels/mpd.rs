@@ -79,6 +79,7 @@ array_to_struct!(
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Mpd {
     name: &'static str,
+    address: &'static str,
     conn: Arc<Mutex<Client>>,
     noidle_conn: Arc<Mutex<Client>>,
     #[builder(setter(strip_option))]
@@ -527,6 +528,15 @@ impl Mpd {
         );
         Ok(send.send(result)?)
     }
+
+    fn reconnect(&self, addr: &str) -> Result<()> {
+        *self.conn.lock().unwrap() = Client::connect(addr)?;
+        *self.noidle_conn.lock().unwrap() = Client::connect(addr)?;
+        if let Some(ref highlight_conn) = self.highlight_conn {
+            *highlight_conn.lock().unwrap() = Client::connect(addr)?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait(?Send)]
@@ -640,18 +650,20 @@ impl PanelConfig for Mpd {
             final_address = address;
         }
 
-        builder.conn(Arc::new(Mutex::new(Client::connect(
-            final_address.as_str(),
-        )?)));
+        let final_address = final_address.leak();
+
+        builder.address(final_address);
+
+        builder.conn(Arc::new(Mutex::new(Client::connect(&*final_address)?)));
         builder.noidle_conn(Arc::new(Mutex::new(Client::connect(
-            final_address.as_str(),
+            &*final_address,
         )?)));
         if let Some(progress_bar) =
             remove_bool_from_config("progress_bar", table)
         {
             builder.progress_bar(progress_bar);
             builder.highlight_conn(Arc::new(Mutex::new(Client::connect(
-                final_address.as_str(),
+                &*final_address,
             )?)));
         }
 
@@ -835,7 +847,7 @@ impl PanelConfig for Mpd {
         Ok((
             Box::pin(map.map(move |(t, r)| {
                 r?;
-                self.draw(
+                let val = self.draw(
                     &cr,
                     height,
                     t,
@@ -845,7 +857,17 @@ impl PanelConfig for Mpd {
                         progress_waker.clone(),
                         scroll_waker.clone(),
                     ],
-                )
+                );
+                if let Err(ref e) = val {
+                    if let Some(mpd::error::Error::Io(_)) =
+                        e.downcast_ref::<mpd::error::Error>()
+                    {
+                        if let Err(e) = self.reconnect(self.address) {
+                            log::error!("mpd panel failed to reconnect: {e}");
+                        }
+                    }
+                }
+                val
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),
         ))
