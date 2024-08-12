@@ -1,24 +1,60 @@
-[bars.example]
+[bars.top]
+monitor = "eDP-1"
 position = "top"
 height = 36
-transparent = true
-bg = "#0000"
+transparent = true # allows for transparency
+bg = "#0000" # rgba format is required for transparency
 default_attrs = "default"
 margin_left = 10
 margin_internal = 10
 margin_right = 10
+ipc = true
 panels_left = ["xwindow"]
 panels_center = ["clock"]
-panels_right = ["pulseaudio","first_separator","network","separator","battery"]
+panels_right = ["pulseaudio","separator","network","separator","battery"]
+
+[bars.bottom]
+monitor = "eDP-1"
+position = "bottom"
+height = 36
+transparent = true
+bg = "#0000"
+default_attrs = "default"
+margin_left = 0
+margin_internal = 10
+margin_right = 10
 ipc = true
+panels_left = ["xworkspaces"]
+panels_center = ["mpd"]
+panels_right = ["temp","separator","cpu","separator","memory","separator","systray"]
+
+[highlights.cyan]
+underline_height = 5
+underline_color = "#0ff"
 
 [attrs.default]
 bg = "default"
 fg = "#ccc"
-font = "FiraCode Nerd Font 10"
+font = "FiraCode Nerd Font Mono 10"
+
+[attrs.none]
+bg = "none"
 
 [attrs.manual]
 bg = "manual"
+
+[attrs.mpd]
+bg = "none"
+fg = "#fff"
+
+[attrs.active_blocks]
+bg = "active"
+[attrs.nonempty_blocks]
+bg = "nonempty"
+fg = "#aaa"
+[attrs.inactive_blocks]
+bg = "inactive"
+fg = "#777"
 
 [bgs.default]
 style = "bubble_prop"
@@ -31,15 +67,67 @@ border = 8
 radius = 12
 color = "#000"
 
+# bubble backgrounds with a radius of 0 are rectangles
+[bgs.active]
+style = "bubble_prop"
+radius = 0
+color = "#444"
+
+[bgs.inactive]
+style = "bubble_prop"
+radius = 0
+color = "#0000"
+
+[bgs.nonempty]
+style = "bubble_prop"
+radius = 0
+color = "#0000"
+
+[bgs.none]
+style = "none"
+
+[panels.xworkspaces]
+type = "xworkspaces"
+attrs_active = "active_blocks"
+attrs_nonempty = "nonempty_blocks"
+attrs_inactive = "inactive_blocks"
+highlight_active = "cyan"
+
 [panels.xwindow]
 type = "xwindow"
 max_width = 100
 
+[panels.temp]
+type = "temp"
+format = "<span foreground='#0ff'>TEMP</span> %temp%°C"
+zone = 7
+interval = 2
+
+# systray has known issues with bars that aren't transparent
+[panels.systray]
+type = "systray"
+size = 24
+padding = 0
+sort = "window_name_lower"
+
+[panels.memory]
+type = "memory"
+format = "<span foreground='#0ff'>RAM</span> %percentage_used%%"
+
+[panels.cpu]
+type = "cpu"
+format = "<span foreground='#0ff'>CPU</span> %percentage%%"
+interval = 2
+
 [panels.pulseaudio]
 type = "pulseaudio"
 attrs = "manual"
-ramp = "pa"
+ramp_unmuted = "pa"
 ramp_muted = "pa_muted"
+click_left = "toggle"
+scroll_up = "increment"
+scroll_down = "decrement"
+unit = 1
 
 [panels.network]
 type = "network"
@@ -50,29 +138,38 @@ format_disconnected = "<span foreground='#0ff'>%ifname%</span> <span foreground=
 
 [panels.mpd]
 type = "mpd"
+fg = "#fff"
+attrs = "mpd"
 progress_bar = true
 max_width = 30
 strategy = "scroll"
-scroll_interval = 1000
+scroll_interval = 300
+format_playing = "%shuffle% %main% <span font_size='20pt' rise='-5pt'>%prev% %toggle% %next%</span>"
+format_paused = "%shuffle% %main% <span font_size='20pt' rise='-5pt'>%prev% %toggle% %next%</span>"
+format_main = "%title% - %artist%"
+format_shuffle = "<span font_size='25pt' rise='-7.5pt'>󰒟</span>"
+format_prev = "󰒮"
+format_toggle_playing = "󰏤"
+format_toggle_paused = "󰐊"
+format_next = "󰒭"
 
 [panels.battery]
 type = "battery"
+format_full = "<span foreground='#0ff'>chom</span>"
 
 [panels.clock]
 type = "clock"
-precision = "seconds"
-formats = ["<span foreground='#0ff'>%Y-%m-%d %T</span>", "<span foreground='#f00'>%Y-%m-%d %T</span>"]
-click-left = "cycle"
+precisions = ["seconds","minutes"]
+# toggle seconds
+formats = ["<span foreground='#0ff'>%Y-%m-%d %T</span>","<span foreground='#0ff'>%Y-%m-%d %H:%M</span>"]
+click_left = "cycle"
+click_right = "cycle_back"
 
 [panels.separator]
 type = "separator"
-format = "<span font='FiraCode Nerd Font Mono 13' foreground='#666'>  //  </span>"
-dependence = "right"
-
-[panels.first_separator]
-type = "separator"
-format = "<span font='FiraCode Nerd Font Mono 13' foreground='#666'>  //  </span>"
-dependence = "both"
+attrs = "none"
+format = " "
+dependence = "left"
 
 [ramps.pa]
 0 = "<span font_size='25pt' rise='-7.5pt'>󰕿</span> "
