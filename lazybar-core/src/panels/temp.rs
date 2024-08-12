@@ -24,7 +24,7 @@ use crate::{
 ///
 /// The thermal zone meanings are listed in
 /// `/sys/class/thermal/thermal_zone*/type`.
-#[derive(Debug, Builder)]
+#[derive(Debug, Builder, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Temp {

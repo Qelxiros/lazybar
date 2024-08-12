@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Attributes of a panel, or the defaults for the bar.
-#[derive(Builder, Clone, Default, Debug)]
+#[derive(Builder, Clone, Default, Debug, PartialEq, PartialOrd)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Attrs {

@@ -8,6 +8,7 @@ use std::{
 use anyhow::Result;
 use config::Value;
 use derive_builder::Builder;
+use derive_debug::Dbg;
 use futures::task::AtomicWaker;
 use pangocairo::functions::show_layout;
 
@@ -22,6 +23,7 @@ use crate::{
 
 /// A [`PanelShowFn`] and a [`PanelHideFn`] bundled together. Only for use with
 /// [`draw_common`].
+#[derive(Dbg)]
 pub enum ShowHide {
     /// This is designed for use with a [`ManagedIntervalStream`], but other
     /// streams can also work.
@@ -30,6 +32,7 @@ pub enum ShowHide {
     /// function sets the bool to true (indicating paused).
     Default(Arc<Mutex<bool>>, Arc<AtomicWaker>),
     /// The functions are provided.
+    #[dbg(skip)]
     Custom(Option<PanelShowFn>, Option<PanelHideFn>),
     /// The functions are no-ops.
     None,

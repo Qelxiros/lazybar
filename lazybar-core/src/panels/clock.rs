@@ -85,7 +85,7 @@ impl FromStr for Precision {
 ///
 /// Available actions: `cycle` and `cycle_back` to change the format that is
 /// used
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Clock {

@@ -4,7 +4,7 @@ use crate::{parser, remove_string_from_config};
 
 /// Utility data structure to display one of several strings based on a value in
 /// a range, like a volume icon.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Ramp {
     icons: Vec<String>,
 }
@@ -65,14 +65,6 @@ impl Ramp {
             key += 1;
         }
         Some(Self { icons })
-    }
-}
-
-impl Default for Ramp {
-    fn default() -> Self {
-        Self {
-            icons: vec![String::new()],
-        }
     }
 }
 

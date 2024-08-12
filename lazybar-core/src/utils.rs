@@ -28,6 +28,7 @@ lazy_static! {
 
 /// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
 /// results through a channel.
+#[derive(Debug)]
 pub struct UnixStreamWrapper {
     inner: UnixStream,
     endpoint: ChannelEndpoint<String, EventResponse>,
@@ -76,7 +77,7 @@ impl UnixStreamWrapper {
 ///
 /// Make sure to set the interval's
 /// [`MissedTickBehavior`][tokio::time::MissedTickBehavior] appropriately.
-#[derive(Builder)]
+#[derive(Builder, Clone, Debug)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct ManagedIntervalStream {

@@ -28,7 +28,7 @@ lazy_static! {
         Regex::new(r"cpu\s*(?<user>\d+) (?<nice>\d+) (?<system>\d+) (?<idle>\d+) \d+ \d+ \d+ (?<steal>\d+)").unwrap();
 }
 
-#[derive(Builder)]
+#[derive(Debug, Clone, Builder)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 /// Display information about CPU usage based on `/proc/stat`

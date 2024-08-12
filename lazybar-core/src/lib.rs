@@ -94,7 +94,7 @@ mod x;
 
 use std::{
     collections::HashMap,
-    fmt::Display,
+    fmt::{Debug, Display},
     pin::Pin,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -151,7 +151,7 @@ pub(crate) type IpcStream = Pin<
 /// The trait implemented by all panels. Provides support for parsing a panel
 /// and turning it into a [`PanelStream`].
 #[async_trait(?Send)]
-pub trait PanelConfig {
+pub trait PanelConfig: Debug {
     /// Parses an instance of this type from a subset of the global [`Config`].
     fn parse(
         name: &'static str,
@@ -183,7 +183,7 @@ pub trait PanelConfig {
 }
 
 /// Describes where on the screen the bar should appear.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub enum Position {
     /// The top of the screen
     #[default]
@@ -193,7 +193,7 @@ pub enum Position {
 }
 
 /// Describes where on the bar a panel should appear.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Alignment {
     /// The left of the bar
     Left,
@@ -214,7 +214,7 @@ impl Display for Alignment {
 }
 
 /// Describes the position and size of a clickable button.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ButtonIndex {
     /// The name of the button.
     pub name: String,
@@ -227,7 +227,7 @@ pub struct ButtonIndex {
 }
 
 /// Describes the minimum width of gaps around panel groups.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Default)]
 pub struct Margins {
     /// The distance in pixels from the left side of the screen to the start
     /// of the leftmost panel.
@@ -281,7 +281,7 @@ pub mod builders {
     /// A set of options for a bar.
     ///
     /// See [`parser::parse`][crate::parser::parse] for configuration details.
-    #[derive(Builder)]
+    #[derive(Builder, Debug)]
     #[builder_struct_attr(allow(missing_docs))]
     #[builder_impl_attr(allow(missing_docs))]
     #[builder(pattern = "owned")]

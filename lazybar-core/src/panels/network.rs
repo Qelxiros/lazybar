@@ -32,7 +32,7 @@ array_to_struct!(NetworkFormats, connected, disconnected);
 
 /// Displays information about the current network connection on a given
 /// interface.
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Network {

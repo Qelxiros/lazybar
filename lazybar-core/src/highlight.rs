@@ -4,7 +4,7 @@ use csscolorparser::Color;
 use crate::{parser, remove_color_from_config, remove_float_from_config};
 
 /// Describes a bar to be drawn below a workspace name
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
 pub struct Highlight {
     /// the height in pixels of the top highlight
     pub overline_height: f64,

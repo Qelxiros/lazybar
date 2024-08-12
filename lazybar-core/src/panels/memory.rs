@@ -32,7 +32,7 @@ lazy_static! {
 
 /// Displays memory/swap usage based on information from (by default)
 /// `/proc/meminfo`
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Memory {

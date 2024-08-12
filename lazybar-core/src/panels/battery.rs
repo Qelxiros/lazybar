@@ -26,7 +26,7 @@ use crate::{
 };
 
 /// Shows the current battery level.
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 #[allow(dead_code)]

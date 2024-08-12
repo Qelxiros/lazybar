@@ -52,7 +52,7 @@ enum WorkspaceState {
 /// Display information about workspaces
 ///
 /// Requires an EWMH-compliant window manager
-#[derive(Clone, Builder)]
+#[derive(Clone, Debug, Builder)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct XWorkspaces {

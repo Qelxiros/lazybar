@@ -7,7 +7,7 @@ use derive_builder::Builder;
 use crate::remove_string_from_config;
 
 /// A map from mouse buttons to panel events
-#[derive(Debug, Clone, Default, Builder)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Builder)]
 pub struct Actions {
     /// The event that should be run when the panel is left-clicked
     #[builder(default = "String::new()")]

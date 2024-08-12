@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// The configuration options for a panel background
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum Bg {
     /// No background will be drawn for the panel.

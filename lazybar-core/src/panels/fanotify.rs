@@ -28,7 +28,7 @@ use crate::{
 
 /// Uses fanotify to monitor and display the contents of a file. Useful for
 /// one-off scripts that can write to a file easily.
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 #[deprecated = "This panel will be removed in a future release. Use \

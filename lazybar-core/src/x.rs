@@ -65,6 +65,7 @@ pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
     Ok(conn.intern_atom(true, atom)?.reply()?.atom)
 }
 
+#[derive(Debug)]
 pub struct XStream {
     conn: Arc<XCBConnection>,
     handle: Option<JoinHandle<Result<Event>>>,
@@ -375,7 +376,7 @@ pub fn set_wm_properties(
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct xcb_visualtype_t {
     pub visual_id: u32,

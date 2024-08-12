@@ -48,6 +48,7 @@ macro_rules! array_to_struct {
 macro_rules! interned_atoms {
     ($name:ident, $ref:expr, $($atoms:ident,)+) => {
         #[allow(non_snake_case)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name {
             $(
                 $atoms: ::std::primitive::u32,

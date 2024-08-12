@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use csscolorparser::Color;
+use derive_debug::Dbg;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -81,13 +82,14 @@ struct Extents {
     right: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Which neighbor(s) a panel depends on to be shown
 ///
 /// If a panel is dependent on another panel with non-None dependence, it will
 /// not be shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Dependence {
     /// The panel will always be shown
+    #[default]
     None,
     /// The panel will be shown if its left neighbor has a nonzero width
     Left,
@@ -98,6 +100,7 @@ pub enum Dependence {
 }
 
 /// Information describing how to draw/redraw a [`Panel`].
+#[derive(Dbg)]
 pub struct PanelDrawInfo {
     /// The width in pixels of the panel.
     pub width: i32,
@@ -108,15 +111,26 @@ pub struct PanelDrawInfo {
     /// A [`FnMut`] that draws the panel to the [`cairo::Context`], starting at
     /// (0, 0). Translating the Context is the responsibility of functions in
     /// this module.
+    #[dbg(placeholder = "..")]
     pub draw_fn: PanelDrawFn,
     /// The function to be run when the panel is shown.
+    #[dbg(formatter = "fmt_option")]
     pub show_fn: Option<PanelShowFn>,
     /// The function to be run when the panel is hidden.
+    #[dbg(formatter = "fmt_option")]
     pub hide_fn: Option<PanelHideFn>,
     /// The function to be run before the panel is destroyed. This function
     /// should run as quickly as possible because the shutdown functions
     /// for all panels are held to a time limit.
+    #[dbg(formatter = "fmt_option")]
     pub shutdown: Option<PanelShutdownFn>,
+}
+
+fn fmt_option<T>(value: &Option<T>) -> &'static str {
+    match value {
+        Some(_) => "Some(..)",
+        None => "None",
+    }
 }
 
 impl PanelDrawInfo {
@@ -180,9 +194,10 @@ impl From<&Panel> for PanelStatus {
 /// A button that can be linked to an action for a panel
 ///
 /// Note: scrolling direction may be incorrect depending on your configuration
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Default)]
 pub enum MouseButton {
     /// The left mouse button
+    #[default]
     Left,
     /// The middle mouse button
     Middle,
@@ -220,7 +235,7 @@ impl MouseButton {
 }
 
 /// A mouse event that can be passed to a panel
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Default)]
 pub struct MouseEvent {
     /// The button that was pressed (or scrolled)
     pub button: MouseButton,
@@ -231,7 +246,7 @@ pub struct MouseEvent {
 }
 
 /// An event that can be passed to a panel
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum Event {
     /// A mouse event
     Mouse(MouseEvent),
@@ -240,7 +255,9 @@ pub enum Event {
 }
 
 /// A response to an event
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub enum EventResponse {
     /// The event executed normally
     Ok,
@@ -260,6 +277,7 @@ impl Display for EventResponse {
 }
 
 /// A panel on the bar
+#[derive(Debug)]
 pub struct Panel {
     /// How to draw the panel.
     pub draw_info: Option<PanelDrawInfo>,
@@ -296,10 +314,11 @@ impl Panel {
     }
 }
 
-#[allow(dead_code)]
 /// The bar itself.
 ///
 /// See [`parser::parse`][crate::parser::parse] for configuration details.
+#[allow(dead_code)]
+#[derive(Dbg)]
 pub struct Bar {
     pub(crate) name: String,
     position: Position,
@@ -317,6 +336,7 @@ pub struct Bar {
     pub(crate) left_panels: Vec<Panel>,
     pub(crate) center_panels: Vec<Panel>,
     pub(crate) right_panels: Vec<Panel>,
+    #[dbg(placeholder = "..")]
     pub(crate) streams: StreamMap<Alignment, StreamMap<usize, PanelStream>>,
     pub(crate) ipc: bool,
     mapped: bool,

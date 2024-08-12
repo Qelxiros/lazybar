@@ -39,8 +39,8 @@ use crate::{
     PanelConfig, PanelStream,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortMethod {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum SortMethod {
     Arrival(bool),
     WindowName(bool),
     WindowNameLower(bool),
@@ -58,7 +58,7 @@ impl SortMethod {
 
 /// Display icons from some applications. See
 /// <https://specifications.freedesktop.org/systemtray-spec/> for details.
-#[derive(Builder)]
+#[derive(Debug, Builder, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Systray {

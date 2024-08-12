@@ -35,7 +35,7 @@ array_to_struct!(PingFormats, connected, disconnected);
 /// Requires the `cap_net_raw` capability. See
 /// <https://man7.org/linux/man-pages/man7/capabilities.7.html> for more
 /// details.
-#[derive(Builder, Debug)]
+#[derive(Builder, Debug, Clone)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Ping {

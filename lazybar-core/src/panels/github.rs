@@ -39,7 +39,7 @@ lazy_static! {
 }
 
 /// Displays the number of github notifications you have.
-#[derive(Builder)]
+#[derive(Debug, Clone, Builder)]
 #[builder_struct_attr(allow(missing_docs))]
 #[builder_impl_attr(allow(missing_docs))]
 pub struct Github {
