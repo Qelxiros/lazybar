@@ -72,3 +72,27 @@ impl<T, U> ChannelEndpoint<T, U> {
         Self { send, recv }
     }
 }
+
+impl<T, U> AsRef<UnboundedSender<T>> for ChannelEndpoint<T, U> {
+    fn as_ref(&self) -> &UnboundedSender<T> {
+        &self.send
+    }
+}
+
+impl<T, U> AsMut<UnboundedSender<T>> for ChannelEndpoint<T, U> {
+    fn as_mut(&mut self) -> &mut UnboundedSender<T> {
+        &mut self.send
+    }
+}
+
+impl<T, U> AsRef<UnboundedReceiver<U>> for ChannelEndpoint<T, U> {
+    fn as_ref(&self) -> &UnboundedReceiver<U> {
+        &self.recv
+    }
+}
+
+impl<T, U> AsMut<UnboundedReceiver<U>> for ChannelEndpoint<T, U> {
+    fn as_mut(&mut self) -> &mut UnboundedReceiver<U> {
+        &mut self.recv
+    }
+}

@@ -68,10 +68,22 @@ impl Ramp {
     }
 }
 
+impl From<Vec<String>> for Ramp {
+    fn from(icons: Vec<String>) -> Self {
+        Self { icons }
+    }
+}
+
 impl FromIterator<String> for Ramp {
     fn from_iter<T: IntoIterator<Item = String>>(iter: T) -> Self {
         Self {
             icons: iter.into_iter().collect(),
         }
+    }
+}
+
+impl Extend<String> for Ramp {
+    fn extend<T: IntoIterator<Item = String>>(&mut self, iter: T) {
+        self.icons.extend(iter);
     }
 }
