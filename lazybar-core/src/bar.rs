@@ -499,43 +499,6 @@ impl Bar {
             });
     }
 
-    fn process_show_hide_events(
-        panels: &mut [Panel],
-        statuses: &[PanelStatus],
-    ) {
-        assert_eq!(panels.len(), statuses.len());
-        let mut hidden = Vec::new();
-        let mut shown = Vec::new();
-        panels
-            .iter_mut()
-            .zip(statuses.iter())
-            .for_each(|(panel, &status)| {
-                if panel.draw_info.is_some()
-                    && panel.last_status
-                    && status != PanelStatus::Shown
-                {
-                    hidden.push(panel.draw_info.as_ref().unwrap());
-                }
-                if panel.draw_info.is_some()
-                    && !panel.last_status
-                    && status == PanelStatus::Shown
-                {
-                    shown.push(panel.draw_info.as_ref().unwrap());
-                }
-                panel.last_status = status == PanelStatus::Shown;
-            });
-        for draw_info in hidden {
-            if let Some(ref hide) = draw_info.hide_fn {
-                let _ = hide();
-            }
-        }
-        for draw_info in shown {
-            if let Some(ref show) = draw_info.show_fn {
-                let _ = show();
-            }
-        }
-    }
-
     /// Handle an event from the X server.
     pub fn process_event(&mut self, event: &protocol::Event) -> Result<()> {
         match event {
@@ -627,8 +590,22 @@ impl Bar {
                 _ => unreachable!(),
             } {
                 match &caps["message"] {
-                    "show" => target.visible = true,
-                    "hide" => target.visible = false,
+                    "show" => {
+                        if let Some(ref draw_info) = target.draw_info {
+                            if let Some(ref f) = draw_info.show_fn {
+                                f()?;
+                            }
+                        }
+                        target.visible = true;
+                    }
+                    "hide" => {
+                        if let Some(ref draw_info) = target.draw_info {
+                            if let Some(ref f) = draw_info.hide_fn {
+                                f()?;
+                            }
+                        }
+                        target.visible = false;
+                    }
                     "toggle" => target.visible = !target.visible,
                     message => {
                         return Err(anyhow!("Unknown message {message}"))
@@ -990,11 +967,6 @@ impl Bar {
 
         let statuses = Self::apply_dependence(self.left_panels.as_slice());
 
-        Self::process_show_hide_events(
-            self.left_panels.as_mut_slice(),
-            statuses.as_slice(),
-        );
-
         for panel in self
             .left_panels
             .iter_mut()
@@ -1030,11 +1002,6 @@ impl Bar {
         let center_statuses =
             Self::apply_dependence(self.center_panels.as_slice());
 
-        Self::process_show_hide_events(
-            self.center_panels.as_mut_slice(),
-            center_statuses.as_slice(),
-        );
-
         let center_panels = self
             .center_panels
             .iter_mut()
@@ -1047,11 +1014,6 @@ impl Bar {
 
         let right_statuses =
             Self::apply_dependence(self.right_panels.as_slice());
-
-        Self::process_show_hide_events(
-            self.right_panels.as_mut_slice(),
-            right_statuses.as_slice(),
-        );
 
         let right_panels = self
             .right_panels
@@ -1145,11 +1107,6 @@ impl Bar {
         let statuses = statuses.unwrap_or_else(|| {
             Self::apply_dependence(self.right_panels.as_slice())
         });
-
-        Self::process_show_hide_events(
-            self.right_panels.as_mut_slice(),
-            statuses.as_slice(),
-        );
 
         let total_width = f64::from(
             self.right_panels
