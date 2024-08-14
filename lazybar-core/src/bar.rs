@@ -289,8 +289,6 @@ pub struct Panel {
     /// Whether the panel is visible. To set this value on startup, see
     /// [`PanelCommon`][crate::common::PanelCommon].
     pub visible: bool,
-    // true if PanelStatus::Shown, false otherwise
-    last_status: bool,
     endpoint: Option<Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>>,
 }
 
@@ -308,7 +306,6 @@ impl Panel {
             x: 0.0,
             name,
             visible,
-            last_status: false,
             endpoint: endpoint.map(|e| Arc::new(Mutex::new(e))),
         }
     }

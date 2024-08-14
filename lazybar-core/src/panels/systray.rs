@@ -429,6 +429,8 @@ impl PanelConfig for Systray {
             &CreatePictureAux::new(),
         )?;
 
+        self.conn.map_window(tray_wid)?;
+
         self.conn.flush()?;
 
         Ok((
@@ -521,16 +523,15 @@ impl Systray {
                             false, window, info_atom, info_atom, 0, 64,
                         )?
                         .reply()?;
-                    if let Some(mapped) = xembed_info
+                    if let Some(0) = xembed_info
                         .value32()
                         .context("Invalid reply from X server")?
                         .nth(1)
+                        .map(|m| m & 0x1)
                     {
-                        if mapped & 0x1 == 1 {
-                            self.conn.map_window(window)?;
-                        } else {
-                            self.conn.unmap_window(window)?;
-                        }
+                        self.conn.unmap_window(window)?;
+                    } else {
+                        self.conn.map_window(window)?;
                     };
                     true
                 } else {
