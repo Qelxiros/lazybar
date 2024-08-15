@@ -1,6 +1,6 @@
 [package]
 name = "lazybar-msg"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
 edition = "2021"
 rust-version = "1.79.0"
@@ -15,7 +15,7 @@ categories = ["os::linux-apis","os::unix-apis","command-line-utilities","asynchr
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["cargo", "derive"] }
 clap_complete = "4.5.8"
-lazybar-core = { version = "0.5.0", path = "../lazybar-core" }
+lazybar-core = { version = "0.5.1", path = "../lazybar-core" }
 log = "0.4.22"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
