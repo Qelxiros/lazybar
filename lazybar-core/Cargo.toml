@@ -39,7 +39,7 @@ async-trait = "0.1.81"
 cairo-rs = { version = "0.20.0", features = ["png", "xcb"] }
 chrono = { version = "0.4.38", default-features = false, features = ["alloc", "clock"], optional = true }
 config = { version = "0.14.0", default-features = false, features = ["toml"] }
-csscolorparser = "0.6.2"
+csscolorparser = "0.7.0"
 derive-debug = "0.1.2"
 derive_builder = "0.20.0"
 fastping-rs = { version = "0.2.4", optional = true }

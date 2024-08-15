@@ -62,10 +62,10 @@ impl Highlight {
         if self.overline_height > 0.0 {
             cr.rectangle(0.0, 0.0, width, self.overline_height);
             cr.set_source_rgba(
-                self.overline_color.r,
-                self.overline_color.g,
-                self.overline_color.b,
-                self.overline_color.a,
+                self.overline_color.r.into(),
+                self.overline_color.g.into(),
+                self.overline_color.b.into(),
+                self.overline_color.a.into(),
             );
             cr.fill()?;
         }
@@ -78,10 +78,10 @@ impl Highlight {
                 self.underline_height,
             );
             cr.set_source_rgba(
-                self.underline_color.r,
-                self.underline_color.g,
-                self.underline_color.b,
-                self.underline_color.a,
+                self.underline_color.r.into(),
+                self.underline_color.g.into(),
+                self.underline_color.b.into(),
+                self.underline_color.a.into(),
             );
             cr.fill()?;
         }

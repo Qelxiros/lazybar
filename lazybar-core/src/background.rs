@@ -164,7 +164,12 @@ impl Bg {
                 cr.rel_line_to(0.0, 2.0 * radius - max_height);
                 cr.arc(*radius, *radius, *radius, PI, -PI / 2.0);
 
-                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.set_source_rgba(
+                    color.r.into(),
+                    color.g.into(),
+                    color.b.into(),
+                    color.a.into(),
+                );
                 cr.fill()?;
 
                 cr.restore()?;
@@ -188,7 +193,12 @@ impl Bg {
                 cr.rel_line_to(0.0, 2.0 * radius - max_height);
                 cr.arc(*radius, *radius, *radius, PI, -PI / 2.0);
 
-                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.set_source_rgba(
+                    color.r.into(),
+                    color.g.into(),
+                    color.b.into(),
+                    color.a.into(),
+                );
                 cr.fill()?;
 
                 cr.restore()?;
@@ -218,7 +228,12 @@ impl Bg {
                 cr.rel_line_to(radius - total_width, 0.0);
                 cr.rel_line_to(0.0, max_height);
 
-                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.set_source_rgba(
+                    color.r.into(),
+                    color.g.into(),
+                    color.b.into(),
+                    color.a.into(),
+                );
                 cr.fill()?;
 
                 cr.restore()?;
@@ -247,7 +262,12 @@ impl Bg {
                 cr.rel_line_to(0.0, 2.0 * radius - max_height);
                 cr.arc(*radius, *radius, *radius, PI, -PI / 2.0);
 
-                cr.set_source_rgba(color.r, color.g, color.b, color.a);
+                cr.set_source_rgba(
+                    color.r.into(),
+                    color.g.into(),
+                    color.b.into(),
+                    color.a.into(),
+                );
                 cr.fill()?;
 
                 cr.restore()?;

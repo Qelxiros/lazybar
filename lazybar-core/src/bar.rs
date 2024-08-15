@@ -701,8 +701,12 @@ impl Bar {
     fn redraw_background(&self, scope: &Region) -> Result<()> {
         self.cr.save()?;
         self.cr.set_operator(cairo::Operator::Source);
-        self.cr
-            .set_source_rgba(self.bg.r, self.bg.g, self.bg.b, self.bg.a);
+        self.cr.set_source_rgba(
+            self.bg.r.into(),
+            self.bg.g.into(),
+            self.bg.b.into(),
+            self.bg.a.into(),
+        );
         match scope {
             Region::Left => self.cr.rectangle(
                 0.0,

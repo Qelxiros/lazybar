@@ -101,7 +101,12 @@ impl Attrs {
     /// Sets the foreground (usually text) color of a [`cairo::Context`].
     pub fn apply_fg(&self, cr: &cairo::Context) {
         if let Some(fg) = &self.fg {
-            cr.set_source_rgba(fg.r, fg.g, fg.b, fg.a);
+            cr.set_source_rgba(
+                fg.r.into(),
+                fg.g.into(),
+                fg.b.into(),
+                fg.a.into(),
+            );
         }
     }
 
