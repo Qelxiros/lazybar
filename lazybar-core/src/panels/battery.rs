@@ -36,6 +36,8 @@ pub struct Battery {
     battery: String,
     #[builder(default = r#"String::from("AC")"#)]
     adapter: String,
+    #[builder(default, setter(strip_option))]
+    full_at: Option<u8>,
     #[builder(default = "Duration::from_secs(10)")]
     duration: Duration,
     #[builder(default)]
@@ -61,42 +63,48 @@ impl Battery {
         ))?;
         let mut capacity = String::new();
         capacity_f.read_to_string(&mut capacity)?;
-
-        let mut status_f = File::open(format!(
-            "/sys/class/power_supply/{}/status",
-            self.battery
-        ))?;
-        let mut status = String::new();
-        status_f.read_to_string(&mut status)?;
-
-        let text = match status.trim() {
-            "Charging" => self
-                .formats
-                .charging
-                .replace("%percentage%", capacity.trim()),
-            "Discharging" => self
-                .formats
-                .discharging
-                .replace("%percentage%", capacity.trim()),
-            "Not charging" => self
-                .formats
-                .not_charging
-                .replace("%percentage%", capacity.trim()),
-            "Full" => {
+        let capacity_val = capacity.trim().parse::<u8>()?;
+        let text =
+            if self.full_at.is_some_and(|full_at| capacity_val > full_at) {
                 self.formats.full.replace("%percentage%", capacity.trim())
+            } else {
+                let mut status_f = File::open(format!(
+                    "/sys/class/power_supply/{}/status",
+                    self.battery
+                ))?;
+                let mut status = String::new();
+                status_f.read_to_string(&mut status)?;
+
+                match status.trim() {
+                    "Charging" => self
+                        .formats
+                        .charging
+                        .replace("%percentage%", capacity.trim()),
+                    "Discharging" => self
+                        .formats
+                        .discharging
+                        .replace("%percentage%", capacity.trim()),
+                    "Not charging" => self
+                        .formats
+                        .not_charging
+                        .replace("%percentage%", capacity.trim()),
+                    "Full" => self
+                        .formats
+                        .full
+                        .replace("%percentage%", capacity.trim()),
+                    "Unknown" => self
+                        .formats
+                        .unknown
+                        .replace("%percentage%", capacity.trim()),
+                    _ => String::from("Unknown battery state"),
+                }
             }
-            "Unknown" => self
-                .formats
-                .unknown
-                .replace("%percentage%", capacity.trim()),
-            _ => String::from("Unknown battery state"),
-        }
-        .replace(
-            "%ramp%",
-            self.ramp
-                .choose(capacity.trim().parse::<u32>()?, 0, 100)
-                .as_str(),
-        );
+            .replace(
+                "%ramp%",
+                self.ramp
+                    .choose(capacity.trim().parse::<u32>()?, 0, 100)
+                    .as_str(),
+            );
 
         draw_common(
             cr,
@@ -122,23 +130,26 @@ impl PanelConfig for Battery {
     /// - `adapter`: specify which adapter to monitor
     ///   - default: "AC"
     ///   - currently unused
-    /// - `charging_format`: format string when the battery is charging
+    /// - `full_at`: specify the minimum percentage to use `format_full`. If
+    ///   set, ignores the `status` file when the battery percentage is above
+    ///   the provided value.
+    /// - `format_charging`: format string when the battery is charging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "CHG: %percentage%%"
-    /// - `discharging_format`: format string when the battery is discharging
+    /// - `format_discharging`: format string when the battery is discharging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "DSCHG: %percentage%%"
-    /// - `not_charging_format`: format string when the battery is not charging
+    /// - `format_not_charging`: format string when the battery is not charging
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "NCHG: %percentage%%"
-    /// - `full_format`: format string when the battery is full
+    /// - `format_full`: format string when the battery is full
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "FULL: %percentage%%"
-    /// - `unknown_format`: format string when the battery is unknown
+    /// - `format_unknown`: format string when the battery is unknown
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "%percentage%%"
@@ -165,6 +176,9 @@ impl PanelConfig for Battery {
         }
         if let Some(adapter) = remove_string_from_config("adapter", table) {
             builder.adapter(adapter);
+        }
+        if let Some(full_at) = remove_uint_from_config("full_at", table) {
+            builder.full_at(full_at.min(100) as u8);
         }
         if let Some(duration) = remove_uint_from_config("interval", table) {
             builder.duration(Duration::from_secs(duration));
