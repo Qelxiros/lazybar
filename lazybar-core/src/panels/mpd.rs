@@ -308,7 +308,11 @@ impl Mpd {
                     cr.save()?;
 
                     cr.translate(bar_start, 0.0);
-                    highlight.draw(cr, height as f64, bar_width)?;
+                    highlight.draw(
+                        cr,
+                        height as f64,
+                        bar_width.min(bar_max_width),
+                    )?;
 
                     cr.restore()?;
                 }
