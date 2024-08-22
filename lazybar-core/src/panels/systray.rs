@@ -28,7 +28,9 @@ use x11rb::{
 };
 
 use crate::{
-    bar::{self, BarInfo, Event, EventResponse, PanelDrawInfo},
+    bar::{
+        self, BarInfo, Cursor, CursorInfo, Event, EventResponse, PanelDrawInfo,
+    },
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
@@ -161,6 +163,7 @@ impl Systray {
                 }
                 let _ = shutdown_conn.destroy_window(selection);
             })),
+            CursorInfo::Static(Cursor::Default),
         )
     }
 

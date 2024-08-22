@@ -7,7 +7,7 @@ use derive_builder::Builder;
 
 use crate::{
     bar::{Event, EventResponse},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     Attrs, PanelConfig, PanelStream,
 };
@@ -71,7 +71,7 @@ impl PanelConfig for Separator {
         self.attrs.apply_to(&global_attrs);
 
         Ok((
-            Box::pin(tokio_stream::once(draw_common(
+            Box::pin(tokio_stream::once(self.common.draw(
                 &cr,
                 self.format,
                 &self.attrs,

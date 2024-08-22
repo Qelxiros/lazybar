@@ -34,7 +34,9 @@ use x11rb::{
 use crate::{
     array_to_struct,
     background::Bg,
-    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    bar::{
+        Cursor, CursorInfo, Event, EventResponse, MouseButton, PanelDrawInfo,
+    },
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
@@ -120,11 +122,11 @@ impl XWorkspaces {
             })
             .collect();
 
-        let mut width_cache = width_cache.lock().unwrap();
-        width_cache.clear();
+        let mut cache = width_cache.lock().unwrap();
+        cache.clear();
         for l in &layouts {
             let size = l.1.pixel_size();
-            width_cache.push(
+            cache.push(
                 match l.0 {
                     WorkspaceState::Active => &self.attrs.active,
                     WorkspaceState::Nonempty => &self.attrs.nonempty,
@@ -136,8 +138,8 @@ impl XWorkspaces {
                 .0,
             );
         }
-        let width = width_cache.iter().sum::<i32>();
-        drop(width_cache);
+        let width = cache.iter().sum::<i32>();
+        drop(cache);
 
         let active = self.attrs.active.clone();
         let nonempty = self.attrs.nonempty.clone();
@@ -148,6 +150,9 @@ impl XWorkspaces {
         let images = self.common.images.clone();
         let conn = self.conn.clone();
         let conn_ = self.conn.clone();
+
+        let cursor_conn = self.conn.clone();
+        let width_cache = width_cache.clone();
 
         Ok(PanelDrawInfo::new(
             (width, height),
@@ -233,6 +238,54 @@ impl XWorkspaces {
                 Ok(())
             })),
             None,
+            CursorInfo::Dynamic(Box::new(move |event| {
+                let names = get_workspaces(
+                    cursor_conn.as_ref(),
+                    root,
+                    number_atom,
+                    names_atom,
+                    utf8_atom,
+                )?;
+
+                let len = names.len();
+
+                let idx = match event.button {
+                    MouseButton::Left
+                    | MouseButton::Right
+                    | MouseButton::Middle => {
+                        let mut idx = 0;
+                        let cache = width_cache.lock().unwrap();
+                        if cache.is_empty() {
+                            return Ok(Cursor::Default);
+                        }
+                        let mut x = cache[0];
+                        while x < event.x as i32 && idx < len {
+                            idx += 1;
+                            x += cache[idx];
+                        }
+                        drop(cache);
+
+                        idx
+                    }
+                    MouseButton::ScrollUp => {
+                        let current =
+                            get_current(&cursor_conn, root, current_atom)?;
+                        (current + 1) as usize % names.len()
+                    }
+                    MouseButton::ScrollDown => {
+                        let current =
+                            get_current(&cursor_conn, root, current_atom)?;
+                        let len = names.len();
+                        (current as usize + len - 1) % len
+                    }
+                };
+
+                Ok(if idx < len {
+                    Cursor::Click
+                } else {
+                    Cursor::Default
+                })
+            })),
         ))
     }
 
@@ -246,7 +299,7 @@ impl XWorkspaces {
         send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
-            Event::Action(event) => {
+            Event::Action(Some(event)) => {
                 if let Some(idx) = names.iter().position(|s| *s == event) {
                     conn.send_event(
                         false,
@@ -267,6 +320,8 @@ impl XWorkspaces {
                     )))?;
                 }
             }
+
+            Event::Action(None) => {}
 
             Event::Mouse(event) => {
                 let len = names.len();
@@ -301,7 +356,7 @@ impl XWorkspaces {
 
                 if idx < len {
                     Self::process_event(
-                        Event::Action(names[idx].clone()),
+                        Event::Action(Some(names[idx].clone())),
                         conn,
                         root,
                         width_cache,

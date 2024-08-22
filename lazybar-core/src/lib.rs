@@ -103,7 +103,9 @@ use std::{
 use anyhow::Result;
 use async_trait::async_trait;
 use attrs::Attrs;
-use bar::{Bar, Event, EventResponse, Panel, PanelDrawInfo};
+use bar::{
+    Bar, Cursor, Event, EventResponse, MouseEvent, Panel, PanelDrawInfo,
+};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
@@ -130,6 +132,10 @@ pub type PanelShowFn = Box<dyn Fn() -> Result<()>>;
 pub type PanelHideFn = Box<dyn Fn() -> Result<()>>;
 /// A function that is called for each panel before the bar shuts down.
 pub type PanelShutdownFn = Box<dyn FnOnce()>;
+/// This function receives a [`MouseEvent`] and determines what the cursor name
+/// should be. See [`CursorInfo::Dynamic`][bar::CursorInfo::Dynamic] for more
+/// details.
+pub type CursorFn = Box<dyn Fn(MouseEvent) -> Result<Cursor>>;
 /// A stream that produces panel changes when the underlying data source
 /// changes.
 pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
@@ -274,8 +280,9 @@ pub mod builders {
     };
 
     use crate::{
-        cleanup, ipc::ChannelEndpoint, x::XStream, Alignment, Attrs, Bar,
-        Color, Margins, Panel, PanelConfig, Position, UnixStreamWrapper,
+        bar::Cursors, cleanup, ipc::ChannelEndpoint, x::XStream, Alignment,
+        Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        UnixStreamWrapper,
     };
 
     /// A set of options for a bar.
@@ -316,6 +323,8 @@ pub mod builders {
         /// Which monitor to display the bar on. Defaults to the primary
         /// monitor.
         pub monitor: Option<String>,
+        /// The X11 cursor names associated with the bar.
+        pub cursors: Cursors,
     }
 
     impl BarConfig {
@@ -359,6 +368,7 @@ pub mod builders {
                 self.reverse_scroll,
                 self.ipc,
                 self.monitor,
+                self.cursors,
             )?;
             log::debug!("bar created");
 

@@ -41,7 +41,7 @@ use crate::panels::XWindow;
 #[cfg(feature = "xworkspaces")]
 use crate::panels::XWorkspaces;
 use crate::{
-    builders::BarConfigBuilder, cleanup, get_table_from_config,
+    bar::Cursors, builders::BarConfigBuilder, cleanup, get_table_from_config,
     remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
     PanelConfig, Position,
 };
@@ -103,6 +103,8 @@ lazy_static! {
 ///   can use `xrandr --query` to find monitor names in most cases. However,
 ///   discovering all monitors is a complicated problem and beyond the scope of
 ///   this documentation.
+/// - `cursor_{default, click, scroll}`: The X11 cursor names to use. See
+///   /usr/include/X11/cursorfont.h for some options.
 pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
     let config = Config::builder()
         .add_source(
@@ -252,6 +254,29 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
         .monitor({
             let val = remove_string_from_config("monitor", &mut bar_table);
             log::trace!("got bar monitor: {val:?}");
+            val
+        })
+        .cursors({
+            let val = Cursors {
+                default: remove_string_from_config(
+                    "cursor_default",
+                    &mut bar_table,
+                )
+                .map::<&'static str, _>(|s| s.leak())
+                .unwrap_or("default"),
+                click: remove_string_from_config(
+                    "cursor_click",
+                    &mut bar_table,
+                )
+                .map::<&'static str, _>(|s| s.leak())
+                .unwrap_or("hand2"),
+                scroll: remove_string_from_config(
+                    "cursor_scroll",
+                    &mut bar_table,
+                )
+                .map::<&'static str, _>(|s| s.leak())
+                .unwrap_or("sb_v_double_arrow"),
+            };
             val
         })
         .left(Vec::new())

@@ -14,7 +14,7 @@ use tokio_stream::StreamExt;
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_uint_from_config, Attrs, Highlight, ManagedIntervalStream,
     PanelConfig, PanelStream, Ramp,
@@ -64,7 +64,7 @@ impl Temp {
             .replace("%temp%", temp.to_string().as_str())
             .replace("%ramp%", self.ramp.choose(temp, 0, 200).as_str());
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs,

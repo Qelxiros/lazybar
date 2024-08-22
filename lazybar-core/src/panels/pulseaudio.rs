@@ -37,7 +37,7 @@ use crate::{
     actions::Actions,
     array_to_struct,
     bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
@@ -126,6 +126,7 @@ impl Pulseaudio {
         height: i32,
         paused: Arc<Mutex<bool>>,
         waker: Arc<AtomicWaker>,
+        common: PanelCommon,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
             Ok(Some(data)) => data,
@@ -144,7 +145,7 @@ impl Pulseaudio {
             .replace("%ramp%", ramp_text.as_str())
             .replace("%volume%", volume.to_string().as_str());
 
-        draw_common(
+        common.draw(
             cr,
             text.as_str(),
             attrs,
@@ -166,7 +167,7 @@ impl Pulseaudio {
         response_send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
-            Event::Action(ref value) if value == "increment" => {
+            Event::Action(Some(ref value)) if value == "increment" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -205,7 +206,7 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok)?)
             }
-            Event::Action(ref value) if value == "decrement" => {
+            Event::Action(Some(ref value)) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -243,7 +244,7 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok)?)
             }
-            Event::Action(ref value) if value == "toggle" => {
+            Event::Action(Some(ref value)) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -266,12 +267,13 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok)?)
             }
-            Event::Action(ref value) => {
+            Event::Action(Some(ref value)) => {
                 let value = value.to_owned();
                 Ok(response_send.send(EventResponse::Err(format!(
                     "Unknown event {value}",
                 )))?)
             }
+            Event::Action(None) => Ok(()),
             Event::Mouse(event) => {
                 let action = match event.button {
                     MouseButton::Left => actions.left.clone(),
@@ -494,6 +496,7 @@ impl PanelConfig for Pulseaudio {
         let images = self.common.images.clone();
         let paused = self.paused.clone();
         let waker = self.waker.clone();
+        let common = self.common.clone();
 
         let mut map = StreamMap::<
             usize,
@@ -550,6 +553,7 @@ impl PanelConfig for Pulseaudio {
                     height,
                     paused.clone(),
                     waker.clone(),
+                    common.clone(),
                 )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),

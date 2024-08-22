@@ -26,7 +26,7 @@ use x11rb::{
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::InternedAtoms,
@@ -129,7 +129,7 @@ impl XWindow {
         let conn = self.conn.clone();
         let conn_ = self.conn.clone();
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs,

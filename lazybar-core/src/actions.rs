@@ -4,26 +4,26 @@ use anyhow::Result;
 use config::Value;
 use derive_builder::Builder;
 
-use crate::remove_string_from_config;
+use crate::{bar::Cursor, remove_string_from_config};
 
 /// A map from mouse buttons to panel events
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Builder)]
 pub struct Actions {
     /// The event that should be run when the panel is left-clicked
-    #[builder(default = "String::new()")]
-    pub left: String,
+    #[builder(default, setter(strip_option))]
+    pub left: Option<String>,
     /// The event that should be run when the panel is right-clicked
-    #[builder(default = "String::new()")]
-    pub right: String,
+    #[builder(default, setter(strip_option))]
+    pub right: Option<String>,
     /// The event that should be run when the panel is middle-clicked
-    #[builder(default = "String::new()")]
-    pub middle: String,
+    #[builder(default, setter(strip_option))]
+    pub middle: Option<String>,
     /// The event that should be run when the panel is scrolled up
-    #[builder(default = "String::new()")]
-    pub up: String,
+    #[builder(default, setter(strip_option))]
+    pub up: Option<String>,
     /// The event that should be run when the panel is scrolled down
-    #[builder(default = "String::new()")]
-    pub down: String,
+    #[builder(default, setter(strip_option))]
+    pub down: Option<String>,
 }
 
 impl Actions {
@@ -63,5 +63,27 @@ impl Actions {
         }
 
         Ok(builder.build()?)
+    }
+
+    /// Chooses a reasonable cursor based on the possible actions.
+    ///
+    /// - If the panel is scrollable, a cursor indicating that will be chosen.
+    /// - Otherwise, if the panel is clickable, a cursor indicating that will be
+    ///   chosen.
+    /// - Otherwise, the cursor will be set to the system default.
+    pub fn get_cursor(&self) -> Cursor {
+        if self.up.as_ref().or(self.down.as_ref()).is_some() {
+            Cursor::Scroll
+        } else if self
+            .left
+            .as_ref()
+            .or(self.middle.as_ref())
+            .or(self.right.as_ref())
+            .is_some()
+        {
+            Cursor::Click
+        } else {
+            Cursor::Default
+        }
     }
 }

@@ -15,7 +15,7 @@ use pangocairo::functions::show_layout;
 use crate::{
     actions::Actions,
     attrs::Attrs,
-    bar::{Dependence, PanelDrawInfo},
+    bar::{CursorInfo, Dependence, PanelDrawInfo},
     image::Image,
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, Highlight, PanelHideFn, PanelShowFn, Ramp,
@@ -38,84 +38,6 @@ pub enum ShowHide {
     None,
 }
 
-/// The end of a typical draw function.
-///
-/// Takes a cairo context, a string to
-/// display, and attributes to use, and returns a closure that will do the
-/// drawing and a tuple representing the final width and height.
-///
-/// The text will be interpreted as markup. If this is not your intended
-/// behavior, use [`markup_escape_text`][crate::markup_escape_text] to display
-/// what you want or implement this functionality manually.
-pub fn draw_common(
-    cr: &Rc<cairo::Context>,
-    text: &str,
-    attrs: &Attrs,
-    dependence: Dependence,
-    highlight: Option<Highlight>,
-    images: Vec<Image>,
-    height: i32,
-    show_hide: ShowHide,
-) -> Result<PanelDrawInfo> {
-    let layout = pangocairo::functions::create_layout(cr);
-    layout.set_markup(text);
-    attrs.apply_font(&layout);
-    let dims = layout.pixel_size();
-
-    let attrs = attrs.clone();
-    let bg = attrs.bg.clone().unwrap_or_default();
-
-    let (show, hide): (Option<PanelShowFn>, Option<PanelHideFn>) =
-        match show_hide {
-            ShowHide::Default(paused, waker) => {
-                let paused_ = paused.clone();
-                (
-                    Some(Box::new(move || {
-                        *paused.lock().unwrap() = false;
-                        waker.wake();
-                        Ok(())
-                    })),
-                    Some(Box::new(move || {
-                        *paused_.lock().unwrap() = true;
-                        Ok(())
-                    })),
-                )
-            }
-            ShowHide::Custom(show, hide) => (show, hide),
-            ShowHide::None => (None, None),
-        };
-
-    Ok(PanelDrawInfo::new(
-        bg.adjust_dims(dims, height),
-        dependence,
-        Box::new(move |cr, _| {
-            let offset =
-                bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
-
-            for image in &images {
-                image.draw(cr)?;
-            }
-
-            cr.save()?;
-
-            cr.translate(offset, 0.0);
-            if let Some(ref highlight) = highlight {
-                highlight.draw(cr, height as f64, dims.0 as f64)?;
-            }
-
-            cr.translate(0.0, (height - dims.1) as f64 / 2.0);
-
-            attrs.apply_fg(cr);
-            show_layout(cr, &layout);
-            cr.restore()?;
-            Ok(())
-        }),
-        show,
-        hide,
-        None,
-    ))
-}
-
 /// The common part of most [`PanelConfigs`][crate::PanelConfig]. Stores format
 /// strings, [`Attrs`], and [`Dependence`]
 #[derive(Debug, Clone, Builder)]
@@ -133,6 +55,86 @@ pub struct PanelCommon {
 }
 
 impl PanelCommon {
+    /// The end of a typical draw function.
+    ///
+    /// Takes a cairo context, a string to
+    /// display, and attributes to use, and returns a closure that will do the
+    /// drawing and a tuple representing the final width and height.
+    ///
+    /// The text will be interpreted as markup. If this is not your intended
+    /// behavior, use [`markup_escape_text`][crate::markup_escape_text] to
+    /// display what you want or implement this functionality manually.
+    pub fn draw(
+        &self,
+        cr: &Rc<cairo::Context>,
+        text: &str,
+        attrs: &Attrs,
+        dependence: Dependence,
+        highlight: Option<Highlight>,
+        images: Vec<Image>,
+        height: i32,
+        show_hide: ShowHide,
+    ) -> Result<PanelDrawInfo> {
+        let layout = pangocairo::functions::create_layout(cr);
+        layout.set_markup(text);
+        attrs.apply_font(&layout);
+        let dims = layout.pixel_size();
+
+        let attrs = attrs.clone();
+        let bg = attrs.bg.clone().unwrap_or_default();
+
+        let (show, hide): (Option<PanelShowFn>, Option<PanelHideFn>) =
+            match show_hide {
+                ShowHide::Default(paused, waker) => {
+                    let paused_ = paused.clone();
+                    (
+                        Some(Box::new(move || {
+                            *paused.lock().unwrap() = false;
+                            waker.wake();
+                            Ok(())
+                        })),
+                        Some(Box::new(move || {
+                            *paused_.lock().unwrap() = true;
+                            Ok(())
+                        })),
+                    )
+                }
+                ShowHide::Custom(show, hide) => (show, hide),
+                ShowHide::None => (None, None),
+            };
+
+        Ok(PanelDrawInfo::new(
+            bg.adjust_dims(dims, height),
+            dependence,
+            Box::new(move |cr, _| {
+                let offset =
+                    bg.draw(cr, dims.0 as f64, dims.1 as f64, height as f64)?;
+
+                for image in &images {
+                    image.draw(cr)?;
+                }
+
+                cr.save()?;
+
+                cr.translate(offset, 0.0);
+                if let Some(ref highlight) = highlight {
+                    highlight.draw(cr, height as f64, dims.0 as f64)?;
+                }
+
+                cr.translate(0.0, (height - dims.1) as f64 / 2.0);
+
+                attrs.apply_fg(cr);
+                show_layout(cr, &layout);
+                cr.restore()?;
+                Ok(())
+            }),
+            show,
+            hide,
+            None,
+            CursorInfo::Static(self.actions.get_cursor()),
+        ))
+    }
+
     /// Parses a single format from a subset of the global config.
     pub fn parse_format<S: BuildHasher>(
         table: &mut HashMap<String, Value, S>,

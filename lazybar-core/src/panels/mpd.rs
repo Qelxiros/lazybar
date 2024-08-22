@@ -30,7 +30,9 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     array_to_struct,
-    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    bar::{
+        Cursor, CursorInfo, Event, EventResponse, MouseButton, PanelDrawInfo,
+    },
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
@@ -292,6 +294,9 @@ impl Mpd {
         let images = self.common.images.clone();
         let paused_ = paused.clone();
 
+        let last_layout = self.last_layout.clone();
+        let index_cache = self.index_cache.clone();
+
         Ok(PanelDrawInfo::new(
             (size.0, height),
             self.common.dependence,
@@ -341,6 +346,44 @@ impl Mpd {
                 Ok(())
             })),
             None,
+            CursorInfo::Dynamic(Box::new(move |event| {
+                Ok(
+                    if let Some(ref layout) =
+                        *last_layout.clone().lock().unwrap()
+                    {
+                        if let Some(ref cache) =
+                            *index_cache.clone().lock().unwrap()
+                        {
+                            let idx = layout
+                                .0
+                                .xy_to_index(
+                                    event.x as i32 * pango::SCALE,
+                                    event.y as i32 * pango::SCALE,
+                                )
+                                .1
+                                as usize;
+                            cache
+                                .iter()
+                                .find(|index| {
+                                    index.start <= idx
+                                        && idx <= index.start + index.length
+                                })
+                                .map(|index| {
+                                    if index.name == "main" {
+                                        Cursor::Default
+                                    } else {
+                                        Cursor::Click
+                                    }
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            Cursor::Default
+                        }
+                    } else {
+                        Cursor::Default
+                    },
+                )
+            })),
         ))
     }
 
@@ -447,7 +490,7 @@ impl Mpd {
         send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let result = match event {
-            Event::Action(ref value) => match value.as_str() {
+            Event::Action(Some(ref value)) => match value.as_str() {
                 "next" => conn.lock().unwrap().next(),
                 "prev" => conn.lock().unwrap().prev(),
                 "play" => conn.lock().unwrap().play(),
@@ -480,6 +523,7 @@ impl Mpd {
                     Ok(())
                 }
             },
+            Event::Action(None) => Ok(()),
             Event::Mouse(event) => {
                 match event.button {
                     MouseButton::Left
@@ -507,7 +551,9 @@ impl Mpd {
                                     })
                                     .map(|index| {
                                         Self::process_event(
-                                            &Event::Action(index.name.clone()),
+                                            &Event::Action(Some(
+                                                index.name.clone(),
+                                            )),
                                             conn,
                                             last_layout,
                                             index_cache,
@@ -639,7 +685,7 @@ impl PanelConfig for Mpd {
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
     /// - See [`PanelCommon::parse_common`]. `click_*` and `scroll_*` are
-    ///   currently ignored in favor of this panel's builtins.
+    ///   currently ignored.
     fn parse(
         name: &'static str,
         table: &mut HashMap<String, config::Value>,

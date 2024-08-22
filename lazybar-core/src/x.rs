@@ -1,10 +1,11 @@
 use std::{
+    cell::OnceCell,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{self, Poll},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
@@ -14,20 +15,23 @@ use tokio::task::JoinHandle;
 use tokio_stream::Stream;
 use x11rb::{
     connection::Connection,
+    cursor::Handle,
+    errors::ReplyError,
     protocol::{
         randr::{ConnectionExt as _, MonitorInfo},
         xproto::{
-            Atom, AtomEnum, Colormap, ColormapAlloc, ConnectionExt,
-            CreateWindowAux, EventMask, PropMode, Screen, VisualClass,
-            Visualtype, Window, WindowClass,
+            Atom, AtomEnum, ChangeWindowAttributesAux, Colormap, ColormapAlloc,
+            ConnectionExt, CreateWindowAux, EventMask, PropMode, Screen,
+            VisualClass, Visualtype, Window, WindowClass,
         },
         Event,
     },
+    resource_manager::{self, Database},
     wrapper::ConnectionExt as _,
     xcb_ffi::XCBConnection,
 };
 
-use crate::{interned_atoms, Position};
+use crate::{bar::Cursor, interned_atoms, Position};
 
 lazy_static! {
     static ref ATOMS: Arc<Mutex<InternedAtoms>> =
@@ -60,6 +64,8 @@ interned_atoms!(
     _NET_WM_WINDOW_TYPE_NORMAL,
     _NET_SYSTEM_TRAY_ORIENTATION,
 );
+
+const DB: OnceCell<std::result::Result<Database, ReplyError>> = OnceCell::new();
 
 pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
     Ok(conn.intern_atom(true, atom)?.reply()?.atom)
@@ -190,7 +196,11 @@ pub fn create_window(
         &CreateWindowAux::new()
             .backing_pixel(bg)
             .border_pixel(bg)
-            .event_mask(EventMask::EXPOSURE | EventMask::BUTTON_PRESS)
+            .event_mask(
+                EventMask::EXPOSURE
+                    | EventMask::BUTTON_PRESS
+                    | EventMask::POINTER_MOTION,
+            )
             .colormap(colormap),
     )?;
 
@@ -465,4 +475,26 @@ pub fn get_window_name(
         )
         .to_string())
     }
+}
+
+pub fn set_cursor(
+    conn: &impl Connection,
+    screen: usize,
+    cursor: Cursor,
+    window: Window,
+) -> Result<()> {
+    let db = DB;
+    let resource_database = db
+        .get_or_init(|| resource_manager::new_from_default(conn))
+        .as_ref()
+        .map_err(|e| anyhow!("Failed to get database: {e}"))?;
+    let handle = Handle::new(conn, screen, resource_database)?.reply()?;
+    let cursor = handle.load_cursor(conn, cursor.into())?;
+
+    conn.change_window_attributes(
+        window,
+        &ChangeWindowAttributesAux::new().cursor(cursor),
+    )?;
+
+    Ok(())
 }

@@ -19,7 +19,7 @@ use tokio_stream::StreamExt;
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     ManagedIntervalStream, PanelConfig, PanelStream,
@@ -222,7 +222,7 @@ impl Memory {
             },
         );
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs,

@@ -25,7 +25,7 @@ use tokio_stream::{
 use crate::{
     actions::Actions,
     bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_array_from_config, remove_string_from_config,
     remove_uint_from_config, Attrs, PanelConfig, PanelStream,
@@ -117,7 +117,7 @@ impl Clock {
             .format(&self.formats[self.idx.lock().unwrap().0])
             .to_string();
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs[self.idx.lock().unwrap().0],
@@ -139,7 +139,7 @@ impl Clock {
         waker: &Arc<AtomicWaker>,
     ) -> Result<()> {
         match event {
-            Event::Action(value) => {
+            Event::Action(Some(value)) => {
                 let mut idx = idx.lock().unwrap();
                 let new_idx = match value.as_str() {
                     "cycle" => (idx.0 + 1) % idx.1,
@@ -163,6 +163,7 @@ impl Clock {
                 drop(idx);
                 send.send(EventResponse::Ok)?;
             }
+            Event::Action(None) => {}
             Event::Mouse(event) => {
                 let action = match event.button {
                     MouseButton::Left => actions.left.clone(),

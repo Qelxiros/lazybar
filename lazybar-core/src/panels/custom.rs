@@ -17,7 +17,7 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     PanelConfig, PanelStream,
@@ -63,7 +63,7 @@ impl Custom {
                 String::from_utf8_lossy(output.stderr.as_slice()).as_ref(),
             );
 
-        draw_common(
+        self.common.draw(
             cr,
             text.trim(),
             &self.attrs,

@@ -30,7 +30,9 @@ use x11rb::{
 use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    set_wm_properties, Alignment, IpcStream, Margins, PanelDrawFn, PanelHideFn,
+    set_wm_properties,
+    x::set_cursor,
+    Alignment, CursorFn, IpcStream, Margins, PanelDrawFn, PanelHideFn,
     PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
 
@@ -56,6 +58,44 @@ pub struct BarInfo {
     pub transparent: bool,
     /// The background color of the bar
     pub bg: Color,
+    /// The X11 cursor names associated with the bar
+    pub cursors: Cursors,
+}
+
+/// A set of X11 cursor names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Cursors {
+    /// The default cursor
+    pub default: &'static str,
+    /// A cursor representing clickability
+    pub click: &'static str,
+    /// A cursor representing scrollability
+    pub scroll: &'static str,
+}
+
+/// The cursor to be displayed.
+///
+/// The X11 cursor name associated with each variant can be set for each bar
+/// using [`BarConfig`][crate::BarConfig]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Cursor {
+    /// The default cursor.
+    #[default]
+    Default,
+    /// A cursor indicating that a panel is clickable.
+    Click,
+    /// A cursor indicating that a panel is scrollable.
+    Scroll,
+}
+
+impl Into<&str> for Cursor {
+    fn into(self) -> &'static str {
+        match self {
+            Self::Default => BAR_INFO.get().unwrap().cursors.default,
+            Self::Click => BAR_INFO.get().unwrap().cursors.click,
+            Self::Scroll => BAR_INFO.get().unwrap().cursors.scroll,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -99,6 +139,32 @@ pub enum Dependence {
     Both,
 }
 
+/// What to set the cursor to when a panel is hovered.
+#[derive(Dbg)]
+pub enum CursorInfo {
+    /// The cursor should be the same across the whole panel. `None` will set
+    /// the cursor the system default.
+    Static(Cursor),
+    /// The cursor can have multiple values within the panel. If this function
+    /// returns `Err(_)` or `Ok(None)`, the cursor will be set to the
+    /// system default.
+    #[dbg(skip)]
+    Dynamic(CursorFn),
+}
+
+impl CursorInfo {
+    /// Gets the cursor name.
+    ///
+    /// Either returns the `Static` name or calls the
+    /// `Dynamic` function.
+    pub fn get(&self, event: MouseEvent) -> Result<Cursor> {
+        match self {
+            Self::Static(s) => Ok(*s),
+            Self::Dynamic(f) => f(event),
+        }
+    }
+}
+
 /// Information describing how to draw/redraw a [`Panel`].
 #[derive(Dbg)]
 pub struct PanelDrawInfo {
@@ -124,6 +190,8 @@ pub struct PanelDrawInfo {
     /// for all panels are held to a time limit.
     #[dbg(formatter = "fmt_option")]
     pub shutdown: Option<PanelShutdownFn>,
+    /// Information about how to draw the cursor over this panel.
+    pub cursor_info: CursorInfo,
 }
 
 fn fmt_option<T>(value: &Option<T>) -> &'static str {
@@ -143,6 +211,7 @@ impl PanelDrawInfo {
         show_fn: Option<PanelShowFn>,
         hide_fn: Option<PanelHideFn>,
         shutdown: Option<PanelShutdownFn>,
+        cursor_info: CursorInfo,
     ) -> Self {
         Self {
             width: dims.0,
@@ -152,6 +221,7 @@ impl PanelDrawInfo {
             show_fn,
             hide_fn,
             shutdown,
+            cursor_info,
         }
     }
 }
@@ -251,7 +321,7 @@ pub enum Event {
     /// A mouse event
     Mouse(MouseEvent),
     /// A message (typically from another process)
-    Action(String),
+    Action(Option<String>),
 }
 
 /// A response to an event
@@ -353,6 +423,7 @@ impl Bar {
         reverse_scroll: bool,
         ipc: bool,
         monitor: Option<String>,
+        cursors: Cursors,
     ) -> Result<(Self, IpcStream)> {
         let (conn, screen, window, width, visual, mon) =
             create_window(position, height, transparent, &bg, monitor)?;
@@ -365,6 +436,7 @@ impl Bar {
                 height,
                 transparent,
                 bg: bg.clone(),
+                cursors,
             })
             .unwrap();
 
@@ -510,7 +582,6 @@ impl Bar {
                     let (x, y) = if event.same_screen {
                         (event.event_x, event.event_y)
                     } else {
-                        // TODO: make sure this works/is relevant
                         (event.root_x, event.root_y)
                     };
 
@@ -526,6 +597,7 @@ impl Bar {
                                     + p.draw_info.as_ref().unwrap().width as f64
                                     >= x as f64
                         });
+
                     if let Some(p) = panel {
                         if let Some(e) = &p.endpoint {
                             let e = e.lock().unwrap();
@@ -545,6 +617,67 @@ impl Bar {
                 }
                 _ => Ok(()),
             },
+            protocol::Event::MotionNotify(event) => {
+                let (x, y) = if event.same_screen {
+                    (event.event_x, event.event_y)
+                } else {
+                    (event.root_x, event.root_y)
+                };
+
+                let panel = self
+                    .left_panels
+                    .iter()
+                    .chain(self.center_panels.iter())
+                    .chain(self.right_panels.iter())
+                    .filter(|p| p.draw_info.is_some())
+                    .find(|p| {
+                        p.x <= x as f64
+                            && p.x + p.draw_info.as_ref().unwrap().width as f64
+                                >= x as f64
+                    });
+
+                if let Some(panel) = panel {
+                    if let Some(ref draw_info) = panel.draw_info {
+                        if let Ok(cursor) =
+                            draw_info.cursor_info.get(MouseEvent {
+                                button: MouseButton::Left,
+                                x: x - panel.x as i16,
+                                y,
+                            })
+                        {
+                            set_cursor(
+                                self.conn.as_ref(),
+                                self.screen,
+                                cursor,
+                                self.window,
+                            )?;
+                        } else {
+                            set_cursor(
+                                self.conn.as_ref(),
+                                self.screen,
+                                Cursor::Default,
+                                self.window,
+                            )?;
+                        }
+                    } else {
+                        set_cursor(
+                            self.conn.as_ref(),
+                            self.screen,
+                            Cursor::Default,
+                            self.window,
+                        )?;
+                    }
+                } else {
+                    set_cursor(
+                        self.conn.as_ref(),
+                        self.screen,
+                        Cursor::Default,
+                        self.window,
+                    )?;
+                }
+
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -671,17 +804,17 @@ impl Bar {
 
             ipc_set.spawn_blocking(move || {
                 let send = endpoint.lock().unwrap().send.clone();
-                let response = if let Err(e) = send.send(Event::Action(message))
-                {
-                    EventResponse::Err(e.to_string())
-                } else {
-                    endpoint
-                        .lock()
-                        .unwrap()
-                        .recv
-                        .blocking_recv()
-                        .unwrap_or(EventResponse::Ok)
-                };
+                let response =
+                    if let Err(e) = send.send(Event::Action(Some(message))) {
+                        EventResponse::Err(e.to_string())
+                    } else {
+                        endpoint
+                            .lock()
+                            .unwrap()
+                            .recv
+                            .blocking_recv()
+                            .unwrap_or(EventResponse::Ok)
+                    };
                 log::trace!("response received");
 
                 ipc_send.send(response)?;

@@ -22,7 +22,7 @@ use tokio_stream::{Stream, StreamExt};
 use crate::{
     array_to_struct,
     bar::{Event, EventResponse, PanelDrawInfo},
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     PanelConfig, PanelStream, Ramp,
@@ -84,7 +84,7 @@ impl Ping {
             },
         );
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs,

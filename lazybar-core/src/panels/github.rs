@@ -28,7 +28,7 @@ use tokio_stream::Stream;
 use crate::{
     attrs::Attrs,
     bar::PanelDrawInfo,
-    common::{draw_common, PanelCommon, ShowHide},
+    common::{PanelCommon, ShowHide},
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, remove_uint_from_config, Highlight, PanelConfig,
 };
@@ -80,7 +80,7 @@ impl Github {
             text.push('+');
         }
 
-        draw_common(
+        self.common.draw(
             cr,
             text.as_str(),
             &self.attrs,
