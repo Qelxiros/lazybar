@@ -27,13 +27,13 @@ use x11rb::{
     xcb_ffi::XCBConnection,
 };
 
+#[cfg(feature = "cursor")]
+use crate::x::set_cursor;
 use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    set_wm_properties,
-    x::set_cursor,
-    Alignment, CursorFn, IpcStream, Margins, PanelDrawFn, PanelHideFn,
-    PanelShowFn, PanelShutdownFn, PanelStream, Position,
+    set_wm_properties, Alignment, CursorFn, IpcStream, Margins, PanelDrawFn,
+    PanelHideFn, PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
 
 lazy_static! {
@@ -617,6 +617,7 @@ impl Bar {
                 }
                 _ => Ok(()),
             },
+            #[cfg(feature = "cursor")]
             protocol::Event::MotionNotify(event) => {
                 let (x, y) = if event.same_screen {
                     (event.event_x, event.event_y)

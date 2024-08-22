@@ -1,11 +1,14 @@
+#[cfg(feature = "cursor")]
+use std::cell::OnceCell;
 use std::{
-    cell::OnceCell,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{self, Poll},
 };
 
-use anyhow::{anyhow, Context, Result};
+#[cfg(feature = "cursor")]
+use anyhow::anyhow;
+use anyhow::{Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
@@ -15,23 +18,29 @@ use tokio::task::JoinHandle;
 use tokio_stream::Stream;
 use x11rb::{
     connection::Connection,
-    cursor::Handle,
-    errors::ReplyError,
     protocol::{
         randr::{ConnectionExt as _, MonitorInfo},
         xproto::{
-            Atom, AtomEnum, ChangeWindowAttributesAux, Colormap, ColormapAlloc,
-            ConnectionExt, CreateWindowAux, EventMask, PropMode, Screen,
-            VisualClass, Visualtype, Window, WindowClass,
+            Atom, AtomEnum, Colormap, ColormapAlloc, ConnectionExt,
+            CreateWindowAux, EventMask, PropMode, Screen, VisualClass,
+            Visualtype, Window, WindowClass,
         },
         Event,
     },
-    resource_manager::{self, Database},
     wrapper::ConnectionExt as _,
     xcb_ffi::XCBConnection,
 };
+#[cfg(feature = "cursor")]
+use x11rb::{
+    cursor::Handle,
+    errors::ReplyError,
+    protocol::xproto::ChangeWindowAttributesAux,
+    resource_manager::{self, Database},
+};
 
-use crate::{bar::Cursor, interned_atoms, Position};
+#[cfg(feature = "cursor")]
+use crate::bar::Cursor;
+use crate::{interned_atoms, Position};
 
 lazy_static! {
     static ref ATOMS: Arc<Mutex<InternedAtoms>> =
@@ -65,6 +74,7 @@ interned_atoms!(
     _NET_SYSTEM_TRAY_ORIENTATION,
 );
 
+#[cfg(feature = "cursor")]
 const DB: OnceCell<std::result::Result<Database, ReplyError>> = OnceCell::new();
 
 pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
@@ -477,6 +487,7 @@ pub fn get_window_name(
     }
 }
 
+#[cfg(feature = "cursor")]
 pub fn set_cursor(
     conn: &impl Connection,
     screen: usize,
