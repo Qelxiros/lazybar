@@ -30,6 +30,8 @@ use crate::panels::Ping;
 use crate::panels::Pulseaudio;
 #[cfg(feature = "separator")]
 use crate::panels::Separator;
+#[cfg(feature = "storage")]
+use crate::panels::Storage;
 #[cfg(feature = "systray")]
 use crate::panels::Systray;
 #[cfg(feature = "temp")]
@@ -416,6 +418,11 @@ fn parse_panel(
                 #[cfg(feature = "separator")]
                 "separator" => Separator::parse(p, &mut table, config)
                     .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p)),
+                #[cfg(feature = "storage")]
+                "storage" => {
+                    Storage::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
                 #[cfg(feature = "systray")]
                 "systray" => {
                     Systray::parse(p, &mut table, config)
