@@ -21,8 +21,8 @@ fn main() -> Result<()> {
                 .short('g')
                 .long("generate")
                 .visible_aliases(["shell", "completion"])
-                .help("generate shell completions")
-                .long_help("generates completions for a given shell")
+                .help("Generates shell completions")
+                .long_help("Generates completions for a given shell.")
                 .value_name("SHELL")
                 .value_hint(ValueHint::Other)
                 .value_parser(value_parser!(Shell))
@@ -33,9 +33,9 @@ fn main() -> Result<()> {
             Arg::new("config")
                 .short('c')
                 .long("config")
-                .help("set the config path")
+                .help("Sets the config path")
                 .long_help(
-                    "set the config path\nIf unset, tries to find \
+                    "Sets the config path\nIf unset, tries to find \
                      $XDG_CONFIG_HOME/lazybar/config.toml, \
                      $HOME/.config/lazybar/config.toml, and \
                      /etc/lazybar/config.toml",
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
                 .short('b')
                 .long("bar")
                 .help(
-                    "specify the name of the bar to read from the config file",
+                    "Specifies the name of the bar to read from the config file",
                 )
                 .value_name("BAR")
                 .value_hint(ValueHint::Other)
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("verbosity")
                 .short('v')
-                .help("Increase the logging level up to three times")
+                .help("Increases the logging level up to three times")
                 .action(ArgAction::Count),
         );
     let args = cmd.clone().get_matches();
