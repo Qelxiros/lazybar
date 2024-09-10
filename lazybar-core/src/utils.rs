@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    env,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -23,7 +24,7 @@ use tokio::{
 use crate::{bar::EventResponse, ipc::ChannelEndpoint, parser};
 
 lazy_static! {
-    static ref REGEX: Regex = Regex::new(r"%\{(?<const>\w+)}").unwrap();
+    static ref REGEX: Regex = Regex::new(r"%\{(?<const>[^}]+)}").unwrap();
 }
 
 /// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
@@ -303,14 +304,21 @@ pub fn remove_color_from_config<S: std::hash::BuildHasher>(
     })
 }
 
-/// Replace references to constants (of the form `%{const_name}`) with their
-/// respective constants
+/// Replaces references to constants (of the form `%{const_name}`) with their
+/// respective constants.
 pub fn replace_consts<'a, S: std::hash::BuildHasher>(
     format: &'a str,
     consts: &HashMap<String, Value, S>,
 ) -> Cow<'a, str> {
+    println!("{format}");
     REGEX.replace_all(format, |caps: &Captures| {
+        println!("{caps:?}");
         let con = &caps["const"];
+        if let Some(c) = con.strip_prefix("env:") {
+            if let Ok(c) = env::var(c) {
+                return c;
+            }
+        }
         consts
             .get(con)
             .and_then(|c| c.clone().into_string().ok())
