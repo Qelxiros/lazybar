@@ -1,7 +1,7 @@
 /// Defines a struct to hold format strings, along with a constructor.
 ///
 /// The constructor has the following function signature:
-/// ```rust
+/// ```rust,ignore
 /// fn new(value: Vec<T>) -> Self
 /// ```
 /// `value` must have the same number of elements as `args` passed to this
@@ -36,11 +36,11 @@ macro_rules! array_to_struct {
 /// The first argument defines the struct name, the second argument should be a
 /// static reference to a struct of this type, and each argument after that is
 /// the name of an atom. The struct has a constructor with signature:
-/// ```rust
+/// ```rust,ignore
 /// const fn new() -> Self
 /// ```
 /// and a method with signature:
-/// ```rust
+/// ```rust,ignore
 /// pub fn get(&mut self, conn: &impl Connection, atom_name: &'static str) -> Result<u32>
 /// ```
 /// This macro is for internal use and should be called elsewhere with care.
