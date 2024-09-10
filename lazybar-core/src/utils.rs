@@ -14,6 +14,7 @@ use csscolorparser::Color;
 use derive_builder::Builder;
 use futures::{task::AtomicWaker, Stream};
 use lazy_static::lazy_static;
+use lazybar_types::EventResponse;
 use regex::{Captures, Regex};
 use tokio::{
     io::AsyncWriteExt,
@@ -21,7 +22,7 @@ use tokio::{
     time::{interval, Instant, Interval},
 };
 
-use crate::{bar::EventResponse, ipc::ChannelEndpoint, parser};
+use crate::{ipc::ChannelEndpoint, parser};
 
 lazy_static! {
     static ref REGEX: Regex = Regex::new(r"%\{(?<const>[^}]+)}").unwrap();

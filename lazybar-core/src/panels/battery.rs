@@ -18,11 +18,10 @@ use tokio_stream::{Stream, StreamExt, StreamMap};
 
 use crate::{
     array_to_struct,
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelStream, Ramp,
+    ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
 };
 
 /// Shows the current battery level.
@@ -221,8 +220,7 @@ impl PanelConfig for Battery {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         let mut map =

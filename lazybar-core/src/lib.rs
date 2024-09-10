@@ -104,15 +104,14 @@ use std::{
 use anyhow::Result;
 use async_trait::async_trait;
 use attrs::Attrs;
-use bar::{
-    Bar, Cursor, Event, EventResponse, MouseEvent, Panel, PanelDrawInfo,
-};
+use bar::{Bar, Cursor, Event, MouseEvent, Panel, PanelDrawInfo};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 use ipc::ChannelEndpoint;
+use lazybar_types::EventResponse;
 pub use ramp::Ramp;
 use tokio_stream::Stream;
 pub use utils::*;
@@ -143,6 +142,15 @@ pub type PanelStream = Pin<Box<dyn Stream<Item = Result<PanelDrawInfo>>>>;
 
 /// The channel endpoint associated with a panel.
 pub type PanelEndpoint = Arc<Mutex<ChannelEndpoint<Event, EventResponse>>>;
+
+/// The return type of the [`PanelConfig::run`] function.
+///
+/// The [`PanelStream`] will be used to display the panel on the bar, and the
+/// endpoint, if present, will be used to send IPC events to the panel.
+pub type PanelRunResult = Result<(
+    PanelStream,
+    Option<ipc::ChannelEndpoint<Event, EventResponse>>,
+)>;
 
 /// A cache for the position of clickable buttons.
 pub type IndexCache = Vec<ButtonIndex>;
@@ -183,10 +191,7 @@ pub trait PanelConfig: Debug {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(
-        PanelStream,
-        Option<ipc::ChannelEndpoint<Event, EventResponse>>,
-    )>;
+    ) -> PanelRunResult;
 }
 
 /// Describes where on the screen the bar should appear.

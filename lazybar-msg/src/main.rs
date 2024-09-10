@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
-use lazybar_core::bar::EventResponse;
+use lazybar_types::EventResponse;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use tokio::{io::AsyncWriteExt, net::UnixStream};

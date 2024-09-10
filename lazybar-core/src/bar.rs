@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     ops::BitAnd,
     pin::Pin,
     rc::Rc,
@@ -10,8 +9,8 @@ use anyhow::{anyhow, Result};
 use csscolorparser::Color;
 use derive_debug::Dbg;
 use lazy_static::lazy_static;
+use lazybar_types::EventResponse;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use tokio::{
     net::UnixStream,
     sync::{mpsc::UnboundedSender, OnceCell},
@@ -322,28 +321,6 @@ pub enum Event {
     Mouse(MouseEvent),
     /// A message (typically from another process)
     Action(Option<String>),
-}
-
-/// A response to an event
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
-pub enum EventResponse {
-    /// The event executed normally
-    Ok,
-    /// An error occurred
-    Err(String),
-}
-
-impl Display for EventResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Ok => write!(f, "SUCCESS"),
-            Self::Err(e) => {
-                write!(f, "FAILURE: {e}")
-            }
-        }
-    }
 }
 
 /// A panel on the bar

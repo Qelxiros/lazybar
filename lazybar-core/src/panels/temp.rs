@@ -13,11 +13,10 @@ use futures::task::AtomicWaker;
 use tokio_stream::StreamExt;
 
 use crate::{
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_uint_from_config, Attrs, Highlight, ManagedIntervalStream,
-    PanelConfig, PanelStream, Ramp,
+    PanelConfig, PanelRunResult, Ramp,
 };
 
 /// Displays the temperature of a provided thermal zone.
@@ -137,8 +136,7 @@ impl PanelConfig for Temp {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         let paused = Arc::new(Mutex::new(false));

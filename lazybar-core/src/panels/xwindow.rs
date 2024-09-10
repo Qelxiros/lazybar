@@ -25,12 +25,11 @@ use x11rb::{
 };
 
 use crate::{
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config,
     x::InternedAtoms,
-    Attrs, Highlight, PanelConfig, PanelStream,
+    Attrs, Highlight, PanelConfig, PanelRunResult,
 };
 
 /// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
@@ -218,8 +217,7 @@ impl PanelConfig for XWindow {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let name_atom = InternedAtoms::get(&self.conn, "_NET_WM_NAME")?;
         let window_atom = InternedAtoms::get(&self.conn, "_NET_ACTIVE_WINDOW")?;
         let utf8_atom = InternedAtoms::get(&self.conn, "UTF8_STRING")?;

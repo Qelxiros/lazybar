@@ -23,11 +23,10 @@ use tokio_stream::StreamExt;
 
 use crate::{
     array_to_struct,
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelStream,
+    ManagedIntervalStream, PanelConfig, PanelRunResult,
 };
 
 array_to_struct!(NetworkFormats, connected, disconnected);
@@ -160,8 +159,7 @@ impl PanelConfig for Network {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         let paused = Arc::new(Mutex::new(false));

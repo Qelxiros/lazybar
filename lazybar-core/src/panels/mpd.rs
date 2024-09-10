@@ -15,6 +15,7 @@ use config::Config;
 use csscolorparser::Color;
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
+use lazybar_types::EventResponse;
 use mpd::{Client, Idle, State, Status, Subsystem};
 use pango::Layout;
 use pangocairo::functions::{create_layout, show_layout};
@@ -30,14 +31,12 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     array_to_struct,
-    bar::{
-        Cursor, CursorInfo, Event, EventResponse, MouseButton, PanelDrawInfo,
-    },
+    bar::{Cursor, CursorInfo, Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
     remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
-    Highlight, IndexCache, ManagedIntervalStream, PanelConfig, PanelStream,
+    Highlight, IndexCache, ManagedIntervalStream, PanelConfig, PanelRunResult,
 };
 
 #[derive(Clone, Debug)]
@@ -817,8 +816,7 @@ impl PanelConfig for Mpd {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let mut map = StreamMap::<
             EventType,
             Pin<Box<dyn Stream<Item = Result<()>>>>,

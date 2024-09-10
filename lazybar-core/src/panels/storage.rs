@@ -15,11 +15,10 @@ use tokio_stream::StreamExt;
 
 use crate::{
     attrs::Attrs,
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelStream,
+    ManagedIntervalStream, PanelConfig, PanelRunResult,
 };
 
 /// Displays information about storage for a given mountpoint.
@@ -231,8 +230,7 @@ impl PanelConfig for Storage {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         let paused = Arc::new(Mutex::new(false));

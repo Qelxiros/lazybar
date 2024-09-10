@@ -10,6 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
+use lazybar_types::EventResponse;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedSender},
@@ -34,14 +35,12 @@ use x11rb::{
 use crate::{
     array_to_struct,
     background::Bg,
-    bar::{
-        Cursor, CursorInfo, Event, EventResponse, MouseButton, PanelDrawInfo,
-    },
+    bar::{Cursor, CursorInfo, Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
     x::InternedAtoms,
-    Attrs, Highlight, PanelConfig, PanelStream,
+    Attrs, Highlight, PanelConfig, PanelRunResult,
 };
 
 #[derive(PartialEq, Eq, Debug)]
@@ -441,8 +440,7 @@ impl PanelConfig for XWorkspaces {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let number_atom =
             InternedAtoms::get(&self.conn, "_NET_NUMBER_OF_DESKTOPS")?;
         let names_atom = InternedAtoms::get(&self.conn, "_NET_DESKTOP_NAMES")?;

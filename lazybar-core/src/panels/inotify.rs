@@ -23,10 +23,9 @@ use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
-    remove_string_from_config, Attrs, Highlight, PanelConfig, PanelStream,
+    remove_string_from_config, Attrs, Highlight, PanelConfig, PanelRunResult,
 };
 
 /// Uses inotify to monitor and display the contents of a file. Useful for
@@ -125,8 +124,7 @@ impl PanelConfig for Inotify {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let create_flags = CreateFlags::empty();
         let inotify = inotify_init(create_flags)?;
 

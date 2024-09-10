@@ -21,11 +21,10 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     array_to_struct,
-    bar::{Event, EventResponse, PanelDrawInfo},
+    bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    PanelConfig, PanelStream, Ramp,
+    PanelConfig, PanelRunResult, Ramp,
 };
 
 array_to_struct!(PingFormats, connected, disconnected);
@@ -184,8 +183,7 @@ impl PanelConfig for Ping {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         let (pinger, recv) = Pinger::new(None, None).map_err(|s| anyhow!(s))?;

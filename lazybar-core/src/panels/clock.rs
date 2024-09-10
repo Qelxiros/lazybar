@@ -14,6 +14,7 @@ use chrono::{Local, Timelike};
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
+use lazybar_types::EventResponse;
 use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedSender},
     time::{interval, Instant, Interval},
@@ -24,11 +25,11 @@ use tokio_stream::{
 
 use crate::{
     actions::Actions,
-    bar::{Event, EventResponse, MouseButton, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_array_from_config, remove_string_from_config,
-    remove_uint_from_config, Attrs, PanelConfig, PanelStream,
+    remove_uint_from_config, Attrs, PanelConfig, PanelRunResult,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -285,8 +286,7 @@ impl PanelConfig for Clock {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         for attr in &mut self.attrs {
             attr.apply_to(&global_attrs);
         }

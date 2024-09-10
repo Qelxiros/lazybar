@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::{task::AtomicWaker, FutureExt, StreamExt};
 use lazy_static::lazy_static;
+use lazybar_types::EventResponse;
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
@@ -27,10 +28,12 @@ use tokio_stream::Stream;
 
 use crate::{
     attrs::Attrs,
-    bar::PanelDrawInfo,
+    bar::{Event, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
+    ipc::ChannelEndpoint,
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, remove_uint_from_config, Highlight, PanelConfig,
+    PanelStream,
 };
 
 lazy_static! {
@@ -176,18 +179,11 @@ impl PanelConfig for Github {
 
     async fn run(
         mut self: Box<Self>,
-        cr: std::rc::Rc<cairo::Context>,
-        global_attrs: crate::attrs::Attrs,
+        cr: Rc<cairo::Context>,
+        global_attrs: Attrs,
         height: i32,
-    ) -> anyhow::Result<(
-        crate::PanelStream,
-        Option<
-            crate::ipc::ChannelEndpoint<
-                crate::bar::Event,
-                crate::bar::EventResponse,
-            >,
-        >,
-    )> {
+    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
+    {
         self.attrs.apply_to(&global_attrs);
 
         let paused = Arc::new(Mutex::new(false));

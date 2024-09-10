@@ -6,10 +6,8 @@ use config::{Config, Value};
 use derive_builder::Builder;
 
 use crate::{
-    bar::{Event, EventResponse},
     common::{PanelCommon, ShowHide},
-    ipc::ChannelEndpoint,
-    Attrs, PanelConfig, PanelStream,
+    Attrs, PanelConfig, PanelRunResult,
 };
 
 /// Displays static text with [pango] markup.
@@ -66,8 +64,7 @@ impl PanelConfig for Separator {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         self.attrs.apply_to(&global_attrs);
 
         Ok((

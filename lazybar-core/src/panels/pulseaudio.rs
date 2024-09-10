@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::{task::AtomicWaker, FutureExt};
+use lazybar_types::EventResponse;
 use libpulse_binding::{
     callbacks::ListResult,
     context::{
@@ -36,12 +37,12 @@ use tokio_stream::{
 use crate::{
     actions::Actions,
     array_to_struct,
-    bar::{Dependence, Event, EventResponse, MouseButton, PanelDrawInfo},
+    bar::{Dependence, Event, MouseButton, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
     image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    PanelConfig, PanelStream, Ramp,
+    PanelConfig, PanelRunResult, Ramp,
 };
 
 array_to_struct!(PulseaudioFormats, unmuted, muted);
@@ -378,8 +379,7 @@ impl PanelConfig for Pulseaudio {
         cr: Rc<cairo::Context>,
         global_attrs: Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let mainloop = Rc::new(RefCell::new(
             threaded::Mainloop::new()
                 .context("Failed to create pulseaudio mainloop")?,

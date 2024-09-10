@@ -28,17 +28,14 @@ use x11rb::{
 };
 
 use crate::{
-    bar::{
-        self, BarInfo, Cursor, CursorInfo, Event, EventResponse, PanelDrawInfo,
-    },
+    bar::{self, BarInfo, Cursor, CursorInfo, PanelDrawInfo},
     common::PanelCommon,
-    ipc::ChannelEndpoint,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
     x::{
         find_visual, get_window_name, intern_named_atom, InternedAtoms, XStream,
     },
-    PanelConfig, PanelStream,
+    PanelConfig, PanelRunResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -311,8 +308,7 @@ impl PanelConfig for Systray {
         _cr: Rc<cairo::Context>,
         _global_attrs: crate::attrs::Attrs,
         height: i32,
-    ) -> Result<(PanelStream, Option<ChannelEndpoint<Event, EventResponse>>)>
-    {
+    ) -> PanelRunResult {
         let tray_selection_atom = intern_named_atom(
             &self.conn,
             format!("_NET_SYSTEM_TRAY_S{}", self.screen).as_bytes(),
