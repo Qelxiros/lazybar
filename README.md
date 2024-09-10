@@ -35,6 +35,13 @@ If you want to see something that isn't on this list, open an issue, or even bet
 Everyone is welcome to contribute. Submit a PR with a feature you want to see, and I'll probably be open to merging it. If you aren't sure, open an issue and ask!
 
 ## Installation
+
+### Arch-based systems 
+
+```paru -S lazybar-git```
+
+### Anywhere
+
 ```cargo install lazybar```
 
 ## Usage
