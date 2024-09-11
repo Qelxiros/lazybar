@@ -47,8 +47,6 @@ fn main() -> Result<()> {
         )
         .arg(
             Arg::new("bar")
-                .short('b')
-                .long("bar")
                 .help(
                     "Specifies the name of the bar to read from the config file",
                 )

@@ -311,9 +311,7 @@ pub fn replace_consts<'a, S: std::hash::BuildHasher>(
     format: &'a str,
     consts: &HashMap<String, Value, S>,
 ) -> Cow<'a, str> {
-    println!("{format}");
     REGEX.replace_all(format, |caps: &Captures| {
-        println!("{caps:?}");
         let con = &caps["const"];
         if let Some(c) = con.strip_prefix("env:") {
             if let Ok(c) = env::var(c) {
