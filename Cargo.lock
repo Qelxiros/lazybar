@@ -992,7 +992,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lazybar"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "acpid_plug",
  "aho-corasick",
