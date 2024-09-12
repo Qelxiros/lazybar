@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use get_if_addrs::get_if_addrs;
+use if_addrs::{get_if_addrs, IfAddr};
 use rustix::{
     io::Errno,
     ioctl::{ioctl, Ioctl, Opcode},
@@ -235,8 +235,8 @@ fn query_ip(if_name: &str) -> Option<IpAddr> {
             .ok()?
             .into_iter()
             .partition::<Vec<_>, _>(|i| match i.addr {
-                get_if_addrs::IfAddr::V4(_) => true,
-                get_if_addrs::IfAddr::V6(_) => true,
+                IfAddr::V4(_) => true,
+                IfAddr::V6(_) => false,
             });
 
     Some(v4.into_iter().chain(v6).find(|i| i.name == if_name)?.ip())
