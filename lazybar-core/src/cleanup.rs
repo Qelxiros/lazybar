@@ -1,17 +1,20 @@
 use std::{
     fs::{read_dir, remove_file},
     os::unix::fs::FileTypeExt,
-    sync::OnceLock,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::{anyhow, Result};
+use lazy_static::lazy_static;
 use tokio::{io::AsyncWriteExt, net::UnixStream, time};
 
 use crate::ipc::{self, ChannelEndpoint};
 
-pub(crate) static mut ENDPOINT: OnceLock<ChannelEndpoint<(), ()>> =
-    OnceLock::new();
+lazy_static! {
+    pub(crate) static ref ENDPOINT: Arc<Mutex<Option<ChannelEndpoint<(), ()>>>> =
+        Arc::new(Mutex::new(None));
+}
 
 /// Removes any sockets in `/tmp/lazybar-ipc/` that can't be connected to.
 pub async fn cleanup() -> Result<()> {
@@ -65,7 +68,7 @@ pub async fn exit(
         let _ = remove_file(format!("/tmp/lazybar-ipc/{bar}"));
     }
     if in_runtime {
-        if let Some(mut endpoint) = unsafe { ENDPOINT.take() } {
+        if let Some(ref mut endpoint) = *ENDPOINT.lock().unwrap() {
             if endpoint.send.send(()).is_ok() {
                 let _ =
                     time::timeout(Duration::from_secs(2), endpoint.recv.recv())
