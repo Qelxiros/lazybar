@@ -1,10 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    pin::Pin,
-    rc::Rc,
-    sync::Arc,
-    task::Poll,
-};
+use std::{collections::HashMap, pin::Pin, rc::Rc, sync::Arc, task::Poll};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -42,7 +36,6 @@ pub struct XWindow {
     name: &'static str,
     conn: Arc<RustConnection>,
     screen: usize,
-    windows: HashSet<Window>,
     #[builder(setter(strip_option), default = "None")]
     max_width: Option<u32>,
     format: &'static str,
@@ -73,13 +66,11 @@ impl XWindow {
         let name = if active == 0 {
             String::new()
         } else {
-            if self.windows.insert(active) {
-                self.conn.change_window_attributes(
-                    active,
-                    &ChangeWindowAttributesAux::new()
-                        .event_mask(EventMask::PROPERTY_CHANGE),
-                )?;
-            }
+            self.conn.change_window_attributes(
+                active,
+                &ChangeWindowAttributesAux::new()
+                    .event_mask(EventMask::PROPERTY_CHANGE),
+            )?;
 
             if let Some(max_width) = self.max_width {
                 let bytes = self
@@ -190,7 +181,6 @@ impl PanelConfig for XWindow {
             log::error!("Failed to connect to X server");
         }
 
-        builder.windows(HashSet::new());
         if let Some(max_width) = remove_uint_from_config("max_width", table) {
             builder.max_width(max_width as u32);
         }
