@@ -333,6 +333,23 @@ pub mod builders {
         pub cursors: Cursors,
     }
 
+    async fn handle_error(e: Error, bar: &Bar, ipc: bool) {
+        if let Some(e) = e.downcast_ref::<ConnectionError>() {
+            log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
+            // close when X server does
+            // this could cause problems, maybe only exit under certain circumstances?
+            cleanup::exit(Some((bar.name.as_str(), ipc)), true, 0).await;
+        } else if let Some(e) = e.downcast_ref::<ParseError>() {
+            log::warn!("Error parsing data from X server: {e}");
+        } else if let Some(e) = e.downcast_ref::<ReplyError>() {
+            log::warn!("Error produced by X server: {e}");
+        } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
+            log::warn!("Error produced by X server: {e}");
+        } else {
+            log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
+        }
+    }
+
     impl BarConfig {
         /// Add a panel to the bar with a given [`Alignment`]. It will appear to
         /// the right of all other panels with the same alignment.
@@ -346,24 +363,6 @@ pub mod builders {
                 Alignment::Center => self.center.push(panel),
                 Alignment::Right => self.right.push(panel),
             };
-        }
-
-        fn handle_error(&self, e: Error, bar: Bar) {
-            if let Some(e) = e.downcast_ref::<ConnectionError>() {
-                log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
-                // close when X server does
-                // this could cause problems, maybe only exit under certain circumstances?
-                cleanup::exit(Some((bar.name.as_str(), self.ipc)), true, 0)
-                    .await;
-            } else if let Some(e) = e.downcast_ref::<ParseError>() {
-                log::warn!("Error parsing data from X server: {e}");
-            } else if let Some(e) = e.downcast_ref::<ReplyError>() {
-                log::warn!("Error produced by X server: {e}");
-            } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
-                log::warn!("Error produced by X server: {e}");
-            } else {
-                log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
-            }
         }
 
         /// Turn the provided [`BarConfig`] into a [`Bar`] and start the main
@@ -559,7 +558,7 @@ pub mod builders {
                     Some(Ok(event)) = x_stream.next() => {
                         log::trace!("X event: {event:?}");
                         if let Err(e) = bar.process_event(&event) {
-                            self.handle_error(e, bar);
+                            handle_error(e, &bar, self.ipc).await;
                         }
                     },
                     Some((alignment, result)) = bar.streams.next() => {
@@ -567,11 +566,11 @@ pub mod builders {
                         match result {
                             (idx, Ok(draw_info)) => if let Err(e) = bar.update_panel(alignment, idx, draw_info) {
                                 log::warn!("Error updating {alignment} panel at index {idx}");
-                                self.handle_error(e, bar);
+                                handle_error(e, &bar, self.ipc).await;
                             }
                             (idx, Err(e)) => {
                                 log::warn!("Error produced by {alignment} panel at index {idx:?}");
-                                self.handle_error(e, bar);
+                                handle_error(e, &bar, self.ipc).await;
                             }
                         }
                     },
