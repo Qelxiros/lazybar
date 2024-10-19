@@ -524,7 +524,7 @@ pub mod builders {
             let (send2, recv1) = unbounded_channel();
             let mut endpoint1 = ChannelEndpoint::new(send1, recv1);
             let endpoint2 = ChannelEndpoint::new(send2, recv2);
-            *cleanup::ENDPOINT.lock().unwrap() = Some(endpoint2);
+            *cleanup::ENDPOINT.lock().await = Some(endpoint2);
             thread::spawn(move || loop {
                 if let Some(signal) = signals.wait().next() {
                     log::info!("Received signal {signal} - shutting down");

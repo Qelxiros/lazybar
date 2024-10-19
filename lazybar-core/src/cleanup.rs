@@ -1,13 +1,13 @@
 use std::{
     fs::{read_dir, remove_file},
     os::unix::fs::FileTypeExt,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
 use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
-use tokio::{io::AsyncWriteExt, net::UnixStream, time};
+use tokio::{io::AsyncWriteExt, net::UnixStream, sync::Mutex, time};
 
 use crate::ipc::{self, ChannelEndpoint};
 
@@ -59,6 +59,8 @@ pub async fn cleanup() -> Result<()> {
 
 /// Shutdown the bar as cleanly as possible. Short of SIGKILL, lazybar should
 /// never exit without calling this function.
+///
+/// `bar` should be the name of the bar and whether IPC is enabled if available, otherwise `None`.
 pub async fn exit(
     bar: Option<(&str, bool)>,
     in_runtime: bool,
@@ -68,7 +70,7 @@ pub async fn exit(
         let _ = remove_file(format!("/tmp/lazybar-ipc/{bar}"));
     }
     if in_runtime {
-        if let Some(ref mut endpoint) = *ENDPOINT.lock().unwrap() {
+        if let Some(ref mut endpoint) = *ENDPOINT.lock().await {
             if endpoint.send.send(()).is_ok() {
                 let _ =
                     time::timeout(Duration::from_secs(2), endpoint.recv.recv())
