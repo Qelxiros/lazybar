@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::{env, io, path::PathBuf};
 
 use anyhow::Result;
 use clap::{
@@ -88,16 +88,64 @@ fn main() -> Result<()> {
     // $HOME/.config/lazybar/config.toml, failing that
     // /etc/lazybar/config.toml
     #[allow(clippy::option_if_let_else)]
-    let path = if let Some(config) = args.get_one::<PathBuf>("config") {
-        config
-    } else if let Ok(lazybar) = std::env::var("LAZYBAR_CONFIG_PATH") {
-        &PathBuf::from(lazybar)
-    } else if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        &PathBuf::from(format!("{xdg}/lazybar/config.toml"))
-    } else if let Ok(home) = std::env::var("HOME") {
-        &PathBuf::from(format!("{home}/.config/lazybar/config.toml"))
+    let path = if let Some(p) = {
+        match args.get_one::<PathBuf>("config") {
+            None => None,
+            Some(c) => {
+                if c.exists() {
+                    Some(c.clone())
+                } else {
+                    None
+                }
+            }
+        }
+    } {
+        p
+    } else if let Some(p) = {
+        match env::var("LAZYBAR_CONFIG_PATH").ok() {
+            None => None,
+            Some(c) => {
+                let p = PathBuf::from(c);
+                if p.exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }
+        }
+    } {
+        p
+    } else if let Some(p) = {
+        match env::var("XDG_CONFIG_HOME").ok() {
+            None => None,
+            Some(c) => {
+                let p = PathBuf::from(format!("{c}/lazybar/config.toml"));
+                if p.exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }
+        }
+    } {
+        p
+    } else if let Some(p) = {
+        match env::var("HOME").ok() {
+            None => None,
+            Some(c) => {
+                let p =
+                    PathBuf::from(format!("{c}/.config/lazybar/config.toml"));
+                if p.exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }
+        }
+    } {
+        p
     } else {
-        &PathBuf::from("/etc/lazybar/config.toml")
+        PathBuf::from("/etc/lazybar/config.toml")
     };
 
     let config = parser::parse(
