@@ -43,10 +43,10 @@ clock = ["dep:chrono"]
 cpu = []
 custom = []
 github = ["dep:reqwest"]
-inotify = ["dep:rustix"]
+inotify = []
 memory = ["dep:aho-corasick"]
 mpd = ["dep:aho-corasick", "dep:mpd", "dep:unicode-segmentation"]
-network = ["dep:rustix"]
+network = []
 ping = ["dep:fastping-rs"]
 pulseaudio = ["dep:libpulse-binding"]
 separator = []
@@ -86,7 +86,7 @@ reqwest = { version = "0.12.5", features = [
   "blocking",
   "json",
 ], optional = true }
-rustix = { version = "0.38.34", optional = true }
+rustix = "0.38.34"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
