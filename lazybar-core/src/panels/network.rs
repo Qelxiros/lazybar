@@ -90,6 +90,7 @@ impl Network {
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
+            format!("{self:?}"),
         )
     }
 }

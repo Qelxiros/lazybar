@@ -4,7 +4,7 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, Receiver},
         Arc, Mutex,
     },
     task::Poll,
@@ -37,9 +37,8 @@ use tokio_stream::{
 use crate::{
     actions::Actions,
     array_to_struct,
-    bar::{Dependence, Event, MouseButton, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
-    image::Image,
     ipc::ChannelEndpoint,
     remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
     PanelConfig, PanelRunResult, Ramp,
@@ -60,14 +59,11 @@ pub struct Pulseaudio {
     server: Option<String>,
     #[builder(default = "10")]
     unit: u32,
-    send: Sender<(Volume, bool)>,
     recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
     #[builder(default)]
     paused: Arc<Mutex<bool>>,
     #[builder(default)]
     waker: Arc<AtomicWaker>,
-    #[builder(default, setter(skip))]
-    handle: Option<JoinHandle<Result<(Volume, bool)>>>,
     formats: PulseaudioFormats<String>,
     attrs: Attrs,
     #[builder(default, setter(strip_option))]
@@ -76,58 +72,14 @@ pub struct Pulseaudio {
     common: PanelCommon,
 }
 
-impl Stream for Pulseaudio {
-    type Item = (Volume, bool);
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        self.waker.register(cx.waker());
-        if *self.paused.lock().unwrap() {
-            Poll::Pending
-        } else if let Some(handle) = &mut self.handle {
-            if handle.is_finished() {
-                let value = handle
-                    .poll_unpin(cx)
-                    .map(|r| r.map(Result::ok).ok().flatten());
-                if value.is_ready() {
-                    self.handle = None;
-                }
-                value
-            } else {
-                Poll::Pending
-            }
-        } else {
-            let waker = cx.waker().clone();
-            let recv = self.recv.clone();
-            self.handle = Some(task::spawn_blocking(move || {
-                let value = recv.lock().unwrap().recv()?;
-                waker.wake_by_ref();
-                Ok(value)
-            }));
-            Poll::Pending
-        }
-    }
-}
-
 impl Pulseaudio {
     fn draw(
+        &self,
         cr: &Rc<cairo::Context>,
-        data: Result<Option<(Volume, bool)>>,
-        last_data: &Arc<Mutex<(Volume, bool)>>,
-        format_unmuted: &str,
-        format_muted: &str,
-        ramp: &Ramp,
-        ramp_muted: &Ramp,
-        attrs: &Attrs,
-        dependence: Dependence,
-        highlight: Option<Highlight>,
-        images: Vec<Image>,
         height: i32,
         paused: Arc<Mutex<bool>>,
-        waker: Arc<AtomicWaker>,
-        common: PanelCommon,
+        data: Result<Option<(Volume, bool)>>,
+        last_data: Arc<Mutex<(Volume, bool)>>,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
             Ok(Some(data)) => data,
@@ -136,9 +88,9 @@ impl Pulseaudio {
         };
         *last_data.lock().unwrap() = (volume, mute);
         let (format, ramp) = if mute {
-            (format_muted, ramp_muted)
+            (self.formats.muted.clone(), self.ramps.muted.clone())
         } else {
-            (format_unmuted, ramp)
+            (self.formats.unmuted.clone(), self.ramps.unmuted.clone())
         };
         let ramp_text =
             ramp.choose(volume.0, Volume::MUTED.0, Volume::NORMAL.0);
@@ -146,15 +98,16 @@ impl Pulseaudio {
             .replace("%ramp%", ramp_text.as_str())
             .replace("%volume%", volume.to_string().as_str());
 
-        common.draw(
+        self.common.draw(
             cr,
             text.as_str(),
-            attrs,
-            dependence,
-            highlight,
-            images,
+            &self.attrs,
+            self.common.dependence,
+            self.highlight.clone(),
+            self.common.images.clone(),
             height,
-            ShowHide::Default(paused, waker),
+            ShowHide::Default(paused, self.waker.clone()),
+            format!("{self:?}"),
         )
     }
 
@@ -205,7 +158,7 @@ impl Pulseaudio {
                     mainloop.borrow_mut().unlock();
                 };
 
-                Ok(response_send.send(EventResponse::Ok)?)
+                Ok(response_send.send(EventResponse::Ok(None))?)
             }
             Event::Action(Some(ref value)) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -243,7 +196,7 @@ impl Pulseaudio {
                     mainloop.borrow_mut().unlock();
                 };
 
-                Ok(response_send.send(EventResponse::Ok)?)
+                Ok(response_send.send(EventResponse::Ok(None))?)
             }
             Event::Action(Some(ref value)) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
@@ -266,7 +219,7 @@ impl Pulseaudio {
                     mainloop.borrow_mut().unlock();
                 };
 
-                Ok(response_send.send(EventResponse::Ok)?)
+                Ok(response_send.send(EventResponse::Ok(None))?)
             }
             Event::Action(Some(ref value)) => {
                 let value = value.to_owned();
@@ -293,6 +246,64 @@ impl Pulseaudio {
                     response_send,
                 )?)
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PulseaudioStream {
+    recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
+    paused: Arc<Mutex<bool>>,
+    waker: Arc<AtomicWaker>,
+    handle: Option<JoinHandle<Result<(Volume, bool)>>>,
+}
+
+impl Stream for PulseaudioStream {
+    type Item = (Volume, bool);
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.waker.register(cx.waker());
+        if *self.paused.lock().unwrap() {
+            Poll::Pending
+        } else if let Some(handle) = &mut self.handle {
+            if handle.is_finished() {
+                let value = handle
+                    .poll_unpin(cx)
+                    .map(|r| r.map(Result::ok).ok().flatten());
+                if value.is_ready() {
+                    self.handle = None;
+                }
+                value
+            } else {
+                Poll::Pending
+            }
+        } else {
+            let waker = cx.waker().clone();
+            let recv = self.recv.clone();
+            self.handle = Some(task::spawn_blocking(move || {
+                let value = recv.lock().unwrap().recv()?;
+                waker.wake_by_ref();
+                Ok(value)
+            }));
+            Poll::Pending
+        }
+    }
+}
+
+impl PulseaudioStream {
+    fn new(
+        recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
+        paused: Arc<Mutex<bool>>,
+        waker: Arc<AtomicWaker>,
+    ) -> Self {
+        Self {
+            recv,
+            paused,
+            waker,
+            handle: None,
         }
     }
 }
@@ -347,8 +358,8 @@ impl PanelConfig for Pulseaudio {
             builder.unit(unit as u32);
         }
 
+        // FIXME: unused channel
         let (send, recv) = channel();
-        builder.send(send);
         builder.recv(Arc::new(Mutex::new(recv)));
 
         let common = PanelCommon::parse_common(table)?;
@@ -439,7 +450,6 @@ impl PanelConfig for Pulseaudio {
         let introspector = context.borrow_mut().introspect();
 
         let (sink_send, sink_recv) = channel();
-        self.send = sink_send.clone();
         let sink = self.sink.clone();
 
         let initial = sink_send.clone();
@@ -463,9 +473,10 @@ impl PanelConfig for Pulseaudio {
             .borrow_mut()
             .subscribe(InterestMaskSet::SINK, |_| {});
 
+        let ss = sink_send.clone();
         let cb: Option<Box<dyn FnMut(_, _, _)>> =
             Some(Box::new(move |_, _, _| {
-                let send = sink_send.clone();
+                let send = ss.clone();
                 introspector.get_sink_info_by_name(sink.as_str(), move |r| {
                     if let ListResult::Item(s) = r {
                         let volume = s.volume.get()[0];
@@ -486,17 +497,6 @@ impl PanelConfig for Pulseaudio {
         Box::leak(Box::new(context));
 
         self.attrs.apply_to(&global_attrs);
-        let ramp = self.ramps.unmuted.clone();
-        let ramp_muted = self.ramps.muted.clone();
-        let format_unmuted = self.formats.unmuted.clone();
-        let format_muted = self.formats.muted.clone();
-        let attrs = self.attrs.clone();
-        let dependence = self.common.dependence;
-        let highlight = self.highlight.clone();
-        let images = self.common.images.clone();
-        let paused = self.paused.clone();
-        let waker = self.waker.clone();
-        let common = self.common.clone();
 
         let mut map = StreamMap::<
             usize,
@@ -505,19 +505,26 @@ impl PanelConfig for Pulseaudio {
 
         let initial = sink_recv.recv()?;
         self.recv = Arc::new(Mutex::new(sink_recv));
-        let sink = self.sink.clone();
-        let unit = self.unit;
-        let actions = self.common.actions.clone();
+
+        let stream = PulseaudioStream::new(
+            self.recv.clone(),
+            self.paused.clone(),
+            self.waker.clone(),
+        );
         map.insert(
             0,
             Box::pin(
                 tokio_stream::once(Ok(Some(initial)))
-                    .chain(self.map(Option::Some).map(Result::Ok)),
+                    .chain(stream.map(Option::Some).map(Result::Ok)),
             ),
         );
 
         let (event_send, event_recv) = unbounded_channel();
         let (response_send, response_recv) = unbounded_channel();
+
+        let actions = self.common.actions.clone();
+        let sink = self.sink.clone();
+        let unit = self.unit;
         map.insert(
             1,
             Box::pin(UnboundedReceiverStream::new(event_recv).map(move |s| {
@@ -538,22 +545,12 @@ impl PanelConfig for Pulseaudio {
 
         Ok((
             Box::pin(map.map(move |(_, data)| {
-                Self::draw(
+                self.draw(
                     &cr,
-                    data,
-                    &last_data,
-                    format_unmuted.as_str(),
-                    format_muted.as_str(),
-                    &ramp,
-                    &ramp_muted,
-                    &attrs,
-                    dependence,
-                    highlight.clone(),
-                    images.clone(),
                     height,
-                    paused.clone(),
-                    waker.clone(),
-                    common.clone(),
+                    self.paused.clone(),
+                    data,
+                    last_data.clone(),
                 )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),

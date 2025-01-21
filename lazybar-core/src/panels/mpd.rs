@@ -383,6 +383,7 @@ impl Mpd {
                     },
                 )
             })),
+            format!("{self:?}"),
         ))
     }
 
@@ -573,7 +574,7 @@ impl Mpd {
                     "Event {event:?} produced an error: {e}",
                 ))
             },
-            |()| EventResponse::Ok,
+            |()| EventResponse::Ok(None),
         );
         Ok(send.send(result)?)
     }

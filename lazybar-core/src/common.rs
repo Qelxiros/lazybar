@@ -74,6 +74,7 @@ impl PanelCommon {
         images: Vec<Image>,
         height: i32,
         show_hide: ShowHide,
+        dump: String,
     ) -> Result<PanelDrawInfo> {
         let layout = pangocairo::functions::create_layout(cr);
         layout.set_markup(text);
@@ -132,6 +133,7 @@ impl PanelCommon {
             hide,
             None,
             CursorInfo::Static(self.actions.get_cursor()),
+            dump,
         ))
     }
 

@@ -285,6 +285,7 @@ impl XWorkspaces {
                     Cursor::Default
                 })
             })),
+            format!("{self:?}"),
         ))
     }
 
@@ -312,7 +313,7 @@ impl XWorkspaces {
                             [idx as u32, CURRENT_TIME, 0, 0, 0],
                         ),
                     )?;
-                    send.send(EventResponse::Ok)?;
+                    send.send(EventResponse::Ok(None))?;
                 } else {
                     send.send(EventResponse::Err(format!(
                         "No workspace found with name {event}"

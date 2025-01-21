@@ -87,12 +87,12 @@ pub enum Cursor {
     Scroll,
 }
 
-impl Into<&str> for Cursor {
-    fn into(self) -> &'static str {
-        match self {
-            Self::Default => BAR_INFO.get().unwrap().cursors.default,
-            Self::Click => BAR_INFO.get().unwrap().cursors.click,
-            Self::Scroll => BAR_INFO.get().unwrap().cursors.scroll,
+impl From<Cursor> for &str {
+    fn from(value: Cursor) -> Self {
+        match value {
+            Cursor::Default => BAR_INFO.get().unwrap().cursors.default,
+            Cursor::Click => BAR_INFO.get().unwrap().cursors.click,
+            Cursor::Scroll => BAR_INFO.get().unwrap().cursors.scroll,
         }
     }
 }
@@ -174,7 +174,7 @@ pub struct PanelDrawInfo {
     /// When the panel should be hidden
     pub dependence: Dependence,
     /// A [`FnMut`] that draws the panel to the [`cairo::Context`], starting at
-    /// (0, 0). Translating the Context is the responsibility of functions in
+    /// (0, 0). Translating the `Context` is the responsibility of functions in
     /// this module.
     #[dbg(placeholder = "..")]
     pub draw_fn: PanelDrawFn,
@@ -191,6 +191,8 @@ pub struct PanelDrawInfo {
     pub shutdown: Option<PanelShutdownFn>,
     /// Information about how to draw the cursor over this panel.
     pub cursor_info: CursorInfo,
+    /// Information to be shown when `lazybar-msg` sends a "dump" message.
+    pub dump: String,
 }
 
 fn fmt_option<T>(value: &Option<T>) -> &'static str {
@@ -211,6 +213,7 @@ impl PanelDrawInfo {
         hide_fn: Option<PanelHideFn>,
         shutdown: Option<PanelShutdownFn>,
         cursor_info: CursorInfo,
+        dump: String,
     ) -> Self {
         Self {
             width: dims.0,
@@ -221,6 +224,7 @@ impl PanelDrawInfo {
             hide_fn,
             shutdown,
             cursor_info,
+            dump,
         }
     }
 }
@@ -686,8 +690,11 @@ impl Bar {
         }
     }
 
-    fn handle_panel_event(&mut self, message: &str) -> Result<bool> {
-        if let Some(caps) = REGEX.captures_iter(message).next() {
+    fn handle_panel_event(
+        &mut self,
+        message: &str,
+    ) -> Result<(bool, Option<String>)> {
+        if let Some(caps) = REGEX.captures(message) {
             let region = &caps["region"];
             let idx = caps["idx"].parse::<usize>()?;
 
@@ -698,7 +705,7 @@ impl Bar {
                 _ => unreachable!(),
             } {
                 match &caps["message"] {
-                    "show" => {
+                    "show" | "toggle" if !target.visible => {
                         if let Some(ref draw_info) = target.draw_info {
                             if let Some(ref f) = draw_info.show_fn {
                                 f()?;
@@ -706,7 +713,7 @@ impl Bar {
                         }
                         target.visible = true;
                     }
-                    "hide" => {
+                    "hide" | "toggle" if target.visible => {
                         if let Some(ref draw_info) = target.draw_info {
                             if let Some(ref f) = draw_info.hide_fn {
                                 f()?;
@@ -714,9 +721,15 @@ impl Bar {
                         }
                         target.visible = false;
                     }
-                    "toggle" => target.visible = !target.visible,
+                    "dump" => {
+                        if let Some(ref draw_info) = target.draw_info {
+                            return Ok((false, Some(draw_info.dump.clone())));
+                        }
+                    }
                     message => {
-                        return Err(anyhow!("Unknown message {message}"))
+                        return Err(anyhow!(
+                            "Unknown or invalid message {message}"
+                        ))
                     }
                 }
 
@@ -728,7 +741,7 @@ impl Bar {
                 }?;
             }
         }
-        Ok(false)
+        Ok((false, None))
     }
 
     /// Sends a message to the appropriate panel.
@@ -739,7 +752,9 @@ impl Bar {
         ipc_send: UnboundedSender<EventResponse>,
     ) -> Result<bool> {
         if let Some(stripped) = message.strip_prefix('#') {
-            return self.handle_panel_event(stripped);
+            let (exit, message) = self.handle_panel_event(stripped)?;
+            ipc_send.send(EventResponse::Ok(message))?;
+            return Ok(exit);
         }
 
         let (dest, message) = match message.split_once('.') {
@@ -751,8 +766,8 @@ impl Bar {
             let mut panels = self
                 .left_panels
                 .iter()
-                .chain(self.center_panels.iter())
-                .chain(self.right_panels.iter())
+                .chain(&self.center_panels)
+                .chain(&self.right_panels)
                 .filter(|p| p.name == panel);
 
             let target = panels.next();
@@ -791,7 +806,7 @@ impl Bar {
                             .unwrap()
                             .recv
                             .blocking_recv()
-                            .unwrap_or(EventResponse::Ok)
+                            .unwrap_or(EventResponse::Ok(None))
                     };
                 log::trace!("response received");
 

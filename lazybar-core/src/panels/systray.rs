@@ -161,6 +161,7 @@ impl Systray {
                 let _ = shutdown_conn.destroy_window(selection);
             })),
             CursorInfo::Static(Cursor::Default),
+            format!("{self:?}"),
         )
     }
 

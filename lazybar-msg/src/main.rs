@@ -12,7 +12,10 @@ use clap_complete::{generate, Generator, Shell};
 use lazybar_types::EventResponse;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
-use tokio::{io::AsyncWriteExt, net::UnixStream};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::UnixStream,
+};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -110,19 +113,15 @@ async fn main() -> Result<ExitCode> {
         let bytes = stream.try_write(message.as_bytes())?;
         log::debug!("message written ({bytes} bytes)");
 
-        let mut response = [0; 1024];
-        stream.readable().await?;
-        let bytes = stream.try_read(&mut response)?;
+        let mut response = String::new();
+        let bytes = stream.read_to_string(&mut response).await?;
         log::debug!("response read ({bytes} bytes)");
+        log::trace!("response: {response}");
 
-        let response = serde_json::from_str::<EventResponse>(
-            String::from_utf8_lossy(&response[..bytes])
-                .to_string()
-                .as_str(),
-        );
+        let response = serde_json::from_str::<EventResponse>(&response);
 
         match response {
-            Ok(response @ EventResponse::Ok) => {
+            Ok(response @ EventResponse::Ok(_)) => {
                 log::info!("{file_name}: {response}");
             }
             Ok(response @ EventResponse::Err(_)) => {

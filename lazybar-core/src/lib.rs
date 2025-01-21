@@ -101,7 +101,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use async_trait::async_trait;
 use attrs::Attrs;
 use bar::{Bar, Cursor, Event, MouseEvent, Panel, PanelDrawInfo};
@@ -116,6 +116,7 @@ pub use ramp::Ramp;
 use tokio_stream::Stream;
 pub use utils::*;
 use x::{create_surface, create_window, set_wm_properties};
+use x11rb::errors::{ConnectionError, ParseError, ReplyError, ReplyOrIdError};
 
 /// A function that can be called repeatedly to draw the panel. The
 /// [`cairo::Context`] will have its current point set to the top left corner of
@@ -266,12 +267,29 @@ impl Margins {
     }
 }
 
+async fn handle_error(e: Error, bar: &Bar, ipc: bool) {
+    if let Some(e) = e.downcast_ref::<ConnectionError>() {
+        log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
+        // close when X server does
+        // this could cause problems, maybe only exit under certain circumstances?
+        cleanup::exit(Some((bar.name.as_str(), ipc)), true, 0).await;
+    } else if let Some(e) = e.downcast_ref::<ParseError>() {
+        log::warn!("Error parsing data from X server: {e}");
+    } else if let Some(e) = e.downcast_ref::<ReplyError>() {
+        log::warn!("Error produced by X server: {e}");
+    } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
+        log::warn!("Error produced by X server: {e}");
+    } else {
+        log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
+    }
+}
+
 /// Builder structs for non-panel items, courtesy of [`derive_builder`]. See
 /// [`panels::builders`] for panel builders.
 pub mod builders {
     use std::thread;
 
-    use anyhow::{Error, Result};
+    use anyhow::Result;
     use derive_builder::Builder;
     use futures::executor;
     use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
@@ -281,13 +299,10 @@ pub mod builders {
         task::{self, JoinSet},
     };
     use tokio_stream::{StreamExt, StreamMap};
-    use x11rb::errors::{
-        ConnectionError, ParseError, ReplyError, ReplyOrIdError,
-    };
 
     use crate::{
-        bar::Cursors, cleanup, ipc::ChannelEndpoint, x::XStream, Alignment,
-        Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        bar::Cursors, cleanup, handle_error, ipc::ChannelEndpoint, x::XStream,
+        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
         UnixStreamWrapper,
     };
 
@@ -331,23 +346,6 @@ pub mod builders {
         pub monitor: Option<String>,
         /// The X11 cursor names associated with the bar.
         pub cursors: Cursors,
-    }
-
-    async fn handle_error(e: Error, bar: &Bar, ipc: bool) {
-        if let Some(e) = e.downcast_ref::<ConnectionError>() {
-            log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
-            // close when X server does
-            // this could cause problems, maybe only exit under certain circumstances?
-            cleanup::exit(Some((bar.name.as_str(), ipc)), true, 0).await;
-        } else if let Some(e) = e.downcast_ref::<ParseError>() {
-            log::warn!("Error parsing data from X server: {e}");
-        } else if let Some(e) = e.downcast_ref::<ReplyError>() {
-            log::warn!("Error produced by X server: {e}");
-        } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
-            log::warn!("Error produced by X server: {e}");
-        } else {
-            log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
-        }
     }
 
     impl BarConfig {

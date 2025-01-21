@@ -145,6 +145,7 @@ impl XWindow {
                     Ok(())
                 })),
             ),
+            format!("{self:?}"),
         )
     }
 }

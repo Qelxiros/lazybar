@@ -127,6 +127,7 @@ impl Clock {
             self.common.images.clone(),
             height,
             ShowHide::Default(paused, self.waker.clone()),
+            format!("{self:?}"),
         )
     }
 
@@ -162,7 +163,7 @@ impl Clock {
                     waker.wake();
                 }
                 drop(idx);
-                send.send(EventResponse::Ok)?;
+                send.send(EventResponse::Ok(None))?;
             }
             Event::Action(None) => {}
             Event::Mouse(event) => {

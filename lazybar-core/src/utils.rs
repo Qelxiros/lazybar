@@ -55,8 +55,12 @@ impl UnixStreamWrapper {
             return Ok(());
         }
         self.endpoint.send.send(message.to_string())?;
-        let response =
-            self.endpoint.recv.recv().await.unwrap_or(EventResponse::Ok);
+        let response = self
+            .endpoint
+            .recv
+            .recv()
+            .await
+            .unwrap_or(EventResponse::Ok(None));
 
         self.inner.writable().await?;
         self.inner
