@@ -446,6 +446,7 @@ pub fn create_surface(
     )?)
 }
 
+#[cfg(feature = "systray")]
 pub fn get_window_name(
     conn: &impl Connection,
     window: Window,
