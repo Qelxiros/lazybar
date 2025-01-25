@@ -1107,7 +1107,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lazybar"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1120,7 +1120,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "acpid_plug",
  "aho-corasick",
@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-msg"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "lazybar-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]
