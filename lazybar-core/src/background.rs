@@ -311,7 +311,7 @@ impl Bg {
     /// Adjusts the dimensions of a panel to account for the background.
     #[must_use]
     pub fn adjust_dims(&self, dims: (i32, i32), max_height: i32) -> (i32, i32) {
-        match self {
+        let out = match self {
             Self::None => dims,
             Self::Bubble {
                 radius: _,
@@ -332,6 +332,8 @@ impl Bg {
                 radius: _,
                 color: _,
             } => (dims.0 + max_height - dims.1, max_height),
-        }
+        };
+
+        (out.0.max(dims.0), out.1.max(dims.1))
     }
 }

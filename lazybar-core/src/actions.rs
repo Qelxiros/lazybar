@@ -4,7 +4,9 @@ use anyhow::Result;
 use config::Value;
 use derive_builder::Builder;
 
-use crate::{bar::Cursor, remove_string_from_config};
+#[cfg(feature = "cursor")]
+use crate::bar::Cursor;
+use crate::remove_string_from_config;
 
 /// A map from mouse buttons to panel events
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Builder)]
@@ -71,6 +73,7 @@ impl Actions {
     /// - Otherwise, if the panel is clickable, a cursor indicating that will be
     ///   chosen.
     /// - Otherwise, the cursor will be set to the system default.
+    #[cfg(feature = "cursor")]
     pub fn get_cursor(&self) -> Cursor {
         if self.up.as_ref().or(self.down.as_ref()).is_some() {
             Cursor::Scroll

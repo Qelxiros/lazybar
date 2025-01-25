@@ -104,7 +104,9 @@ use std::{
 use anyhow::{Error, Result};
 use async_trait::async_trait;
 use attrs::Attrs;
-use bar::{Bar, Cursor, Event, MouseEvent, Panel, PanelDrawInfo};
+use bar::{Bar, Event, Panel, PanelDrawInfo};
+#[cfg(feature = "cursor")]
+use bar::{Cursor, MouseEvent};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
@@ -120,8 +122,8 @@ use x11rb::errors::{ConnectionError, ParseError, ReplyError, ReplyOrIdError};
 
 /// A function that can be called repeatedly to draw the panel. The
 /// [`cairo::Context`] will have its current point set to the top left corner of
-/// the panel. The second and third parameters are the x and y coordinates of
-/// that point relative to the top left corner of the bar.
+/// the panel. The second parameter is the x coordinate of that point relative
+/// to the top left corner of the bar.
 pub type PanelDrawFn = Box<dyn Fn(&cairo::Context, f64) -> Result<()>>;
 /// A function that will be called whenever the panel is shown. Use this to
 /// resume polling, remap a child window, or make any other state changes that
@@ -136,6 +138,7 @@ pub type PanelShutdownFn = Box<dyn FnOnce()>;
 /// This function receives a [`MouseEvent`] and determines what the cursor name
 /// should be. See [`CursorInfo::Dynamic`][bar::CursorInfo::Dynamic] for more
 /// details.
+#[cfg(feature = "cursor")]
 pub type CursorFn = Box<dyn Fn(MouseEvent) -> Result<Cursor>>;
 /// A stream that produces panel changes when the underlying data source
 /// changes.
@@ -153,7 +156,7 @@ pub type PanelRunResult = Result<(
     Option<ipc::ChannelEndpoint<Event, EventResponse>>,
 )>;
 
-/// A cache for the position of clickable buttons.
+/// A cache for the position of clickable text areas.
 pub type IndexCache = Vec<ButtonIndex>;
 
 pub(crate) type IpcStream = Pin<
@@ -231,11 +234,11 @@ impl Display for Alignment {
 pub struct ButtonIndex {
     /// The name of the button.
     pub name: String,
-    /// The start of the button in bytes. Gets converted to pixel coordinates
-    /// with [`pango::Layout::xy_to_index()`]
+    /// The start of the button in bytes. Should be converted to pixel
+    /// coordinates with [`pango::Layout::xy_to_index()`]
     pub start: usize,
-    /// The length of the button in bytes. Gets converted to pixel coordinates
-    /// with [`pango::Layout::xy_to_index()`]
+    /// The length of the button in bytes. Should be converted to pixel
+    /// coordinates with [`pango::Layout::xy_to_index()`]
     pub length: usize,
 }
 
@@ -269,9 +272,13 @@ impl Margins {
 
 async fn handle_error(e: Error, bar: &Bar, ipc: bool) {
     if let Some(e) = e.downcast_ref::<ConnectionError>() {
-        log::warn!("X connection error (this probably points to an issue external to lazybar): {e}");
+        log::warn!(
+            "X connection error (this probably points to an issue external to \
+             lazybar): {e}"
+        );
         // close when X server does
-        // this could cause problems, maybe only exit under certain circumstances?
+        // this could cause problems, maybe only exit under certain
+        // circumstances?
         cleanup::exit(Some((bar.name.as_str(), ipc)), true, 0).await;
     } else if let Some(e) = e.downcast_ref::<ParseError>() {
         log::warn!("Error parsing data from X server: {e}");
@@ -280,7 +287,10 @@ async fn handle_error(e: Error, bar: &Bar, ipc: bool) {
     } else if let Some(e) = e.downcast_ref::<ReplyOrIdError>() {
         log::warn!("Error produced by X server: {e}");
     } else {
-        log::warn!("Error produced as a side effect of an X event (expect cryptic error messages): {e}");
+        log::warn!(
+            "Error produced as a side effect of an X event (expect cryptic \
+             error messages): {e}"
+        );
     }
 }
 
@@ -300,9 +310,11 @@ pub mod builders {
     };
     use tokio_stream::{StreamExt, StreamMap};
 
+    #[cfg(feature = "cursor")]
+    use crate::bar::Cursors;
     use crate::{
-        bar::Cursors, cleanup, handle_error, ipc::ChannelEndpoint, x::XStream,
-        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        cleanup, handle_error, ipc::ChannelEndpoint, x::XStream, Alignment,
+        Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
         UnixStreamWrapper,
     };
 
@@ -345,12 +357,19 @@ pub mod builders {
         /// monitor.
         pub monitor: Option<String>,
         /// The X11 cursor names associated with the bar.
+        #[cfg(feature = "cursor")]
         pub cursors: Cursors,
     }
 
     impl BarConfig {
+        /// Provides access to the [`BarConfigBuilder`] without an
+        /// additional import.
+        pub fn builder() -> BarConfigBuilder {
+            BarConfigBuilder::default()
+        }
+
         /// Add a panel to the bar with a given [`Alignment`]. It will appear to
-        /// the right of all other panels with the same alignment.
+        /// the right of all existing panels with the same alignment.
         pub fn add_panel(
             &mut self,
             panel: Box<dyn PanelConfig>,
@@ -389,6 +408,7 @@ pub mod builders {
                 self.reverse_scroll,
                 self.ipc,
                 self.monitor,
+                #[cfg(feature = "cursor")]
                 self.cursors,
             )?;
             log::debug!("bar created");

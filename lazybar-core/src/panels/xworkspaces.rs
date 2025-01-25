@@ -32,10 +32,12 @@ use x11rb::{
     CURRENT_TIME,
 };
 
+#[cfg(feature = "cursor")]
+use crate::bar::{Cursor, CursorInfo};
 use crate::{
     array_to_struct,
     background::Bg,
-    bar::{Cursor, CursorInfo, Event, MouseButton, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
@@ -150,7 +152,9 @@ impl XWorkspaces {
         let conn = self.conn.clone();
         let conn_ = self.conn.clone();
 
+        #[cfg(feature = "cursor")]
         let cursor_conn = self.conn.clone();
+        #[cfg(feature = "cursor")]
         let width_cache = width_cache.clone();
 
         Ok(PanelDrawInfo::new(
@@ -237,6 +241,7 @@ impl XWorkspaces {
                 Ok(())
             })),
             None,
+            #[cfg(feature = "cursor")]
             CursorInfo::Dynamic(Box::new(move |event| {
                 let names = get_workspaces(
                     cursor_conn.as_ref(),
@@ -374,18 +379,13 @@ impl XWorkspaces {
 
 #[async_trait(?Send)]
 impl PanelConfig for XWorkspaces {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `screen`: the name of the X screen to monitor
     ///   - type: String
     ///   - default: None (This will tell X to choose the default screen, which
     ///     is probably what you want.)
-    /// - `active_highlight`: The name of the highlight that will appear on the
-    ///   active workspaces. See [`Highlight::parse`] for parsing options.
-    /// - `nonempty_highlight`: The name of the highlight that will appear on
-    ///   the nonempty workspaces. See [`Highlight::parse`] for parsing options.
-    /// - `inactive_highlight`: The name of the highlight that will appear on
-    ///   the inactive workspaces. See [`Highlight::parse`] for parsing options.
     /// - `attrs_active`: A string specifying the attrs for the active
     ///   workspace. See [`Attrs::parse`] for details.
     /// - `attrs_nonempty`: A string specifying the attrs for the nonempty

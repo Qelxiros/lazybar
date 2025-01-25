@@ -165,8 +165,8 @@ impl PanelConfig for Storage {
     /// - `format`: the format string
     ///   - type: String
     ///   - default: `RAM: %percentage_used%`
-    ///   - formatting options: `%{gb,mb}_[swap_]{total,used,free}%,
-    ///     %percentage_[swap_]{used,free}%`
+    ///   - formatting options: `%{gb,mb}_{total,used,free}%,
+    ///     %percentage_{used,free}%`
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
     /// - `highlight`: A string specifying the highlight for the panel. See
@@ -206,16 +206,8 @@ impl PanelConfig for Storage {
             "%mb_total%",
             "%mb_used%",
             "%mb_free%",
-            "%gb_swap_total%",
-            "%gb_swap_used%",
-            "%gb_swap_free%",
-            "%mb_swap_total%",
-            "%mb_swap_used%",
-            "%mb_swap_free%",
             "%percentage_used%",
             "%percentage_free%",
-            "%percentage_swap_used%",
-            "%percentage_swap_free%",
             "%ramp%",
         ])?);
 

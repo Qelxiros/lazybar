@@ -310,8 +310,9 @@ impl PulseaudioStream {
 
 #[async_trait(?Send)]
 impl PanelConfig for Pulseaudio {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `sink`: the sink about which to display information
     ///   - type: String
     ///   - default: "@DEFAULT_SINK@"
@@ -320,6 +321,10 @@ impl PanelConfig for Pulseaudio {
     ///   - default: None (This does not mean no default; rather
     ///     [`Option::None`] is passed to the connect function and pulseaudio
     ///     will make its best guess. This is the right option on most systems.)
+    /// - `unit`: The number of percentage points by which to adjust the volume
+    ///   of the chosen sink
+    ///   - type: u64
+    ///   - default: 10
     /// - `format_unmuted`: the format string when the default sink is unmuted
     ///   - type: String
     ///   - default: `%ramp%%volume%%`
@@ -359,7 +364,7 @@ impl PanelConfig for Pulseaudio {
         }
 
         // FIXME: unused channel
-        let (send, recv) = channel();
+        let (_, recv) = channel();
         builder.recv(Arc::new(Mutex::new(recv)));
 
         let common = PanelCommon::parse_common(table)?;

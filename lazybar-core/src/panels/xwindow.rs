@@ -152,8 +152,9 @@ impl XWindow {
 
 #[async_trait(?Send)]
 impl PanelConfig for XWindow {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `screen`: the name of the X screen to monitor
     ///   - type: String
     ///   - default: None (This will tell X to choose the default screen, which

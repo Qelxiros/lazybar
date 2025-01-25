@@ -26,14 +26,14 @@ use x11rb::{
     xcb_ffi::XCBConnection,
 };
 
-#[cfg(feature = "cursor")]
-use crate::x::set_cursor;
 use crate::{
     create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    set_wm_properties, Alignment, CursorFn, IpcStream, Margins, PanelDrawFn,
-    PanelHideFn, PanelShowFn, PanelShutdownFn, PanelStream, Position,
+    set_wm_properties, Alignment, IpcStream, Margins, PanelDrawFn, PanelHideFn,
+    PanelShowFn, PanelShutdownFn, PanelStream, Position,
 };
+#[cfg(feature = "cursor")]
+use crate::{x::set_cursor, CursorFn};
 
 lazy_static! {
     static ref REGEX: Regex =
@@ -58,10 +58,12 @@ pub struct BarInfo {
     /// The background color of the bar
     pub bg: Color,
     /// The X11 cursor names associated with the bar
+    #[cfg(feature = "cursor")]
     pub cursors: Cursors,
 }
 
 /// A set of X11 cursor names.
+#[cfg(feature = "cursor")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cursors {
     /// The default cursor
@@ -76,6 +78,7 @@ pub struct Cursors {
 ///
 /// The X11 cursor name associated with each variant can be set for each bar
 /// using [`BarConfig`][crate::BarConfig]
+#[cfg(feature = "cursor")]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Cursor {
     /// The default cursor.
@@ -87,6 +90,7 @@ pub enum Cursor {
     Scroll,
 }
 
+#[cfg(feature = "cursor")]
 impl From<Cursor> for &str {
     fn from(value: Cursor) -> Self {
         match value {
@@ -139,6 +143,7 @@ pub enum Dependence {
 }
 
 /// What to set the cursor to when a panel is hovered.
+#[cfg(feature = "cursor")]
 #[derive(Dbg)]
 pub enum CursorInfo {
     /// The cursor should be the same across the whole panel. `None` will set
@@ -151,6 +156,7 @@ pub enum CursorInfo {
     Dynamic(CursorFn),
 }
 
+#[cfg(feature = "cursor")]
 impl CursorInfo {
     /// Gets the cursor name.
     ///
@@ -190,6 +196,7 @@ pub struct PanelDrawInfo {
     #[dbg(formatter = "fmt_option")]
     pub shutdown: Option<PanelShutdownFn>,
     /// Information about how to draw the cursor over this panel.
+    #[cfg(feature = "cursor")]
     pub cursor_info: CursorInfo,
     /// Information to be shown when `lazybar-msg` sends a "dump" message.
     pub dump: String,
@@ -212,7 +219,7 @@ impl PanelDrawInfo {
         show_fn: Option<PanelShowFn>,
         hide_fn: Option<PanelHideFn>,
         shutdown: Option<PanelShutdownFn>,
-        cursor_info: CursorInfo,
+        #[cfg(feature = "cursor")] cursor_info: CursorInfo,
         dump: String,
     ) -> Self {
         Self {
@@ -223,6 +230,7 @@ impl PanelDrawInfo {
             show_fn,
             hide_fn,
             shutdown,
+            #[cfg(feature = "cursor")]
             cursor_info,
             dump,
         }
@@ -404,7 +412,7 @@ impl Bar {
         reverse_scroll: bool,
         ipc: bool,
         monitor: Option<String>,
-        cursors: Cursors,
+        #[cfg(feature = "cursor")] cursors: Cursors,
     ) -> Result<(Self, IpcStream)> {
         let (conn, screen, window, width, visual, mon) =
             create_window(position, height, transparent, &bg, monitor)?;
@@ -417,6 +425,7 @@ impl Bar {
                 height,
                 transparent,
                 bg: bg.clone(),
+                #[cfg(feature = "cursor")]
                 cursors,
             })
             .unwrap();

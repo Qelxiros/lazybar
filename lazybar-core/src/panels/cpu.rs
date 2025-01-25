@@ -89,8 +89,9 @@ impl Cpu {
 
 #[async_trait(?Send)]
 impl PanelConfig for Cpu {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `interval`: how long to wait in seconds between each check
     ///   - type: u64
     ///   - default: 10

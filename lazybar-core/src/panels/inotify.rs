@@ -76,8 +76,9 @@ impl Inotify {
 
 #[async_trait(?Send)]
 impl PanelConfig for Inotify {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `path`: the file to monitor
     ///   - type: String
     ///   - default: none

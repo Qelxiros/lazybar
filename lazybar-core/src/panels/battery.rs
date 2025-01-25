@@ -133,6 +133,10 @@ impl PanelConfig for Battery {
     /// - `full_at`: specify the minimum percentage to use `format_full`. If
     ///   set, ignores the `status` file when the battery percentage is above
     ///   the provided value.
+    ///   - type: u64
+    /// - `interval`: how often (in seconds) to poll for new values
+    ///   - type: u64
+    ///   - default: 10
     /// - `format_charging`: format string when the battery is charging
     ///   - type: String
     ///   - formatting options: `%percentage%`
@@ -153,9 +157,6 @@ impl PanelConfig for Battery {
     ///   - type: String
     ///   - formatting options: `%percentage%`
     ///   - default: "%percentage%%"
-    /// - `interval`: how often (in seconds) to poll for new values
-    ///   - type: u64
-    ///   - default: 10
     /// - `attrs`: A string specifying the attrs for the panel. See
     ///   [`Attrs::parse`] for details.
     /// - `highlight`: A string specifying the highlight for the panel. See

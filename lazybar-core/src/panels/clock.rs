@@ -192,8 +192,9 @@ impl Clock {
 
 #[async_trait(?Send)]
 impl PanelConfig for Clock {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `formats`: The format strings to use. See
     ///   [`PanelCommon::parse_formats_variadic`]. See
     ///   [`chrono::format::strftime`] for clock-specific formatting details.
@@ -201,7 +202,7 @@ impl PanelConfig for Clock {
     ///   for each format. This must be the same length as the `formats` array.
     ///   Each precision should be one of `seconds`, `minutes`, `hours`, and
     ///   `days`. The default for each precision is `seconds`.
-    /// - `precision`: Specify the precision for all formats. Only checked if
+    /// - `precision`: Specify the precision for all formats. Only used if
     ///   `precisions` is unset.
     /// - `attrs`: An array specifying the attrs for each format. See
     ///   [`Attrs::parse`] for details. This must be the same length as the

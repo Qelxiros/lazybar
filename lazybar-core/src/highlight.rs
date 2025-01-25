@@ -96,11 +96,10 @@ impl Highlight {
     ///
     /// Configuration options:
     ///
-    /// - `height`: the height in pixels of the highlight
+    /// - `{over,under}line_height`: the height in pixels of the highlight
     ///   - type: f64
     ///   - default: none
-    ///
-    /// - `color`: the color of the highlight
+    /// - `{over,under}line_color`: the color of the highlight
     ///   - type: String
     ///   - default: none
     pub fn parse(name: impl AsRef<str>) -> Option<Self> {

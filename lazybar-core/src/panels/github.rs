@@ -99,8 +99,9 @@ impl Github {
 
 #[async_trait(?Send)]
 impl PanelConfig for Github {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `interval`: how long to wait between requests. The panel will never
     ///   poll more often than this, but it may poll less often according to the
     ///   `X-Poll-Interval` header of the reponse. See

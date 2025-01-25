@@ -45,9 +45,7 @@ impl Attrs {
     ///
     /// - `fg: String`: Specify the foreground (usually text) color. All parsing
     ///   methods from [csscolorparser] are available.
-    ///
     /// - `bg`: See [`Bg::parse`].
-    ///
     /// - `font: String`: Specify the font to be used. This will be turned into
     ///   a [`pango::FontDescription`], so it's very configurable. Font family,
     ///   weight, size, and more can be specified.
@@ -109,13 +107,6 @@ impl Attrs {
             );
         }
     }
-
-    // /// Sets the background color of a [`cairo::Context`].
-    // pub fn apply_bg(&self, cr: &cairo::Context) {
-    //     if let Some(bg) = &self.bg {
-    //         cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
-    //     }
-    // }
 
     /// Combines two [`Attrs`] instances into one, choosing options from `self`
     /// as long as they are [`Some`], otherwise choosing them from `new`.

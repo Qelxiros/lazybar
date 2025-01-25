@@ -60,7 +60,14 @@ pub async fn cleanup() -> Result<()> {
 /// Shutdown the bar as cleanly as possible. Short of SIGKILL, lazybar should
 /// never exit without calling this function.
 ///
-/// `bar` should be the name of the bar and whether IPC is enabled if available, otherwise `None`.
+/// - `bar` should be the name of the bar and whether IPC is enabled if
+///   available,
+/// otherwise `None`.
+/// - `in_runtime` should specify whether the function is being called from
+///   within
+/// the Tokio runtime. It's much easier for the caller to determine this..
+/// - `exit_code` will be passed to the operating system by
+///   [std::process::exit].
 pub async fn exit(
     bar: Option<(&str, bool)>,
     in_runtime: bool,

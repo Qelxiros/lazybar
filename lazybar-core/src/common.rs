@@ -12,17 +12,19 @@ use derive_debug::Dbg;
 use futures::task::AtomicWaker;
 use pangocairo::functions::show_layout;
 
+#[cfg(feature = "cursor")]
+use crate::bar::CursorInfo;
 use crate::{
     actions::Actions,
     attrs::Attrs,
-    bar::{CursorInfo, Dependence, PanelDrawInfo},
+    bar::{Dependence, PanelDrawInfo},
     image::Image,
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, Highlight, PanelHideFn, PanelShowFn, Ramp,
 };
 
 /// A [`PanelShowFn`] and a [`PanelHideFn`] bundled together. Only for use with
-/// [`draw_common`].
+/// [`PanelCommon::draw`].
 #[derive(Dbg)]
 pub enum ShowHide {
     /// This is designed for use with a [`ManagedIntervalStream`], but other
@@ -132,6 +134,7 @@ impl PanelCommon {
             show,
             hide,
             None,
+            #[cfg(feature = "cursor")]
             CursorInfo::Static(self.actions.get_cursor()),
             dump,
         ))
@@ -304,8 +307,7 @@ impl PanelCommon {
     }
 
     /// Attempts to parse common panel configuration options from a subset of
-    /// the global [`Config`][config::Config]. The format suffixes and defaults
-    /// and attrs prefixes are documented by each panel.
+    /// the global [`Config`][config::Config].
     ///
     /// Format strings should be specified as `format{suffix} = "value"`. Where
     /// not noted, panels accept one format string with no suffix.

@@ -48,7 +48,8 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("bar")
                 .help(
-                    "Specifies the name of the bar to read from the config file",
+                    "Specifies the name of the bar to read from the config \
+                     file",
                 )
                 .value_name("BAR")
                 .value_hint(ValueHint::Other)

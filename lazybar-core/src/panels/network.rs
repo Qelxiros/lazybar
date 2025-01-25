@@ -97,8 +97,9 @@ impl Network {
 
 #[async_trait(?Send)]
 impl PanelConfig for Network {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `if_name`: the name of the given interface. These can be listed with
     ///   `ip link`.
     ///   - type: String

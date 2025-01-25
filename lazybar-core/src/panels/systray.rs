@@ -27,8 +27,10 @@ use x11rb::{
     COPY_FROM_PARENT,
 };
 
+#[cfg(feature = "cursor")]
+use crate::bar::{Cursor, CursorInfo};
 use crate::{
-    bar::{self, BarInfo, Cursor, CursorInfo, PanelDrawInfo},
+    bar::{self, BarInfo, PanelDrawInfo},
     common::PanelCommon,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
@@ -160,6 +162,7 @@ impl Systray {
                 }
                 let _ = shutdown_conn.destroy_window(selection);
             })),
+            #[cfg(feature = "cursor")]
             CursorInfo::Static(Cursor::Default),
             format!("{self:?}"),
         )
@@ -231,8 +234,9 @@ impl Systray {
 
 #[async_trait(?Send)]
 impl PanelConfig for Systray {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `screen`: The X screen to run on. Only one systray can exist on each
     ///   screen at any given time. Leaving this unset is probably what you
     ///   want.

@@ -79,8 +79,9 @@ impl Temp {
 
 #[async_trait(?Send)]
 impl PanelConfig for Temp {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `format`: the format string
     ///   - type: String
     ///   - default: `TEMP: %temp%`

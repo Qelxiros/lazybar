@@ -156,7 +156,7 @@ impl ManagedIntervalStreamBuilder {
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a table
+/// it into a table.
 pub fn get_table_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &HashMap<String, Value, S>,
@@ -173,7 +173,7 @@ pub fn get_table_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a string
+/// it into a string.
 pub fn remove_string_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,
@@ -195,7 +195,7 @@ pub fn remove_string_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into an array
+/// it into an array.
 pub fn remove_array_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,
@@ -232,7 +232,7 @@ pub fn remove_array_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a uint
+/// it into a uint.
 pub fn remove_uint_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,
@@ -249,7 +249,7 @@ pub fn remove_uint_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a bool
+/// it into a bool.
 pub fn remove_bool_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,
@@ -266,7 +266,7 @@ pub fn remove_bool_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a float
+/// it into a float.
 pub fn remove_float_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,
@@ -283,7 +283,7 @@ pub fn remove_float_from_config<S: std::hash::BuildHasher>(
 }
 
 /// Removes a value from a given config table and returns an attempt at parsing
-/// it into a color
+/// it into a color.
 pub fn remove_color_from_config<S: std::hash::BuildHasher>(
     id: &str,
     table: &mut HashMap<String, Value, S>,

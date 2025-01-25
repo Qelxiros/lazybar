@@ -32,7 +32,6 @@ pub struct Custom {
     name: &'static str,
     #[builder(default = r#"Command::new("echo")"#)]
     command: Command,
-    #[builder(setter(strip_option))]
     interval: Option<Duration>,
     #[builder(default)]
     waker: Arc<AtomicWaker>,
@@ -78,8 +77,9 @@ impl Custom {
 
 #[async_trait(?Send)]
 impl PanelConfig for Custom {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `command`: the command to run
     ///   - type: String
     ///   - default: none
@@ -101,34 +101,22 @@ impl PanelConfig for Custom {
         table: &mut HashMap<String, config::Value>,
         _global: &config::Config,
     ) -> Result<Self> {
-        let builder = match (
-            remove_string_from_config("command", table),
-            remove_uint_from_config("interval", table),
-        ) {
-            (Some(command), Some(interval)) => {
-                let mut cmd = Command::new("sh");
-                cmd.arg("-c").arg(command.as_str());
-                CustomBuilder::default()
-                    .command(cmd)
-                    .interval(Duration::from_secs(interval))
-            }
-            (Some(command), None) => {
-                let mut cmd = Command::new("sh");
-                cmd.arg("-c").arg(command.as_str());
-                CustomBuilder::default().command(cmd)
-            }
-            (None, Some(interval)) => {
-                CustomBuilder::default().interval(Duration::from_secs(interval))
-            }
-            (None, None) => CustomBuilder::default(),
-        };
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(
+            remove_string_from_config("command", table)
+                .unwrap_or(String::new()),
+        );
+        let interval =
+            remove_uint_from_config("interval", table).map(Duration::from_secs);
 
         let common = PanelCommon::parse_common(table)?;
         let format = PanelCommon::parse_format(table, "", "%stdout%");
         let attrs = PanelCommon::parse_attr(table, "");
         let highlight = PanelCommon::parse_highlight(table, "");
 
-        Ok(builder
+        Ok(CustomBuilder::default()
+            .command(command)
+            .interval(interval)
             .name(name)
             .common(common)
             .format(format.leak())

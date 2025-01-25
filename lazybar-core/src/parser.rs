@@ -6,6 +6,8 @@ use futures::executor;
 use lazy_static::lazy_static;
 use tokio::sync::OnceCell;
 
+#[cfg(feature = "cursor")]
+use crate::bar::Cursors;
 #[cfg(feature = "battery")]
 use crate::panels::Battery;
 #[cfg(feature = "clock")]
@@ -41,9 +43,8 @@ use crate::panels::XWindow;
 #[cfg(feature = "xworkspaces")]
 use crate::panels::XWorkspaces;
 use crate::{
-    bar::Cursors, builders::BarConfigBuilder, cleanup, get_table_from_config,
-    remove_string_from_config, Alignment, Attrs, BarConfig, Margins,
-    PanelConfig, Position,
+    cleanup, get_table_from_config, remove_string_from_config, Alignment,
+    Attrs, BarConfig, Margins, PanelConfig, Position,
 };
 
 lazy_static! {
@@ -159,7 +160,7 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
         .with_context(|| format!("`{bar_name}` isn't a table"))?;
     log::trace!("got bar table {bar_name} from config");
 
-    let mut bar = BarConfigBuilder::default()
+    let bar = BarConfig::builder()
         .name(bar_name.to_owned())
         .position({
             let val = match bar_table
@@ -256,33 +257,30 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
             log::trace!("got bar monitor: {val:?}");
             val
         })
-        .cursors({
-            let val = Cursors {
-                default: remove_string_from_config(
-                    "cursor_default",
-                    &mut bar_table,
-                )
-                .map::<&'static str, _>(|s| s.leak())
-                .unwrap_or("default"),
-                click: remove_string_from_config(
-                    "cursor_click",
-                    &mut bar_table,
-                )
-                .map::<&'static str, _>(|s| s.leak())
-                .unwrap_or("hand2"),
-                scroll: remove_string_from_config(
-                    "cursor_scroll",
-                    &mut bar_table,
-                )
-                .map::<&'static str, _>(|s| s.leak())
-                .unwrap_or("sb_v_double_arrow"),
-            };
-            val
-        })
         .left(Vec::new())
         .center(Vec::new())
-        .right(Vec::new())
-        .build()?;
+        .right(Vec::new());
+
+    #[cfg(feature = "cursor")]
+    let bar = bar.cursors({
+        let val = Cursors {
+            default: remove_string_from_config(
+                "cursor_default",
+                &mut bar_table,
+            )
+            .map::<&'static str, _>(|s| s.leak())
+            .unwrap_or("default"),
+            click: remove_string_from_config("cursor_click", &mut bar_table)
+                .map::<&'static str, _>(|s| s.leak())
+                .unwrap_or("hand2"),
+            scroll: remove_string_from_config("cursor_scroll", &mut bar_table)
+                .map::<&'static str, _>(|s| s.leak())
+                .unwrap_or("sb_v_double_arrow"),
+        };
+        val
+    });
+
+    let mut bar = bar.build()?;
 
     let mut left_final = Vec::new();
     let mut center_final = Vec::new();

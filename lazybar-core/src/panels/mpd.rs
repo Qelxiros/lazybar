@@ -29,9 +29,11 @@ use tokio_stream::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
+#[cfg(feature = "cursor")]
+use crate::bar::{Cursor, CursorInfo};
 use crate::{
     array_to_struct,
-    bar::{Cursor, CursorInfo, Event, MouseButton, PanelDrawInfo},
+    bar::{Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
@@ -293,7 +295,9 @@ impl Mpd {
         let images = self.common.images.clone();
         let paused_ = paused.clone();
 
+        #[cfg(feature = "cursor")]
         let last_layout = self.last_layout.clone();
+        #[cfg(feature = "cursor")]
         let index_cache = self.index_cache.clone();
 
         Ok(PanelDrawInfo::new(
@@ -345,6 +349,7 @@ impl Mpd {
                 Ok(())
             })),
             None,
+            #[cfg(feature = "cursor")]
             CursorInfo::Dynamic(Box::new(move |event| {
                 Ok(
                     if let Some(ref layout) =
@@ -591,8 +596,9 @@ impl Mpd {
 
 #[async_trait(?Send)]
 impl PanelConfig for Mpd {
-    /// Configuration options:
+    /// Parses an instance of the panel from the global [`Config`]
     ///
+    /// Configuration options:
     /// - `address`: the address of the MPD server to which the panel will
     ///   connect
     ///   - type: String
@@ -695,12 +701,9 @@ impl PanelConfig for Mpd {
 
         builder.name(name);
 
-        let mut final_address = String::from("127.0.0.1:6600");
-        if let Some(address) = remove_string_from_config("address", table) {
-            final_address = address;
-        }
-
-        let final_address = final_address.leak();
+        let final_address = remove_string_from_config("address", table)
+            .unwrap_or(String::from("127.0.0.1:6600"))
+            .leak();
 
         builder.address(final_address);
 
