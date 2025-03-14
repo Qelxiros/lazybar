@@ -19,13 +19,13 @@ use tokio_stream::Stream;
 use x11rb::{
     connection::Connection,
     protocol::{
+        Event,
         randr::{ConnectionExt as _, MonitorInfo},
         xproto::{
             Atom, AtomEnum, Colormap, ColormapAlloc, ConnectionExt,
             CreateWindowAux, EventMask, PropMode, Screen, VisualClass,
             Visualtype, Window, WindowClass,
         },
-        Event,
     },
     wrapper::ConnectionExt as _,
     xcb_ffi::XCBConnection,
@@ -40,7 +40,7 @@ use x11rb::{
 
 #[cfg(feature = "cursor")]
 use crate::bar::Cursor;
-use crate::{interned_atoms, Position};
+use crate::{Position, interned_atoms};
 
 lazy_static! {
     static ref ATOMS: Arc<Mutex<InternedAtoms>> =
@@ -429,21 +429,19 @@ pub fn create_surface(
     height: i32,
     conn: &XCBConnection,
 ) -> Result<XCBSurface> {
-    Ok(XCBSurface::create(
-        unsafe {
+    Ok(unsafe {
+        XCBSurface::create(
             &cairo::XCBConnection::from_raw_none(
                 conn.get_raw_xcb_connection().cast(),
-            )
-        },
-        &cairo::XCBDrawable(window),
-        unsafe {
+            ),
+            &cairo::XCBDrawable(window),
             &cairo::XCBVisualType::from_raw_none(
                 std::ptr::from_mut(&mut xcb_visualtype_t::from(visual)).cast(),
-            )
-        },
-        width,
-        height,
-    )?)
+            ),
+            width,
+            height,
+        )
+    }?)
 }
 
 #[cfg(feature = "systray")]

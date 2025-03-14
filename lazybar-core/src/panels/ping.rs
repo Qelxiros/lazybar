@@ -283,7 +283,7 @@ impl Stream for PingStream {
                     }));
                     Poll::Pending
                 }
-                Some(ref mut interval) => {
+                Some(interval) => {
                     let value = interval.poll_tick(cx);
                     if value.is_ready() {
                         let pings = self.pings;

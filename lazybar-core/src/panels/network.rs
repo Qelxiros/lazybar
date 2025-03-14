@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ffi::{c_char, c_void, CStr},
+    ffi::{CStr, c_char, c_void},
     net::IpAddr,
     ptr,
     rc::Rc,
@@ -13,20 +13,20 @@ use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use if_addrs::{get_if_addrs, IfAddr};
+use if_addrs::{IfAddr, get_if_addrs};
 use rustix::{
     io::Errno,
-    ioctl::{ioctl, Ioctl, Opcode},
-    net::{socket, AddressFamily, SocketType},
+    ioctl::{Ioctl, Opcode, ioctl},
+    net::{AddressFamily, SocketType, socket},
 };
 use tokio_stream::StreamExt;
 
 use crate::{
+    Attrs, Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult,
     array_to_struct,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelRunResult,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 array_to_struct!(NetworkFormats, connected, disconnected);
@@ -251,8 +251,11 @@ struct EssidIoctl {
 unsafe impl Ioctl for EssidIoctl {
     type Output = String;
 
-    const OPCODE: Opcode = Opcode::old(0x8b1b);
     const IS_MUTATING: bool = true;
+
+    fn opcode(&self) -> Opcode {
+        0x8b1b
+    }
 
     fn as_ptr(&mut self) -> *mut c_void {
         ptr::addr_of_mut!(self.data) as _
@@ -262,12 +265,14 @@ unsafe impl Ioctl for EssidIoctl {
         _out: rustix::ioctl::IoctlOutput,
         extract_output: *mut c_void,
     ) -> rustix::io::Result<Self::Output> {
-        let req = &mut *(extract_output as *mut Request);
-        let data = req.data.essid.ptr;
-        let res = match CStr::from_ptr(data).to_str() {
-            Ok(s) => s.to_owned(),
-            Err(_) => return Err(Errno::BADMSG),
-        };
-        Ok(res)
+        unsafe {
+            let req = &mut *(extract_output as *mut Request);
+            let data = req.data.essid.ptr;
+            let res = match CStr::from_ptr(data).to_str() {
+                Ok(s) => s.to_owned(),
+                Err(_) => return Err(Errno::BADMSG),
+            };
+            Ok(res)
+        }
     }
 }

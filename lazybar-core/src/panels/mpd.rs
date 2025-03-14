@@ -495,7 +495,7 @@ impl Mpd {
         send: &UnboundedSender<EventResponse>,
     ) -> Result<()> {
         let result = match event {
-            Event::Action(Some(ref value)) => match value.as_str() {
+            Event::Action(Some(value)) => match value.as_str() {
                 "next" => conn.lock().unwrap().next(),
                 "prev" => conn.lock().unwrap().prev(),
                 "play" => conn.lock().unwrap().play(),

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, pin::Pin, rc::Rc, sync::Arc, task::Poll};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
@@ -19,11 +19,11 @@ use x11rb::{
 };
 
 use crate::{
+    Attrs, Highlight, PanelConfig, PanelRunResult,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
     remove_string_from_config, remove_uint_from_config,
     x::InternedAtoms,
-    Attrs, Highlight, PanelConfig, PanelRunResult,
 };
 
 /// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
@@ -96,9 +96,9 @@ impl XWindow {
                         )?
                         .reply()?;
 
-                    title.push_str(unsafe {
-                        String::from_utf8_unchecked(reply.value).as_str()
-                    });
+                    let s = unsafe { String::from_utf8_unchecked(reply.value) };
+
+                    title.push_str(s.as_str());
 
                     if reply.bytes_after == 0 {
                         break;
@@ -278,12 +278,15 @@ impl Stream for XStream {
             let waker = cx.waker().clone();
             let name_atom = self.name_atom;
             let window_atom = self.window_atom;
-            self.handle = Some(task::spawn_blocking(move || loop {
-                let event = conn.wait_for_event();
-                if let Ok(protocol::Event::PropertyNotify(event)) = event {
-                    if event.atom == name_atom || event.atom == window_atom {
-                        waker.wake();
-                        break;
+            self.handle = Some(task::spawn_blocking(move || {
+                loop {
+                    let event = conn.wait_for_event();
+                    if let Ok(protocol::Event::PropertyNotify(event)) = event {
+                        if event.atom == name_atom || event.atom == window_atom
+                        {
+                            waker.wake();
+                            break;
+                        }
                     }
                 }
             }));

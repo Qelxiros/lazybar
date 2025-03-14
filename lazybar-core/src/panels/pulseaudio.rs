@@ -121,7 +121,7 @@ impl Pulseaudio {
         response_send: UnboundedSender<EventResponse>,
     ) -> Result<()> {
         match event {
-            Event::Action(Some(ref value)) if value == "increment" => {
+            Event::Action(Some(value)) if value == "increment" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -160,7 +160,7 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
-            Event::Action(Some(ref value)) if value == "decrement" => {
+            Event::Action(Some(value)) if value == "decrement" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -198,7 +198,7 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
-            Event::Action(Some(ref value)) if value == "toggle" => {
+            Event::Action(Some(value)) if value == "toggle" => {
                 let (send, recv) = std::sync::mpsc::channel();
                 mainloop.borrow_mut().lock();
                 introspector.borrow_mut().get_sink_info_by_name(
@@ -221,7 +221,7 @@ impl Pulseaudio {
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
-            Event::Action(Some(ref value)) => {
+            Event::Action(Some(value)) => {
                 let value = value.to_owned();
                 Ok(response_send.send(EventResponse::Err(format!(
                     "Unknown event {value}",

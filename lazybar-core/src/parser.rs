@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use config::{Config, File, FileFormat, Value};
 use futures::executor;
 use lazy_static::lazy_static;
@@ -43,8 +43,8 @@ use crate::panels::XWindow;
 #[cfg(feature = "xworkspaces")]
 use crate::panels::XWorkspaces;
 use crate::{
-    cleanup, get_table_from_config, remove_string_from_config, Alignment,
-    Attrs, BarConfig, Margins, PanelConfig, Position,
+    Alignment, Attrs, BarConfig, Margins, PanelConfig, Position, cleanup,
+    get_table_from_config, remove_string_from_config,
 };
 
 lazy_static! {

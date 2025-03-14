@@ -13,19 +13,20 @@ use anyhow::Result;
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
-use futures::{task::AtomicWaker, FutureExt};
+use futures::{FutureExt, task::AtomicWaker};
 use rustix::{
     fd::OwnedFd,
-    fs::inotify::{inotify_add_watch, inotify_init, CreateFlags, WatchFlags},
+    fs::inotify::{CreateFlags, WatchFlags, add_watch, init},
     io,
 };
 use tokio::task::{self, JoinHandle};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
+    Attrs, Highlight, PanelConfig, PanelRunResult,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, Attrs, Highlight, PanelConfig, PanelRunResult,
+    remove_string_from_config,
 };
 
 /// Uses inotify to monitor and display the contents of a file. Useful for
@@ -128,10 +129,10 @@ impl PanelConfig for Inotify {
         height: i32,
     ) -> PanelRunResult {
         let create_flags = CreateFlags::empty();
-        let inotify = inotify_init(create_flags)?;
+        let inotify = init(create_flags)?;
 
         let watch_flags = WatchFlags::MODIFY;
-        inotify_add_watch(inotify.as_fd(), self.path.as_str(), watch_flags)?;
+        add_watch(inotify.as_fd(), self.path.as_str(), watch_flags)?;
 
         self.attrs.apply_to(&global_attrs);
 
@@ -190,14 +191,16 @@ impl Stream for InotifyStream {
         } else {
             let i = self.i.clone();
             let waker = cx.waker().clone();
-            self.handle = Some(task::spawn_blocking(move || loop {
-                let mut buf = [0u8; 1024];
-                let bytes = io::read(i.as_fd(), &mut buf);
-                match bytes {
-                    Err(_) | Ok(0) => continue,
-                    Ok(_) => {
-                        waker.wake();
-                        break;
+            self.handle = Some(task::spawn_blocking(move || {
+                loop {
+                    let mut buf = [0u8; 1024];
+                    let bytes = io::read(i.as_fd(), &mut buf);
+                    match bytes {
+                        Err(_) | Ok(0) => continue,
+                        Ok(_) => {
+                            waker.wake();
+                            break;
+                        }
                     }
                 }
             }));

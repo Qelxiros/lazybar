@@ -162,8 +162,11 @@ pub type IndexCache = Vec<ButtonIndex>;
 pub(crate) type IpcStream = Pin<
     Box<
         dyn tokio_stream::Stream<
-            Item = std::result::Result<tokio::net::UnixStream, std::io::Error>,
-        >,
+                Item = std::result::Result<
+                    tokio::net::UnixStream,
+                    std::io::Error,
+                >,
+            >,
     >,
 >;
 
@@ -313,9 +316,9 @@ pub mod builders {
     #[cfg(feature = "cursor")]
     use crate::bar::Cursors;
     use crate::{
-        cleanup, handle_error, ipc::ChannelEndpoint, x::XStream, Alignment,
-        Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
-        UnixStreamWrapper,
+        Alignment, Attrs, Bar, Color, Margins, Panel, PanelConfig, Position,
+        UnixStreamWrapper, cleanup, handle_error, ipc::ChannelEndpoint,
+        x::XStream,
     };
 
     /// A set of options for a bar.
@@ -543,24 +546,26 @@ pub mod builders {
             let mut endpoint1 = ChannelEndpoint::new(send1, recv1);
             let endpoint2 = ChannelEndpoint::new(send2, recv2);
             *cleanup::ENDPOINT.lock().await = Some(endpoint2);
-            thread::spawn(move || loop {
-                if let Some(signal) = signals.wait().next() {
-                    log::info!("Received signal {signal} - shutting down");
-                    if let Ok(rt) = Runtime::new() {
-                        rt.block_on(async {
-                            cleanup::exit(
+            thread::spawn(move || {
+                loop {
+                    if let Some(signal) = signals.wait().next() {
+                        log::info!("Received signal {signal} - shutting down");
+                        if let Ok(rt) = Runtime::new() {
+                            rt.block_on(async {
+                                cleanup::exit(
+                                    Some((name.as_str(), self.ipc)),
+                                    true,
+                                    0,
+                                )
+                                .await;
+                            });
+                        } else {
+                            executor::block_on(cleanup::exit(
                                 Some((name.as_str(), self.ipc)),
-                                true,
+                                false,
                                 0,
-                            )
-                            .await;
-                        });
-                    } else {
-                        executor::block_on(cleanup::exit(
-                            Some((name.as_str(), self.ipc)),
-                            false,
-                            0,
-                        ));
+                            ));
+                        }
                     }
                 }
             });

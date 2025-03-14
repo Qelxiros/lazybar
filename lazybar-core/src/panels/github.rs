@@ -260,7 +260,7 @@ impl Stream for GithubStream {
         self.waker.register(cx.waker());
         if *self.paused.lock().unwrap() {
             Poll::Pending
-        } else if let Some(ref mut handle) = &mut self.handle {
+        } else if let Some(handle) = &mut self.handle {
             let val = handle.poll_unpin(cx).map(Result::ok);
 
             if val.is_ready() {

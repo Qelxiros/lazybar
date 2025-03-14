@@ -6,20 +6,21 @@ use std::{
     task::Poll,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use lazybar_types::EventResponse;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedSender},
+    sync::mpsc::{UnboundedSender, unbounded_channel},
     task::{self, JoinHandle},
 };
 use tokio_stream::{
-    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+    Stream, StreamExt, StreamMap, wrappers::UnboundedReceiverStream,
 };
 use x11rb::{
+    CURRENT_TIME,
     connection::Connection,
     protocol::{
         self,
@@ -29,20 +30,18 @@ use x11rb::{
         },
     },
     rust_connection::RustConnection,
-    CURRENT_TIME,
 };
 
 #[cfg(feature = "cursor")]
 use crate::bar::{Cursor, CursorInfo};
 use crate::{
-    array_to_struct,
+    Attrs, Highlight, PanelConfig, PanelRunResult, array_to_struct,
     background::Bg,
     bar::{Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_string_from_config,
     x::InternedAtoms,
-    Attrs, Highlight, PanelConfig, PanelRunResult,
 };
 
 #[derive(PartialEq, Eq, Debug)]
@@ -689,15 +688,17 @@ impl Stream for XStream {
             let number_atom = self.number_atom;
             let current_atom = self.current_atom;
             let names_atom = self.names_atom;
-            self.handle = Some(task::spawn_blocking(move || loop {
-                let event = conn.wait_for_event();
-                if let Ok(protocol::Event::PropertyNotify(event)) = event {
-                    if event.atom == number_atom
-                        || event.atom == current_atom
-                        || event.atom == names_atom
-                    {
-                        waker.wake();
-                        break;
+            self.handle = Some(task::spawn_blocking(move || {
+                loop {
+                    let event = conn.wait_for_event();
+                    if let Ok(protocol::Event::PropertyNotify(event)) = event {
+                        if event.atom == number_atom
+                            || event.atom == current_atom
+                            || event.atom == names_atom
+                        {
+                            waker.wake();
+                            break;
+                        }
                     }
                 }
             }));

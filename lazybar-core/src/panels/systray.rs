@@ -2,12 +2,13 @@ use std::{
     cmp::Ordering, collections::HashMap, ffi::CString, rc::Rc, sync::Arc,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
 use tokio_stream::StreamExt;
 use x11rb::{
+    COPY_FROM_PARENT,
     connection::Connection,
     cookie::VoidCookie,
     protocol::{
@@ -24,20 +25,19 @@ use x11rb::{
     },
     wrapper::ConnectionExt as _,
     xcb_ffi::XCBConnection,
-    COPY_FROM_PARENT,
 };
 
 #[cfg(feature = "cursor")]
 use crate::bar::{Cursor, CursorInfo};
 use crate::{
+    PanelConfig, PanelRunResult,
     bar::{self, BarInfo, PanelDrawInfo},
     common::PanelCommon,
     remove_bool_from_config, remove_string_from_config,
     remove_uint_from_config,
     x::{
-        find_visual, get_window_name, intern_named_atom, InternedAtoms, XStream,
+        InternedAtoms, XStream, find_visual, get_window_name, intern_named_atom,
     },
-    PanelConfig, PanelRunResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -776,8 +776,8 @@ impl Systray {
                 self.time_end = event.time;
                 false
             }
-            protocol::Event::KeyPress(mut event)
-            | protocol::Event::KeyRelease(mut event) => {
+            &protocol::Event::KeyPress(mut event)
+            | &protocol::Event::KeyRelease(mut event) => {
                 if let Some(focused) = self.focused {
                     event.child = focused.window;
                     self.conn.send_event(

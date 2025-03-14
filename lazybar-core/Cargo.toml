@@ -2,8 +2,8 @@
 name = "lazybar-core"
 version = "0.8.0"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
-edition = "2021"
-rust-version = "1.79.0"
+edition = "2024"
+rust-version = "1.85.0"
 description = "A lightweight, event-driven X11 status bar"
 readme = "../README.md"
 repository = "https://github.com/Qelxiros/lazybar"
@@ -59,38 +59,38 @@ xworkspaces = ["dep:chrono"]
 [dependencies]
 acpid_plug = "0.1.2"
 aho-corasick = { version = "1.1.3", optional = true }
-anyhow = "1.0.86"
-async-trait = "0.1.81"
-cairo-rs = { version = "0.20.0", features = ["png", "xcb"] }
-chrono = { version = "0.4.38", default-features = false, features = [
+anyhow = "1.0.97"
+async-trait = "0.1.87"
+cairo-rs = { version = "0.20.7", features = ["png", "xcb"] }
+chrono = { version = "0.4.40", default-features = false, features = [
   "alloc",
   "clock",
 ], optional = true }
-config = { version = "0.15.4", default-features = false, features = ["toml"] }
+config = { version = "0.15.11", default-features = false, features = ["toml"] }
 csscolorparser = "0.7.0"
 derive-debug = "0.1.2"
-derive_builder = "0.20.0"
+derive_builder = "0.20.2"
 fastping-rs = { version = "0.2.4", optional = true }
-futures = "0.3.30"
-glib = "0.20.0"
+futures = "0.3.31"
+glib = "0.20.9"
 if-addrs = "0.13.3"
 lazy_static = "1.5.0"
 lazybar-types = { version = "0.2.0", path = "../lazybar-types" }
-libpulse-binding = { version = "2.28.1", optional = true }
-log = "0.4.22"
+libpulse-binding = { version = "2.29.0", optional = true }
+log = "0.4.26"
 mpd = { version = "0.1.0", optional = true }
-pango = { version = "0.20.0", features = ["v1_46"] }
-pangocairo = "0.20.0"
-regex = "1.10.5"
-reqwest = { version = "0.12.5", features = [
+pango = { version = "0.20.9", features = ["v1_46"] }
+pangocairo = "0.20.7"
+regex = "1.11.1"
+reqwest = { version = "0.12.14", features = [
   "blocking",
   "json",
 ], optional = true }
-rustix = "0.38.34"
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
+rustix = { version = "1.0.2", features = ["fs", "system", "net"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
-tokio = { version = "1.38.0", features = [
+tokio = { version = "1.44.1", features = [
   "rt",
   "net",
   "time",
@@ -99,8 +99,8 @@ tokio = { version = "1.38.0", features = [
   "fs",
   "io-util",
 ] }
-tokio-stream = { version = "0.1.15", features = ["net"] }
-unicode-segmentation = { version = "1.11.0", optional = true }
+tokio-stream = { version = "0.1.17", features = ["net"] }
+unicode-segmentation = { version = "1.12.0", optional = true }
 x11rb = { version = "0.13.1", features = [
   "allow-unsafe-code",
   "cursor",

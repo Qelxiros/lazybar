@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chrono::{Local, Timelike};
 use config::{Config, Value};
@@ -16,20 +16,21 @@ use derive_builder::Builder;
 use futures::task::AtomicWaker;
 use lazybar_types::EventResponse;
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedSender},
-    time::{interval, Instant, Interval},
+    sync::mpsc::{UnboundedSender, unbounded_channel},
+    time::{Instant, Interval, interval},
 };
 use tokio_stream::{
-    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+    Stream, StreamExt, StreamMap, wrappers::UnboundedReceiverStream,
 };
 
 use crate::{
+    Attrs, PanelConfig, PanelRunResult,
     actions::Actions,
     bar::{Event, MouseButton, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_array_from_config, remove_string_from_config,
-    remove_uint_from_config, Attrs, PanelConfig, PanelRunResult,
+    remove_uint_from_config,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

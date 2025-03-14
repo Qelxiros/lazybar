@@ -18,4 +18,4 @@ categories = [
 ]
 
 [dependencies]
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }

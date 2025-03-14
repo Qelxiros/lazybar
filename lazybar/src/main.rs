@@ -9,8 +9,8 @@ use lazybar_core::parser;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
-fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
-    generate(gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
+fn print_completions<G: Generator>(r#gen: G, cmd: &mut Command) {
+    generate(r#gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
 }
 
 fn main() -> Result<()> {

@@ -46,7 +46,7 @@ macro_rules! array_to_struct {
 /// This macro is for internal use and should be called elsewhere with care.
 #[macro_export]
 macro_rules! interned_atoms {
-    ($name:ident, $ref:expr, $($atoms:ident,)+) => {
+    ($name:ident, $ref:expr_2021, $($atoms:ident,)+) => {
         #[allow(non_snake_case)]
         #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name {

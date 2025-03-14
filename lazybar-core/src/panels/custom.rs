@@ -186,7 +186,7 @@ impl Stream for CustomStream {
             Poll::Pending
         } else {
             match &mut self.interval {
-                Some(ref mut interval) => {
+                Some(interval) => {
                     interval.poll_tick(cx).map(|_| Some(()))
                 }
                 None => {
