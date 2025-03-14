@@ -1,9 +1,9 @@
 [package]
 name = "lazybar"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Jeremy Smart <jeremy3141592@gmail.com>"]
-edition = "2021"
-rust-version = "1.79.0"
+edition = "2024"
+rust-version = "1.85.0"
 description = "A lightweight, event-driven X11 status bar"
 readme = "../README.md"
 repository = "https://github.com/Qelxiros/lazybar"
@@ -57,7 +57,7 @@ xworkspaces = ["lazybar-core/xworkspaces"]
 anyhow = "1.0.97"
 clap = { version = "4.5.32", features = ["cargo"] }
 clap_complete = "4.5.46"
-lazybar-core = { version = "0.8.0", default-features = false, path = "../lazybar-core" }
+lazybar-core = { version = "0.9.0", default-features = false, path = "../lazybar-core" }
 log = "0.4.26"
 signal-hook = { version = "0.3.17", features = ["iterator"] }
 simple_logger = "5.0.0"
