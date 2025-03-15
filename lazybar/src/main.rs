@@ -2,9 +2,9 @@ use std::{env, io, path::PathBuf};
 
 use anyhow::Result;
 use clap::{
-    crate_name, crate_version, value_parser, Arg, ArgAction, Command, ValueHint,
+    Arg, ArgAction, Command, ValueHint, crate_name, crate_version, value_parser,
 };
-use clap_complete::{generate, Generator, Shell};
+use clap_complete::{Generator, Shell, generate};
 use lazybar_core::parser;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
@@ -107,11 +107,7 @@ fn main() -> Result<()> {
             None => None,
             Some(c) => {
                 let p = PathBuf::from(c);
-                if p.exists() {
-                    Some(p)
-                } else {
-                    None
-                }
+                if p.exists() { Some(p) } else { None }
             }
         }
     } {
@@ -121,11 +117,7 @@ fn main() -> Result<()> {
             None => None,
             Some(c) => {
                 let p = PathBuf::from(format!("{c}/lazybar/config.toml"));
-                if p.exists() {
-                    Some(p)
-                } else {
-                    None
-                }
+                if p.exists() { Some(p) } else { None }
             }
         }
     } {
@@ -136,11 +128,7 @@ fn main() -> Result<()> {
             Some(c) => {
                 let p =
                     PathBuf::from(format!("{c}/.config/lazybar/config.toml"));
-                if p.exists() {
-                    Some(p)
-                } else {
-                    None
-                }
+                if p.exists() { Some(p) } else { None }
             }
         }
     } {

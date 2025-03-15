@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
-use clap_complete::{generate, Generator, Shell};
+use clap_complete::{Generator, Shell, generate};
 use lazybar_types::EventResponse;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;

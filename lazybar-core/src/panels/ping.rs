@@ -2,29 +2,28 @@ use std::{
     collections::HashMap,
     pin::Pin,
     rc::Rc,
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc::Receiver},
     task::{Context, Poll},
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use fastping_rs::{PingResult, Pinger};
-use futures::{task::AtomicWaker, FutureExt};
+use futures::{FutureExt, task::AtomicWaker};
 use tokio::{
     task::{self, JoinHandle},
-    time::{interval, Interval},
+    time::{Interval, interval},
 };
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
-    array_to_struct,
+    Attrs, Highlight, PanelConfig, PanelRunResult, Ramp, array_to_struct,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    PanelConfig, PanelRunResult, Ramp,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 array_to_struct!(PingFormats, connected, disconnected);

@@ -14,11 +14,11 @@ use rustix::fs::statvfs;
 use tokio_stream::StreamExt;
 
 use crate::{
+    Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult,
     attrs::Attrs,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelRunResult,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 /// Displays information about storage for a given mountpoint.

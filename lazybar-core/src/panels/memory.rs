@@ -8,7 +8,7 @@ use std::{
 };
 
 use aho_corasick::AhoCorasick;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
@@ -18,10 +18,10 @@ use regex::Regex;
 use tokio_stream::StreamExt;
 
 use crate::{
+    Attrs, Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelRunResult,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 lazy_static! {

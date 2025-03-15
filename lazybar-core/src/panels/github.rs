@@ -11,29 +11,29 @@ use std::{
 use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
-use futures::{task::AtomicWaker, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, task::AtomicWaker};
 use lazy_static::lazy_static;
 use lazybar_types::EventResponse;
 use regex::Regex;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
     Client,
+    header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
 use serde::Deserialize;
 use tokio::{
     task::{self, JoinHandle},
-    time::{interval, Interval},
+    time::{Interval, interval},
 };
 use tokio_stream::Stream;
 
 use crate::{
+    Highlight, PanelConfig, PanelStream,
     attrs::Attrs,
     bar::{Event, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
     remove_array_from_config, remove_bool_from_config,
-    remove_string_from_config, remove_uint_from_config, Highlight, PanelConfig,
-    PanelStream,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 lazy_static! {

@@ -6,8 +6,8 @@ use config::{Config, Value};
 use derive_builder::Builder;
 
 use crate::{
-    common::{PanelCommon, ShowHide},
     Attrs, PanelConfig, PanelRunResult,
+    common::{PanelCommon, ShowHide},
 };
 
 /// Displays static text with [pango] markup.

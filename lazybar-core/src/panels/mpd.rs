@@ -20,25 +20,25 @@ use mpd::{Client, Idle, State, Status, Subsystem};
 use pango::Layout;
 use pangocairo::functions::{create_layout, show_layout};
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedSender},
+    sync::mpsc::{UnboundedSender, unbounded_channel},
     task::{self, JoinHandle},
-    time::{self, interval, Interval},
+    time::{self, Interval, interval},
 };
 use tokio_stream::{
-    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+    Stream, StreamExt, StreamMap, wrappers::UnboundedReceiverStream,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 #[cfg(feature = "cursor")]
 use crate::bar::{Cursor, CursorInfo};
 use crate::{
-    array_to_struct,
+    Attrs, ButtonIndex, Highlight, IndexCache, ManagedIntervalStream,
+    PanelConfig, PanelRunResult, array_to_struct,
     bar::{Event, MouseButton, PanelDrawInfo},
     common::PanelCommon,
     ipc::ChannelEndpoint,
     remove_bool_from_config, remove_color_from_config,
-    remove_string_from_config, remove_uint_from_config, Attrs, ButtonIndex,
-    Highlight, IndexCache, ManagedIntervalStream, PanelConfig, PanelRunResult,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 #[derive(Clone, Debug)]

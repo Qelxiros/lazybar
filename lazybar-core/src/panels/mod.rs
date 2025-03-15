@@ -8,6 +8,8 @@ mod cpu;
 mod custom;
 #[cfg(feature = "github")]
 mod github;
+#[cfg(feature = "i3")]
+mod i3mode;
 #[cfg(feature = "inotify")]
 mod inotify;
 #[cfg(feature = "memory")]
@@ -43,6 +45,8 @@ pub use cpu::Cpu;
 pub use custom::Custom;
 #[cfg(feature = "github")]
 pub use github::Github;
+#[cfg(feature = "i3")]
+pub use i3mode::I3Mode;
 #[cfg(feature = "inotify")]
 pub use inotify::Inotify;
 #[cfg(feature = "memory")]
@@ -80,6 +84,8 @@ pub mod builders {
     pub use super::custom::{CustomBuilder, CustomBuilderError};
     #[cfg(feature = "github")]
     pub use super::github::{GithubBuilder, GithubBuilderError};
+    #[cfg(feature = "i3")]
+    pub use super::i3mode::{I3ModeBuilder, I3ModeBuilderError};
     #[cfg(feature = "inotify")]
     pub use super::inotify::{InotifyBuilder, InotifyBuilderError};
     #[cfg(feature = "memory")]

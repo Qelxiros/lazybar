@@ -17,11 +17,11 @@ use tokio::time::interval;
 use tokio_stream::{Stream, StreamExt, StreamMap};
 
 use crate::{
+    Attrs, Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
     array_to_struct,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 /// Shows the current battery level.

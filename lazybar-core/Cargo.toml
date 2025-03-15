@@ -24,6 +24,7 @@ default = [
   "cpu",
   "custom",
   "github",
+  "i3",
   "inotify",
   "memory",
   "mpd",
@@ -43,6 +44,7 @@ clock = ["dep:chrono"]
 cpu = []
 custom = []
 github = ["dep:reqwest"]
+i3 = ["dep:i3ipc"]
 inotify = []
 memory = ["dep:aho-corasick"]
 mpd = ["dep:aho-corasick", "dep:mpd", "dep:unicode-segmentation"]
@@ -73,6 +75,7 @@ derive_builder = "0.20.2"
 fastping-rs = { version = "0.2.4", optional = true }
 futures = "0.3.31"
 glib = "0.20.9"
+i3ipc = { version = "0.10.1", optional = true }
 if-addrs = "0.13.3"
 lazy_static = "1.5.0"
 lazybar-types = { version = "0.4.0", path = "../lazybar-types" }

@@ -13,10 +13,10 @@ use futures::task::AtomicWaker;
 use tokio_stream::StreamExt;
 
 use crate::{
+    Attrs, Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_uint_from_config, Attrs, Highlight, ManagedIntervalStream,
-    PanelConfig, PanelRunResult, Ramp,
+    remove_uint_from_config,
 };
 
 /// Displays the temperature of a provided thermal zone.

@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use csscolorparser::Color;
 use derive_debug::Dbg;
 use lazy_static::lazy_static;
@@ -13,7 +13,7 @@ use lazybar_types::EventResponse;
 use regex::Regex;
 use tokio::{
     net::UnixStream,
-    sync::{mpsc::UnboundedSender, OnceCell},
+    sync::{OnceCell, mpsc::UnboundedSender},
     task::JoinSet,
 };
 use tokio_stream::{Stream, StreamMap};
@@ -27,13 +27,13 @@ use x11rb::{
 };
 
 use crate::{
-    create_surface, create_window,
+    Alignment, IpcStream, Margins, PanelDrawFn, PanelHideFn, PanelShowFn,
+    PanelShutdownFn, PanelStream, Position, create_surface, create_window,
     ipc::{self, ChannelEndpoint},
-    set_wm_properties, Alignment, IpcStream, Margins, PanelDrawFn, PanelHideFn,
-    PanelShowFn, PanelShutdownFn, PanelStream, Position,
+    set_wm_properties,
 };
 #[cfg(feature = "cursor")]
-use crate::{x::set_cursor, CursorFn};
+use crate::{CursorFn, x::set_cursor};
 
 lazy_static! {
     static ref REGEX: Regex =
@@ -738,7 +738,7 @@ impl Bar {
                     message => {
                         return Err(anyhow!(
                             "Unknown or invalid message {message}"
-                        ))
+                        ));
                     }
                 }
 

@@ -18,6 +18,8 @@ use crate::panels::Cpu;
 use crate::panels::Custom;
 #[cfg(feature = "github")]
 use crate::panels::Github;
+#[cfg(feature = "i3")]
+use crate::panels::I3Mode;
 #[cfg(feature = "inotify")]
 use crate::panels::Inotify;
 #[cfg(feature = "memory")]
@@ -385,6 +387,11 @@ fn parse_panel(
                 #[cfg(feature = "github")]
                 "github" => {
                     Github::parse(p, &mut table, config)
+                        .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
+                }
+                #[cfg(feature = "i3")]
+                "i3mode" => {
+                    I3Mode::parse(p, &mut table, config)
                         .map::<Box<dyn PanelConfig>, _>(|p| Box::new(p))
                 }
                 #[cfg(feature = "inotify")]

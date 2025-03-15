@@ -4,44 +4,44 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::{
-        mpsc::{channel, Receiver},
         Arc, Mutex,
+        mpsc::{Receiver, channel},
     },
     task::Poll,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use config::{Config, Value};
 use derive_builder::Builder;
-use futures::{task::AtomicWaker, FutureExt};
+use futures::{FutureExt, task::AtomicWaker};
 use lazybar_types::EventResponse;
 use libpulse_binding::{
     callbacks::ListResult,
     context::{
-        self, introspect::Introspector, subscribe::InterestMaskSet, FlagSet,
-        State,
+        self, FlagSet, State, introspect::Introspector,
+        subscribe::InterestMaskSet,
     },
     mainloop::threaded,
     operation,
     volume::Volume,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedSender},
+    sync::mpsc::{UnboundedSender, unbounded_channel},
     task::{self, JoinHandle},
 };
 use tokio_stream::{
-    wrappers::UnboundedReceiverStream, Stream, StreamExt, StreamMap,
+    Stream, StreamExt, StreamMap, wrappers::UnboundedReceiverStream,
 };
 
 use crate::{
+    Attrs, Highlight, PanelConfig, PanelRunResult, Ramp,
     actions::Actions,
     array_to_struct,
     bar::{Event, MouseButton, PanelDrawInfo},
     common::{PanelCommon, ShowHide},
     ipc::ChannelEndpoint,
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    PanelConfig, PanelRunResult, Ramp,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 array_to_struct!(PulseaudioFormats, unmuted, muted);

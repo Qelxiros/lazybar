@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
@@ -16,10 +16,10 @@ use regex::Regex;
 use tokio_stream::StreamExt;
 
 use crate::{
+    Attrs, Highlight, ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    ManagedIntervalStream, PanelConfig, PanelRunResult, Ramp,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 lazy_static! {

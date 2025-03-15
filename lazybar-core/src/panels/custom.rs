@@ -12,14 +12,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use tokio::time::{interval, Interval};
+use tokio::time::{Interval, interval};
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
+    Attrs, Highlight, PanelConfig, PanelRunResult,
     bar::PanelDrawInfo,
     common::{PanelCommon, ShowHide},
-    remove_string_from_config, remove_uint_from_config, Attrs, Highlight,
-    PanelConfig, PanelRunResult,
+    remove_string_from_config, remove_uint_from_config,
 };
 
 /// Runs a custom command with `sh -c <command>`, either once or on a given
@@ -186,9 +186,7 @@ impl Stream for CustomStream {
             Poll::Pending
         } else {
             match &mut self.interval {
-                Some(interval) => {
-                    interval.poll_tick(cx).map(|_| Some(()))
-                }
+                Some(interval) => interval.poll_tick(cx).map(|_| Some(())),
                 None => {
                     if self.fired {
                         Poll::Pending

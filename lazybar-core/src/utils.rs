@@ -12,14 +12,14 @@ use anyhow::Result;
 use config::{Map, Value, ValueKind};
 use csscolorparser::Color;
 use derive_builder::Builder;
-use futures::{task::AtomicWaker, Stream};
+use futures::{Stream, task::AtomicWaker};
 use lazy_static::lazy_static;
 use lazybar_types::EventResponse;
 use regex::{Captures, Regex};
 use tokio::{
     io::AsyncWriteExt,
     net::UnixStream,
-    time::{interval, Instant, Interval},
+    time::{Instant, Interval, interval},
 };
 
 use crate::{ipc::ChannelEndpoint, parser};

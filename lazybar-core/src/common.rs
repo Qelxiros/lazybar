@@ -15,12 +15,13 @@ use pangocairo::functions::show_layout;
 #[cfg(feature = "cursor")]
 use crate::bar::CursorInfo;
 use crate::{
+    Highlight, PanelHideFn, PanelShowFn, Ramp,
     actions::Actions,
     attrs::Attrs,
     bar::{Dependence, PanelDrawInfo},
     image::Image,
     remove_array_from_config, remove_bool_from_config,
-    remove_string_from_config, Highlight, PanelHideFn, PanelShowFn, Ramp,
+    remove_string_from_config,
 };
 
 /// A [`PanelShowFn`] and a [`PanelHideFn`] bundled together. Only for use with
