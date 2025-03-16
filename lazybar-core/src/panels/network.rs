@@ -258,7 +258,7 @@ unsafe impl Ioctl for EssidIoctl {
     }
 
     fn as_ptr(&mut self) -> *mut c_void {
-        ptr::addr_of_mut!(self.data) as _
+        ptr::addr_of_mut!(self.data).cast()
     }
 
     unsafe fn output_from_ptr(
@@ -266,7 +266,7 @@ unsafe impl Ioctl for EssidIoctl {
         extract_output: *mut c_void,
     ) -> rustix::io::Result<Self::Output> {
         unsafe {
-            let req = &mut *(extract_output as *mut Request);
+            let req = &mut *(extract_output.cast::<Request>());
             let data = req.data.essid.ptr;
             let res = match CStr::from_ptr(data).to_str() {
                 Ok(s) => s.to_owned(),

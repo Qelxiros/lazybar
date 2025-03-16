@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::Read,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::Duration,
 };
 
@@ -11,7 +11,6 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use lazy_static::lazy_static;
 use regex::Regex;
 use tokio_stream::StreamExt;
 
@@ -22,10 +21,9 @@ use crate::{
     remove_string_from_config, remove_uint_from_config,
 };
 
-lazy_static! {
-    static ref REGEX: Regex =
-        Regex::new(r"cpu\s*(?<user>\d+) (?<nice>\d+) (?<system>\d+) (?<idle>\d+) \d+ \d+ \d+ (?<steal>\d+)").unwrap();
-}
+static REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"cpu\s*(?<user>\d+) (?<nice>\d+) (?<system>\d+) (?<idle>\d+) \d+ \d+ \d+ (?<steal>\d+)").unwrap()
+});
 
 #[derive(Debug, Clone, Builder)]
 #[builder_struct_attr(allow(missing_docs))]

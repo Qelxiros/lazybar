@@ -242,7 +242,7 @@ impl Mpd {
                     text.replace("%main%", replacement_text.as_str());
                 layout.set_markup(layout_text.as_str());
             }
-        };
+        }
 
         self.attrs.apply_font(&layout);
 
@@ -565,7 +565,7 @@ impl Mpd {
                                             send,
                                         )
                                     });
-                            };
+                            }
                         }
                     }
                     _ => {}
@@ -702,7 +702,7 @@ impl PanelConfig for Mpd {
         builder.name(name);
 
         let final_address = remove_string_from_config("address", table)
-            .unwrap_or(String::from("127.0.0.1:6600"))
+            .unwrap_or_else(|| String::from("127.0.0.1:6600"))
             .leak();
 
         builder.address(final_address);

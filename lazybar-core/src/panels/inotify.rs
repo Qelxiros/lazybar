@@ -196,7 +196,7 @@ impl Stream for InotifyStream {
                     let mut buf = [0u8; 1024];
                     let bytes = io::read(i.as_fd(), &mut buf);
                     match bytes {
-                        Err(_) | Ok(0) => continue,
+                        Err(_) | Ok(0) => {}
                         Ok(_) => {
                             waker.wake();
                             break;

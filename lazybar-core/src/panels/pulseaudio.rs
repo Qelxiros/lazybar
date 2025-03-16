@@ -79,7 +79,7 @@ impl Pulseaudio {
         height: i32,
         paused: Arc<Mutex<bool>>,
         data: Result<Option<(Volume, bool)>>,
-        last_data: Arc<Mutex<(Volume, bool)>>,
+        last_data: &Arc<Mutex<(Volume, bool)>>,
     ) -> Result<PanelDrawInfo> {
         let (volume, mute) = match data {
             Ok(Some(data)) => data,
@@ -156,7 +156,7 @@ impl Pulseaudio {
                     }
 
                     mainloop.borrow_mut().unlock();
-                };
+                }
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
@@ -194,7 +194,7 @@ impl Pulseaudio {
                     }
 
                     mainloop.borrow_mut().unlock();
-                };
+                }
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
@@ -217,7 +217,7 @@ impl Pulseaudio {
                         .borrow_mut()
                         .set_sink_mute_by_name(sink, !mute, None);
                     mainloop.borrow_mut().unlock();
-                };
+                }
 
                 Ok(response_send.send(EventResponse::Ok(None))?)
             }
@@ -294,7 +294,7 @@ impl Stream for PulseaudioStream {
 }
 
 impl PulseaudioStream {
-    fn new(
+    const fn new(
         recv: Arc<Mutex<Receiver<(Volume, bool)>>>,
         paused: Arc<Mutex<bool>>,
         waker: Arc<AtomicWaker>,
@@ -478,7 +478,7 @@ impl PanelConfig for Pulseaudio {
             .borrow_mut()
             .subscribe(InterestMaskSet::SINK, |_| {});
 
-        let ss = sink_send.clone();
+        let ss = sink_send;
         let cb: Option<Box<dyn FnMut(_, _, _)>> =
             Some(Box::new(move |_, _, _| {
                 let send = ss.clone();
@@ -555,7 +555,7 @@ impl PanelConfig for Pulseaudio {
                     height,
                     self.paused.clone(),
                     data,
-                    last_data.clone(),
+                    &last_data.clone(),
                 )
             })),
             Some(ChannelEndpoint::new(event_send, response_recv)),

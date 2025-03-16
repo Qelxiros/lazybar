@@ -95,3 +95,39 @@ macro_rules! interned_atoms {
         }
     };
 }
+
+/// Parses panel names from the global config.
+#[macro_export]
+macro_rules! get_panels {
+    ($final:ident, $panels:ident, $btable:ident, $ptable:ident, $bar:ident, $config:ident, $alignment:expr) => {
+        let mut $final = Vec::new();
+
+        let $panels = $btable.remove(stringify!($panels));
+        if let Some(pl) = $panels {
+            let panel_list = pl
+                .into_array()
+                .context(format!("`{}` isn't an array", stringify!($panels)))?;
+            for p in panel_list {
+                if let Ok(name) = p.clone().into_string() {
+                    log::debug!(
+                        "Adding panel {name} to {}",
+                        stringify!($panels)
+                    );
+                    $final.push(name);
+                } else {
+                    log::warn!(
+                        "Ignoring non-string value {p:?} in `{}`",
+                        stringify!($panels)
+                    );
+                }
+            }
+        }
+
+        // leak panel names so that we can use &'static str instead of String
+        $final
+            .into_iter()
+            .filter_map(|p| parse_panel(p.leak(), &$ptable, &$config))
+            .for_each(|p| $bar.add_panel(p, $alignment));
+        log::debug!("{} populated", stringify!($panels));
+    };
+}

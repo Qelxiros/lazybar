@@ -2,7 +2,7 @@
 use std::cell::OnceCell;
 use std::{
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     task::{self, Poll},
 };
 
@@ -12,7 +12,6 @@ use anyhow::{Context, Result};
 use cairo::XCBSurface;
 use csscolorparser::Color;
 use futures::FutureExt;
-use lazy_static::lazy_static;
 use rustix::system::uname;
 use tokio::task::JoinHandle;
 use tokio_stream::Stream;
@@ -42,10 +41,8 @@ use x11rb::{
 use crate::bar::Cursor;
 use crate::{Position, interned_atoms};
 
-lazy_static! {
-    static ref ATOMS: Arc<Mutex<InternedAtoms>> =
-        Arc::new(Mutex::new(InternedAtoms::new()));
-}
+static ATOMS: LazyLock<Mutex<InternedAtoms>> =
+    LazyLock::new(|| Mutex::new(InternedAtoms::new()));
 
 interned_atoms!(
     InternedAtoms,
@@ -148,8 +145,8 @@ pub fn create_window(
     let mut iter = monitors.monitors.iter();
     let mon = if let Some(monitor) = monitor {
         iter.find(|info| {
-            conn.get_atom_name(info.name).map_or(false, |cookie| {
-                cookie.reply().map_or(false, |reply| {
+            conn.get_atom_name(info.name).is_ok_and(|cookie| {
+                cookie.reply().is_ok_and(|reply| {
                     String::from_utf8_lossy(reply.name.as_slice()) == monitor
                 })
             })

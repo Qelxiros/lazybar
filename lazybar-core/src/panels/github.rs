@@ -12,9 +12,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use derive_builder::Builder;
 use futures::{FutureExt, StreamExt, task::AtomicWaker};
-use lazy_static::lazy_static;
 use lazybar_types::EventResponse;
-use regex::Regex;
 use reqwest::{
     Client,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
@@ -35,11 +33,6 @@ use crate::{
     remove_array_from_config, remove_bool_from_config,
     remove_string_from_config, remove_uint_from_config,
 };
-
-lazy_static! {
-    static ref REGEX: Regex =
-        Regex::new(r#"<(?<url>\S*)>; rel="next""#).unwrap();
-}
 
 /// Displays the number of github notifications you have.
 #[derive(Debug, Clone, Builder)]

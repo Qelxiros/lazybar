@@ -1,11 +1,11 @@
-use std::{env, io, path::PathBuf};
+use std::{env, io, path::PathBuf, str::FromStr};
 
 use anyhow::Result;
 use clap::{
     Arg, ArgAction, Command, ValueHint, crate_name, crate_version, value_parser,
 };
 use clap_complete::{Generator, Shell, generate};
-use lazybar_core::parser;
+use lazybar_core::{PROJ_DIRS, parser};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
@@ -84,58 +84,19 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    // the provided path, failing that
-    // $XDG_CONFIG_HOME/lazybar/config.toml, failing that
-    // $HOME/.config/lazybar/config.toml, failing that
-    // /etc/lazybar/config.toml
-    #[allow(clippy::option_if_let_else)]
-    let path = if let Some(p) = {
-        match args.get_one::<PathBuf>("config") {
-            None => None,
-            Some(c) => {
-                if c.exists() {
-                    Some(c.clone())
-                } else {
-                    None
-                }
-            }
-        }
-    } {
-        p
-    } else if let Some(p) = {
-        match env::var("LAZYBAR_CONFIG_PATH").ok() {
-            None => None,
-            Some(c) => {
-                let p = PathBuf::from(c);
-                if p.exists() { Some(p) } else { None }
-            }
-        }
-    } {
-        p
-    } else if let Some(p) = {
-        match env::var("XDG_CONFIG_HOME").ok() {
-            None => None,
-            Some(c) => {
-                let p = PathBuf::from(format!("{c}/lazybar/config.toml"));
-                if p.exists() { Some(p) } else { None }
-            }
-        }
-    } {
-        p
-    } else if let Some(p) = {
-        match env::var("HOME").ok() {
-            None => None,
-            Some(c) => {
-                let p =
-                    PathBuf::from(format!("{c}/.config/lazybar/config.toml"));
-                if p.exists() { Some(p) } else { None }
-            }
-        }
-    } {
-        p
-    } else {
-        PathBuf::from("/etc/lazybar/config.toml")
-    };
+    let path = args.get_one::<PathBuf>("config").map_or_else(
+        || {
+            (*PROJ_DIRS).as_ref().map_or_else(
+                || PathBuf::from_str("/etc/lazybar/config.toml").unwrap(),
+                |p| {
+                    let mut path = p.config_dir().to_path_buf();
+                    path.push("config.toml");
+                    path
+                },
+            )
+        },
+        PathBuf::clone,
+    );
 
     let config = parser::parse(
         args.get_one::<String>("bar").unwrap().as_str(),

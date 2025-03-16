@@ -370,7 +370,7 @@ impl XWorkspaces {
                     )?;
                 }
             }
-        };
+        }
 
         Ok(())
     }
@@ -598,8 +598,8 @@ fn get_nonempty(
             conn.get_property(false, w, type_atom, AtomEnum::ATOM, 0, 1)
                 .map_or(true, |c| {
                     c.reply().map_or(true, |r| {
-                        r.value32().map_or(true, |mut iter| {
-                            iter.next().map_or(true, |v| v == normal_atom)
+                        r.value32().is_none_or(|mut iter| {
+                            iter.next().is_none_or(|v| v == normal_atom)
                         })
                     })
                 })

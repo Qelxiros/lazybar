@@ -1,20 +1,17 @@
 use std::{
     fs::{read_dir, remove_file},
     os::unix::fs::FileTypeExt,
-    sync::Arc,
+    sync::LazyLock,
     time::Duration,
 };
 
 use anyhow::{Result, anyhow};
-use lazy_static::lazy_static;
 use tokio::{io::AsyncWriteExt, net::UnixStream, sync::Mutex, time};
 
 use crate::ipc::{self, ChannelEndpoint};
 
-lazy_static! {
-    pub(crate) static ref ENDPOINT: Arc<Mutex<Option<ChannelEndpoint<(), ()>>>> =
-        Arc::new(Mutex::new(None));
-}
+pub(crate) static ENDPOINT: LazyLock<Mutex<Option<ChannelEndpoint<(), ()>>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 /// Removes any sockets in `/tmp/lazybar-ipc/` that can't be connected to.
 pub async fn cleanup() -> Result<()> {
@@ -61,13 +58,12 @@ pub async fn cleanup() -> Result<()> {
 /// never exit without calling this function.
 ///
 /// - `bar` should be the name of the bar and whether IPC is enabled if
-///   available,
-/// otherwise `None`.
+///   available, otherwise `None`.
 /// - `in_runtime` should specify whether the function is being called from
-///   within
-/// the Tokio runtime. It's much easier for the caller to determine this..
+///   within the Tokio runtime. It's much easier for the caller to determine
+///   this.
 /// - `exit_code` will be passed to the operating system by
-///   [std::process::exit].
+///   [`std::process::exit`].
 pub async fn exit(
     bar: Option<(&str, bool)>,
     in_runtime: bool,

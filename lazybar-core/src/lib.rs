@@ -98,7 +98,7 @@ use std::{
     fmt::{Debug, Display},
     pin::Pin,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use anyhow::{Error, Result};
@@ -110,6 +110,7 @@ use bar::{Cursor, MouseEvent};
 pub use builders::BarConfig;
 use config::{Config, Value};
 pub use csscolorparser::Color;
+use directories::ProjectDirs;
 pub use glib::markup_escape_text;
 pub use highlight::Highlight;
 use ipc::ChannelEndpoint;
@@ -120,18 +121,25 @@ pub use utils::*;
 use x::{create_surface, create_window, set_wm_properties};
 use x11rb::errors::{ConnectionError, ParseError, ReplyError, ReplyOrIdError};
 
-/// A function that can be called repeatedly to draw the panel. The
-/// [`cairo::Context`] will have its current point set to the top left corner of
-/// the panel. The second parameter is the x coordinate of that point relative
-/// to the top left corner of the bar.
+/// Use XDG base directories spec for config files
+pub static PROJ_DIRS: LazyLock<Option<ProjectDirs>> =
+    LazyLock::new(|| ProjectDirs::from("com", "qelxiros", "lazybar"));
+
+/// A function that can be called repeatedly to draw the panel.
+///
+/// The [`cairo::Context`] will have its current point set to the top left
+/// corner of the panel. The second parameter is the x coordinate of that point
+/// relative to the top left corner of the bar.
 pub type PanelDrawFn = Box<dyn Fn(&cairo::Context, f64) -> Result<()>>;
-/// A function that will be called whenever the panel is shown. Use this to
-/// resume polling, remap a child window, or make any other state changes that
-/// can be cheaply reversed.
+/// A function that will be called whenever the panel is shown.
+///
+/// Use this to resume polling, remap a child window, or make any other state
+/// changes that can be cheaply reversed.
 pub type PanelShowFn = Box<dyn Fn() -> Result<()>>;
-/// A function that will be called whenever the panel is hidden. Use this to
-/// pause polling, unmap a child window, or make any other state changes that
-/// can be cheaply reversed.
+/// A function that will be called whenever the panel is hidden.
+///
+/// Use this to pause polling, unmap a child window, or make any other state
+/// changes that can be cheaply reversed.
 pub type PanelHideFn = Box<dyn Fn() -> Result<()>>;
 /// A function that is called for each panel before the bar shuts down.
 pub type PanelShutdownFn = Box<dyn FnOnce()>;
@@ -367,6 +375,7 @@ pub mod builders {
     impl BarConfig {
         /// Provides access to the [`BarConfigBuilder`] without an
         /// additional import.
+        #[must_use]
         pub fn builder() -> BarConfigBuilder {
             BarConfigBuilder::default()
         }
@@ -382,7 +391,7 @@ pub mod builders {
                 Alignment::Left => self.left.push(panel),
                 Alignment::Center => self.center.push(panel),
                 Alignment::Right => self.right.push(panel),
-            };
+            }
         }
 
         /// Turn the provided [`BarConfig`] into a [`Bar`] and start the main

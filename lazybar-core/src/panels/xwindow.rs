@@ -26,7 +26,8 @@ use crate::{
     x::InternedAtoms,
 };
 
-/// Displays the title (_NET_WM_NAME) of the focused window (_NET_ACTIVE_WINDOW)
+/// Displays the title (`_NET_WM_NAME`) of the focused window
+/// (`_NET_ACTIVE_WINDOW`)
 ///
 /// Requires an EWMH-compliant window manager
 #[derive(Debug, Builder, Clone)]
@@ -47,7 +48,7 @@ pub struct XWindow {
 
 impl XWindow {
     fn draw(
-        &mut self,
+        &self,
         cr: &Rc<cairo::Context>,
         name_atom: Atom,
         window_atom: Atom,

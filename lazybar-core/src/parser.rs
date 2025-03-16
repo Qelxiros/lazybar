@@ -1,9 +1,8 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::LazyLock};
 
 use anyhow::{Context, Result, anyhow};
 use config::{Config, File, FileFormat, Value};
 use futures::executor;
-use lazy_static::lazy_static;
 use tokio::sync::OnceCell;
 
 #[cfg(feature = "cursor")]
@@ -46,47 +45,45 @@ use crate::panels::XWindow;
 use crate::panels::XWorkspaces;
 use crate::{
     Alignment, Attrs, BarConfig, Margins, PanelConfig, Position, cleanup,
-    get_table_from_config, remove_string_from_config,
+    get_panels, get_table_from_config, remove_string_from_config,
 };
 
-lazy_static! {
-    /// The `attrs` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref ATTRS: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-    /// The `ramps` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref RAMPS: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-    /// The `bgs` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref BGS: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-    /// The `consts` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref CONSTS: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-    /// The `images` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref IMAGES: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-    /// The `highlights` table from the global [`Config`].
-    ///
-    /// This cell is guaranteed to be initialized during the execution of all
-    /// [`PanelConfig::parse`] functions.
-    pub static ref HIGHLIGHTS: OnceCell<HashMap<String, Value>> =
-        OnceCell::new();
-}
+/// The `attrs` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static ATTRS: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
+/// The `ramps` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static RAMPS: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
+/// The `bgs` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static BGS: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
+/// The `consts` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static CONSTS: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
+/// The `images` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static IMAGES: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
+/// The `highlights` table from the global [`Config`].
+///
+/// This cell is guaranteed to be initialized during the execution of all
+/// [`PanelConfig::parse`] functions.
+pub static HIGHLIGHTS: LazyLock<OnceCell<HashMap<String, Value>>> =
+    LazyLock::new(OnceCell::new);
 
 /// Parses a bar with a given name from the global [`Config`]
 ///
@@ -172,7 +169,6 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
                 .unwrap_or_default()
                 .as_str()
             {
-                "top" => Position::Top,
                 "bottom" => Position::Bottom,
                 _ => Position::Top,
             };
@@ -283,76 +279,38 @@ pub fn parse(bar_name: &str, config: &Path) -> Result<BarConfig> {
     });
 
     let mut bar = bar.build()?;
-
-    let mut left_final = Vec::new();
-    let mut center_final = Vec::new();
-    let mut right_final = Vec::new();
-
-    let panels_left = bar_table.remove("panels_left");
-    if let Some(pl) = panels_left {
-        let panel_list =
-            pl.into_array().context("`panels_left` isn't an array")?;
-        for p in panel_list {
-            if let Ok(name) = p.clone().into_string() {
-                log::debug!("Adding left panel {name}");
-                left_final.push(name);
-            } else {
-                log::warn!("Ignoring non-string value {p:?} in `panels_left`");
-            }
-        }
-    }
-
-    let panels_center = bar_table.remove("panels_center");
-    if let Some(pc) = panels_center {
-        let panel_list =
-            pc.into_array().context("`panels_center` isn't an array")?;
-        for p in panel_list {
-            if let Ok(name) = p.clone().into_string() {
-                log::debug!("Adding center panel {name}");
-                center_final.push(name);
-            } else {
-                log::warn!(
-                    "Ignoring non-string value {p:?} in `panels_center`"
-                );
-            }
-        }
-    }
-
-    let panels_right = bar_table.remove("panels_right");
-    if let Some(pr) = panels_right {
-        let panel_list =
-            pr.into_array().context("`panels_right` isn't an array")?;
-        for p in panel_list {
-            if let Ok(name) = p.clone().into_string() {
-                log::debug!("Adding right panel {name}");
-                right_final.push(name);
-            } else {
-                log::warn!("Ignoring non-string value {p:?} in `panels_right`");
-            }
-        }
-    }
-
     let panels_table = config
         .get_table("panels")
         .context("`panels` doesn't exist or isn't a table")?;
     log::trace!("got panels table");
 
-    // leak panel names so that we can use &'static str instead of String
-    left_final
-        .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
-        .for_each(|p| bar.add_panel(p, Alignment::Left));
-    log::debug!("left panels added");
-    center_final
-        .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
-        .for_each(|p| bar.add_panel(p, Alignment::Center));
-    log::debug!("center panels added");
-    right_final
-        .into_iter()
-        .filter_map(|p| parse_panel(p.leak(), &panels_table, &config))
-        .for_each(|p| bar.add_panel(p, Alignment::Right));
-    log::debug!("right panels added");
+    get_panels!(
+        left_final,
+        panels_left,
+        bar_table,
+        panels_table,
+        bar,
+        config,
+        Alignment::Left
+    );
+    get_panels!(
+        center_final,
+        panels_center,
+        bar_table,
+        panels_table,
+        bar,
+        config,
+        Alignment::Center
+    );
+    get_panels!(
+        right_final,
+        panels_right,
+        bar_table,
+        panels_table,
+        bar,
+        config,
+        Alignment::Right
+    );
 
     Ok(bar)
 }

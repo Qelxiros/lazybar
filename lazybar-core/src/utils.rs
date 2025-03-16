@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     env,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     task::{Context, Poll},
     time::Duration,
 };
@@ -13,7 +13,6 @@ use config::{Map, Value, ValueKind};
 use csscolorparser::Color;
 use derive_builder::Builder;
 use futures::{Stream, task::AtomicWaker};
-use lazy_static::lazy_static;
 use lazybar_types::EventResponse;
 use regex::{Captures, Regex};
 use tokio::{
@@ -24,9 +23,8 @@ use tokio::{
 
 use crate::{ipc::ChannelEndpoint, parser};
 
-lazy_static! {
-    static ref REGEX: Regex = Regex::new(r"%\{(?<const>[^}]+)}").unwrap();
-}
+static REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"%\{(?<const>[^}]+)}").unwrap());
 
 /// A wrapper struct to read indefinitely from a [`UnixStream`] and send the
 /// results through a channel.
@@ -51,7 +49,7 @@ impl UnixStreamWrapper {
         self.inner.readable().await?;
         let len = self.inner.try_read(&mut data)?;
         let message = String::from_utf8_lossy(&data[0..len]);
-        if message.len() == 0 {
+        if message.is_empty() {
             return Ok(());
         }
         self.endpoint.send.send(message.to_string())?;
@@ -130,8 +128,7 @@ impl Stream for ManagedIntervalStream {
         if *self.paused.lock().unwrap() {
             Poll::Pending
         } else {
-            let val = self.interval.lock().unwrap().poll_tick(cx).map(Some);
-            val
+            self.interval.lock().unwrap().poll_tick(cx).map(Some)
         }
     }
 }

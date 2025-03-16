@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::Read,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::Duration,
 };
 
@@ -13,7 +13,6 @@ use async_trait::async_trait;
 use config::Config;
 use derive_builder::Builder;
 use futures::task::AtomicWaker;
-use lazy_static::lazy_static;
 use regex::Regex;
 use tokio_stream::StreamExt;
 
@@ -24,10 +23,9 @@ use crate::{
     remove_string_from_config, remove_uint_from_config,
 };
 
-lazy_static! {
-    static ref REGEX: Regex =
-        Regex::new(r"(?<key>[^:]+):\s*(?<value>\d+)(?: kB)?").unwrap();
-}
+static REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?<key>[^:]+):\s*(?<value>\d+)(?: kB)?").unwrap()
+});
 
 /// Displays memory/swap usage based on information from (by default)
 /// `/proc/meminfo`

@@ -103,8 +103,7 @@ impl PanelConfig for Custom {
     ) -> Result<Self> {
         let mut command = Command::new("sh");
         command.arg("-c").arg(
-            remove_string_from_config("command", table)
-                .unwrap_or(String::new()),
+            remove_string_from_config("command", table).unwrap_or_default(),
         );
         let interval =
             remove_uint_from_config("interval", table).map(Duration::from_secs);

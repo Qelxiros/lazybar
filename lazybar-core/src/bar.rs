@@ -2,13 +2,12 @@ use std::{
     ops::BitAnd,
     pin::Pin,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use anyhow::{Result, anyhow};
 use csscolorparser::Color;
 use derive_debug::Dbg;
-use lazy_static::lazy_static;
 use lazybar_types::EventResponse;
 use regex::Regex;
 use tokio::{
@@ -35,12 +34,11 @@ use crate::{
 #[cfg(feature = "cursor")]
 use crate::{CursorFn, x::set_cursor};
 
-lazy_static! {
-    static ref REGEX: Regex =
-        Regex::new(r"(?<region>[lcr])(?<idx>\d+).(?<message>.+)").unwrap();
-    #[allow(missing_docs)]
-    pub static ref BAR_INFO: OnceCell<BarInfo> = OnceCell::new();
-}
+static REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?<region>[lcr])(?<idx>\d+).(?<message>.+)").unwrap()
+});
+#[allow(missing_docs)]
+pub static BAR_INFO: LazyLock<OnceCell<BarInfo>> = LazyLock::new(OnceCell::new);
 
 /// Information about the bar, usually for use in building panels.
 #[derive(Debug, Clone)]
@@ -202,7 +200,8 @@ pub struct PanelDrawInfo {
     pub dump: String,
 }
 
-fn fmt_option<T>(value: &Option<T>) -> &'static str {
+#[allow(clippy::ref_option)]
+const fn fmt_option<T>(value: &Option<T>) -> &'static str {
     match value {
         Some(_) => "Some(..)",
         None => "None",
