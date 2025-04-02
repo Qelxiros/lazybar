@@ -10,7 +10,6 @@ use tokio_stream::StreamExt;
 use x11rb::{
     COPY_FROM_PARENT,
     connection::Connection,
-    cookie::VoidCookie,
     protocol::{
         self,
         render::{
@@ -156,9 +155,8 @@ impl Systray {
             })),
             Some(Box::new(move || {
                 for icon in icons {
-                    let _ = shutdown_conn
-                        .reparent_window(icon.window, root, 0, 0)
-                        .map(VoidCookie::check);
+                    let _ =
+                        shutdown_conn.reparent_window(icon.window, root, 0, 0);
                 }
                 let _ = shutdown_conn.destroy_window(selection);
             })),
@@ -212,14 +210,22 @@ impl Systray {
 
         let icons = self.icons.clone();
 
-        for icon in icons {
-            self.reposition(icon)?;
-        }
+        let mut x = self.icon_padding as i32 / 2;
+        let mut err = None;
+        icons.iter().filter(|i| i.mapped).for_each(|icon| {
+            // err will hold the first error encountered, if any
+            let res = self.reposition(*icon, x);
+            err = err.take().and_then(|_| res.err());
+            x += (self.icon_size + self.icon_padding) as i32;
+        });
 
-        Ok(())
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
-    fn reposition(&self, icon: Icon) -> Result<()> {
+    fn reposition(&self, icon: Icon, x: i32) -> Result<()> {
         let x = icon.idx as i16 * (self.icon_size + self.icon_padding)
             + self.icon_padding / 2;
 
@@ -789,6 +795,22 @@ impl Systray {
                     )?;
                 }
                 false
+            }
+            protocol::Event::MapNotify(event) => {
+                self.icons
+                    .iter_mut()
+                    .filter(|i| i.window == event.window)
+                    .for_each(|i| i.mapped = true);
+                self.resize(tray_wid, None)?;
+                true
+            }
+            protocol::Event::UnmapNotify(event) => {
+                self.icons
+                    .iter_mut()
+                    .filter(|i| i.window == event.window)
+                    .for_each(|i| i.mapped = false);
+                self.resize(tray_wid, None)?;
+                true
             }
             _ => false,
         };

@@ -169,7 +169,6 @@ impl Stream for I3Stream<'static> {
             let waker = cx.waker().clone();
             self.handle = Some(task::spawn_blocking(move || {
                 loop {
-                    log::info!("looping");
                     let value = iter.lock().unwrap().next();
                     if let Some(Ok(Event::ModeEvent(event))) = value {
                         waker.wake();
