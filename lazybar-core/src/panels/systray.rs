@@ -10,6 +10,7 @@ use tokio_stream::StreamExt;
 use x11rb::{
     COPY_FROM_PARENT,
     connection::Connection,
+    cookie::VoidCookie,
     protocol::{
         self,
         render::{
@@ -155,8 +156,9 @@ impl Systray {
             })),
             Some(Box::new(move || {
                 for icon in icons {
-                    let _ =
-                        shutdown_conn.reparent_window(icon.window, root, 0, 0);
+                    let _ = shutdown_conn
+                        .reparent_window(icon.window, root, 0, 0)
+                        .map(VoidCookie::check);
                 }
                 let _ = shutdown_conn.destroy_window(selection);
             })),
