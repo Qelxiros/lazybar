@@ -75,7 +75,7 @@ interned_atoms!(
 const DB: OnceCell<std::result::Result<Database, ReplyError>> = OnceCell::new();
 
 pub fn intern_named_atom(conn: &impl Connection, atom: &[u8]) -> Result<Atom> {
-    Ok(conn.intern_atom(true, atom)?.reply()?.atom)
+    Ok(conn.intern_atom(false, atom)?.reply()?.atom)
 }
 
 #[derive(Debug)]
