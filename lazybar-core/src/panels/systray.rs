@@ -228,9 +228,6 @@ impl Systray {
     }
 
     fn reposition(&self, icon: Icon, x: i32) -> Result<()> {
-        let x = icon.idx as i16 * (self.icon_size + self.icon_padding)
-            + self.icon_padding / 2;
-
         self.conn.configure_window(
             icon.window,
             &ConfigureWindowAux::new().x(x as i32),
